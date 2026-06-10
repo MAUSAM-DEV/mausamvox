@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MausamVox — Voice Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --void:    #05050F;
+  --deep:    #09091A;
+  --surface: #0E0E20;
+  --card:    #121225;
+  --card2:   #16162C;
+  --border:  #1E1E3A;
+  --border2: #272745;
+  --v:       #8B5CF6;
+  --p:       #EC4899;
+  --c:       #06B6D4;
+  --g:       #10B981;
+  --warn:    #F59E0B;
+  --red:     #EF4444;
+  --white:   #F0F0FF;
+  --pearl:   #C4C4E0;
+  --muted:   #5A5A80;
+  --muted2:  #7878A0;
+  --grad:    linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #06B6D4 100%);
+}
+
+html, body {
+  height: 100%; overflow: hidden;
+  background: var(--void); color: var(--white);
+  font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.5;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.shell {
+  display: grid;
+  grid-template-columns: 216px 1fr 252px;
+  grid-template-rows: 100vh;
+  height: 100vh; overflow: hidden;
+}
+
+/* ══ SIDEBAR (same as voice swap) ══ */
+.sidebar { background: var(--deep); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.sb-logo { display: flex; align-items: center; gap: 10px; padding: 18px 16px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sb-logo svg { width: 34px; height: 34px; flex-shrink: 0; }
+.sb-wordmark { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: -.2px; }
+.sb-wordmark em { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-style: normal; }
+.sb-nav { flex: 1; overflow-y: auto; padding: 10px 8px; }
+.sb-group-label { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); padding: 10px 8px 6px; }
+.sb-link { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; margin-bottom: 1px; font-size: 13px; font-weight: 500; color: var(--muted2); cursor: pointer; transition: all .2s; border: 1px solid transparent; }
+.sb-link:hover { background: var(--surface); color: var(--white); }
+.sb-link.active { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.18); color: var(--white); }
+.sb-emoji { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.sb-badge { margin-left: auto; background: rgba(139,92,246,.15); color: var(--v); font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
+.sb-foot { border-top: 1px solid var(--border); padding: 12px; flex-shrink: 0; }
+.credits-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.credits-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.credits-lbl { font-size: 11px; color: var(--muted); }
+.credits-num { font-size: 11px; font-weight: 600; color: var(--pearl); }
+.credits-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.credits-fill { height: 100%; width: 68%; border-radius: 2px; background: var(--grad); }
+.sb-user { display: flex; align-items: center; gap: 10px; padding: 6px 2px; cursor: pointer; }
+.sb-av { width: 30px; height: 30px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.sb-uname { font-size: 13px; font-weight: 600; color: var(--pearl); }
+.sb-plan { font-size: 11px; color: var(--muted); }
+
+/* ══ CENTRE ══ */
+.centre { display: flex; flex-direction: column; height: 100vh; overflow: hidden; border-right: 1px solid var(--border); }
+
+.topbar { flex-shrink: 0; height: 58px; display: flex; align-items: center; padding: 0 24px; gap: 12px; background: var(--deep); border-bottom: 1px solid var(--border); }
+.topbar-title { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; }
+.topbar-divider { width: 1px; height: 18px; background: var(--border); }
+.topbar-sub { font-size: 12px; color: var(--muted); }
+
+.steps { margin-left: auto; display: flex; align-items: center; }
+.step { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: default; transition: color .2s; position: relative; }
+.step.active { color: var(--white); }
+.step.done { color: var(--v); }
+.step-n { width: 20px; height: 20px; border-radius: 50%; background: var(--border); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; transition: all .3s; }
+.step.active .step-n { background: var(--v); border-color: var(--v); color: #fff; box-shadow: 0 0 10px rgba(139,92,246,.5); }
+.step.done .step-n { background: rgba(139,92,246,.12); border-color: rgba(139,92,246,.3); color: var(--v); }
+.step-sep { width: 24px; height: 1px; background: var(--border); }
+.step.active::after { content: ''; position: absolute; bottom: -1px; left: 12px; right: 12px; height: 2px; background: var(--grad); border-radius: 1px; animation: us .4s ease; }
+@keyframes us { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.workspace { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+.step-panel { display: none; flex-direction: column; gap: 16px; animation: pf .3s ease; }
+.step-panel.on { display: flex; }
+@keyframes pf { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* cards */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: border-color .3s; }
+.card:hover { border-color: rgba(139,92,246,.22); }
+.card-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.card-icon { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.15); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.card-title { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; }
+.card-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.card-body { padding: 18px; }
+
+/* ── STEP 1: CLONE TYPE ── */
+.type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.type-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 28px 24px; cursor: pointer; transition: all .25s; position: relative; overflow: hidden;
+}
+.type-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(139,92,246,.08), transparent 60%);
+  opacity: 0; transition: opacity .3s;
+}
+.type-card:hover { border-color: rgba(139,92,246,.35); transform: translateY(-3px); }
+.type-card:hover::before { opacity: 1; }
+.type-card.on { border-color: var(--v); background: rgba(139,92,246,.05); }
+.type-card.on::after { content: '✓ Selected'; position: absolute; top: 14px; right: 14px; font-size: 10px; font-weight: 700; color: var(--v); padding: 3px 10px; border-radius: 99px; background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.25); }
+.type-icon { width: 48px; height: 48px; border-radius: 13px; background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.18); display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 16px; }
+.type-name { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+.type-time { font-size: 12px; background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 600; margin-bottom: 12px; }
+.type-desc { font-size: 12px; color: var(--muted); line-height: 1.65; margin-bottom: 16px; }
+.type-feats { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.type-feats li { font-size: 12px; color: var(--pearl); display: flex; gap: 7px; align-items: flex-start; }
+.type-feats li::before { content: '✓'; color: var(--v); font-weight: 700; flex-shrink: 0; }
+.type-feats li.dim { color: var(--muted); }
+.type-feats li.dim::before { content: '–'; color: var(--border2); }
+
+/* tip strip */
+.tip-strip {
+  display: flex; gap: 12px; align-items: center;
+  background: rgba(6,182,212,.04); border: 1px solid rgba(6,182,212,.15);
+  border-radius: 12px; padding: 14px 16px;
+}
+.tip-ico { font-size: 18px; flex-shrink: 0; }
+.tip-txt { font-size: 12px; color: var(--pearl); line-height: 1.6; }
+.tip-txt b { color: var(--c); font-weight: 600; }
+
+/* ── STEP 2: RECORD ── */
+.rec-layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+
+/* prompt card */
+.prompt-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.prompt-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.prompt-count { font-size: 11px; font-weight: 600; color: var(--muted); }
+.prompt-count b { color: var(--v); font-size: 13px; }
+.prompt-lang { display: flex; gap: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 3px; }
+.pl-opt { padding: 4px 12px; border-radius: 5px; font-size: 11px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all .2s; }
+.pl-opt.on { background: var(--card2); color: var(--white); }
+
+.prompt-body { padding: 32px 28px; text-align: center; }
+.prompt-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+.prompt-text {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 24px; font-weight: 500; line-height: 1.5; color: var(--white);
+  max-width: 540px; margin: 0 auto 8px;
+}
+.prompt-text .hl { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.prompt-hint { font-size: 12px; color: var(--muted); }
+
+/* live mic visual — signature element */
+.mic-visual {
+  height: 88px; margin: 24px auto 0; max-width: 540px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 2.5px;
+  padding: 12px 20px; overflow: hidden; position: relative;
+}
+.mic-bar { width: 3px; border-radius: 2px; background: var(--grad); transition: height .08s ease; flex-shrink: 0; }
+.mic-idle-txt { position: absolute; font-size: 12px; color: var(--muted); }
+
+/* record controls */
+.rec-controls { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 20px 0 8px; }
+.rec-btn {
+  width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--grad); display: flex; align-items: center; justify-content: center;
+  transition: all .25s; position: relative;
+}
+.rec-btn:hover { transform: scale(1.07); box-shadow: 0 10px 32px rgba(236,72,153,.4); }
+.rec-btn.recording { background: var(--red); animation: recPulse 1.6s ease infinite; }
+@keyframes recPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.4); } 50% { box-shadow: 0 0 0 14px rgba(239,68,68,0); } }
+.rec-side-btn {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border2); color: var(--pearl);
+  font-size: 15px; cursor: pointer; transition: all .2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.rec-side-btn:hover { border-color: var(--v); color: var(--v); }
+.rec-timer { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; color: var(--pearl); text-align: center; padding-bottom: 18px; }
+.rec-timer span { color: var(--muted); font-size: 12px; font-weight: 400; }
+
+/* quality side panel */
+.quality-col { display: flex; flex-direction: column; gap: 12px; }
+.q-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.q-title { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+.q-meter { display: flex; flex-direction: column; gap: 10px; }
+.qm-row { display: flex; align-items: center; gap: 9px; }
+.qm-lbl { font-size: 11px; color: var(--muted2); width: 72px; flex-shrink: 0; }
+.qm-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.qm-fill { height: 100%; border-radius: 2px; transition: width .3s, background .3s; }
+.qm-fill.ok { background: var(--g); }
+.qm-fill.warn { background: var(--warn); }
+.qm-fill.bad { background: var(--red); }
+.qm-status { font-size: 10px; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; }
+.qm-status.ok { color: var(--g); }
+.qm-status.warn { color: var(--warn); }
+
+/* recording progress */
+.prog-ring-wrap { display: flex; align-items: center; gap: 14px; }
+.prog-ring { position: relative; width: 60px; height: 60px; flex-shrink: 0; }
+.prog-ring svg { width: 60px; height: 60px; transform: rotate(-90deg); }
+.prog-ring-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; }
+.prog-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.prog-meta b { color: var(--pearl); font-weight: 600; }
+
+/* sentence checklist */
+.sent-list { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+.sent { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 5px 8px; border-radius: 6px; }
+.sent.done { color: var(--pearl); background: rgba(16,185,129,.04); }
+.sent.cur { color: var(--white); background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.18); }
+.sent-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; background: var(--border); }
+.sent.done .sent-dot { background: rgba(16,185,129,.2); color: var(--g); }
+.sent.cur .sent-dot { background: var(--v); color: #fff; }
+
+/* ── STEP 3: TRAINING ── */
+.train-stage {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 44px 32px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  position: relative; overflow: hidden;
+}
+.train-stage::before {
+  content: ''; position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+  width: 480px; height: 280px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(139,92,246,.14), transparent 70%);
+  pointer-events: none;
+}
+.train-orb {
+  width: 110px; height: 110px; border-radius: 50%; margin-bottom: 24px; position: relative;
+  background: radial-gradient(circle, rgba(139,92,246,.4), rgba(236,72,153,.18) 55%, transparent 75%);
+  animation: tro 3.2s ease-in-out infinite;
+}
+@keyframes tro { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.train-orb::after { content: '🧬'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+
+.train-title { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 6px; position: relative; }
+.train-sub { font-size: 12px; color: var(--muted); margin-bottom: 28px; position: relative; }
+
+.train-quality { width: 100%; max-width: 420px; position: relative; }
+.tq-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 7px; }
+.tq-row b { font-family: 'Space Grotesk', sans-serif; font-size: 15px; background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.tq-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.tq-fill { height: 100%; width: 0%; border-radius: 3px; background: var(--grad); transition: width .8s ease; }
+.tq-note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.6; }
+.tq-note b { color: var(--pearl); }
+
+/* ── STEP 4: TEST ── */
+.done-stage {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 40px 32px; text-align: center; position: relative; overflow: hidden;
+}
+.done-stage::before {
+  content: ''; position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+  width: 460px; height: 240px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(16,185,129,.12), transparent 70%);
+  pointer-events: none;
+}
+.done-badge {
+  width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 20px;
+  background: rgba(16,185,129,.1); border: 2px solid rgba(16,185,129,.35);
+  display: flex; align-items: center; justify-content: center; font-size: 32px;
+  position: relative;
+  animation: pop .5s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+.done-h { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 6px; position: relative; }
+.done-p { font-size: 13px; color: var(--muted); margin-bottom: 24px; position: relative; }
+.done-p b { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 600; }
+
+.test-row {
+  display: flex; align-items: center; gap: 12px; max-width: 440px; margin: 0 auto 24px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  position: relative;
+}
+.test-play {
+  width: 40px; height: 40px; border-radius: 50%; border: none; flex-shrink: 0;
+  background: var(--grad); cursor: pointer; transition: all .25s;
+  display: flex; align-items: center; justify-content: center;
+}
+.test-play:hover { transform: scale(1.08); box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+.test-bars { flex: 1; display: flex; align-items: center; gap: 2px; height: 32px; overflow: hidden; }
+.tb { width: 2.5px; border-radius: 1px; background: var(--grad); flex-shrink: 0; }
+.test-lbl { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
+.done-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; position: relative; }
+.btn-main {
+  padding: 11px 24px; border-radius: 8px; border: none;
+  background: var(--grad); color: #fff;
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .25s;
+}
+.btn-main:hover { box-shadow: 0 8px 26px rgba(139,92,246,.4); transform: translateY(-1px); }
+.btn-sec {
+  padding: 11px 20px; border-radius: 8px; border: 1px solid var(--border2);
+  background: transparent; color: var(--pearl);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all .2s;
+}
+.btn-sec:hover { border-color: var(--v); color: var(--v); }
+
+/* action bar */
+.action-bar { flex-shrink: 0; padding: 14px 24px; background: var(--deep); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.ab-hint { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.ab-hint b { color: var(--v); font-weight: 600; }
+.btn-back { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border2); background: transparent; color: var(--pearl); font-size: 12px; font-weight: 500; cursor: pointer; transition: all .2s; }
+.btn-back:hover { border-color: var(--muted); color: var(--white); }
+.btn-next {
+  margin-left: auto; padding: 10px 24px; border-radius: 8px; border: none;
+  background: var(--grad); color: #fff;
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .25s; display: flex; align-items: center; gap: 7px;
+}
+.btn-next:hover { box-shadow: 0 8px 28px rgba(139,92,246,.4); transform: translateY(-1px); }
+.btn-next:disabled { opacity: .4; cursor: not-allowed; }
+.btn-next:disabled:hover { box-shadow: none; transform: none; }
+
+/* ══ RIGHT PANEL — My Voices ══ */
+.rpanel { background: var(--deep); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.rp-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.rp-title { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
+.rp-body { flex: 1; overflow-y: auto; padding: 10px; }
+
+.voice-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: all .25s; }
+.voice-item:hover { border-color: rgba(139,92,246,.28); transform: translateX(-2px); }
+.vi-top { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.vi-av { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, rgba(139,92,246,.3), rgba(236,72,153,.2)); border: 1px solid rgba(139,92,246,.25); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.vi-name { font-size: 12px; font-weight: 600; }
+.vi-type { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.vi-badge { margin-left: auto; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; flex-shrink: 0; }
+.vi-badge.studio { background: rgba(139,92,246,.1); color: var(--v); border: 1px solid rgba(139,92,246,.2); }
+.vi-badge.express { background: rgba(6,182,212,.08); color: var(--c); border: 1px solid rgba(6,182,212,.18); }
+.vi-meta { font-size: 10px; color: var(--muted); display: flex; gap: 10px; }
+.vi-meta b { color: var(--pearl); font-weight: 600; }
+
+.rp-foot { border-top: 1px solid var(--border); padding: 10px; flex-shrink: 0; }
+.rp-note { font-size: 10px; color: var(--muted); text-align: center; line-height: 1.6; padding: 4px; }
+.rp-note b { color: var(--v); }
+
+/* toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--card2); border: 1px solid var(--border2); border-radius: 10px; padding: 10px 18px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; box-shadow: 0 12px 36px rgba(0,0,0,.5); opacity: 0; transition: all .3s; pointer-events: none; z-index: 999; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--g); box-shadow: 0 0 7px var(--g); flex-shrink: 0; }
+
+/* ══ MOBILE — single column, horizontal tool nav, sticky action bar ══ */
+@media (max-width: 900px) {
+  html, body { overflow: auto; }
+  .shell { display: flex; flex-direction: column; height: auto; min-height: 100vh; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .sb-nav { display: flex; overflow-x: auto; padding: 8px; gap: 4px; -webkit-overflow-scrolling: touch; }
+  .sb-nav::-webkit-scrollbar { display: none; }
+  .sb-group-label { display: none; }
+  .sb-link { flex-shrink: 0; white-space: nowrap; padding: 7px 12px; margin: 0; font-size: 12px; }
+  .sb-badge { display: none; }
+  .sb-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+  .credits-box { flex: 1; margin-bottom: 0; padding: 8px 12px; }
+  .sb-user { padding: 0; flex-shrink: 0; }
+  .sb-uname, .sb-plan { display: none; }
+  .centre { height: auto; border-right: none; }
+  .topbar { height: auto; flex-wrap: wrap; padding: 10px 14px; row-gap: 8px; }
+  .topbar-sub, .topbar-divider { display: none; }
+  .steps { margin-left: 0; width: 100%; justify-content: space-between; }
+  .step { padding: 4px 3px; font-size: 10px; gap: 4px; }
+  .step-sep { width: 8px; }
+  .workspace { padding: 14px; }
+  .type-grid { grid-template-columns: 1fr; }
+  .rec-layout { grid-template-columns: 1fr; }
+  .prompt-text { font-size: 18px; }
+  .prompt-body { padding: 24px 16px; }
+  .mic-visual { height: 72px; }
+  .rpanel { width: 100%; height: auto; border-top: 1px solid var(--border); }
+  .rp-body { max-height: 300px; }
+  .action-bar { flex-wrap: wrap; padding: 12px 14px; position: sticky; bottom: 0; z-index: 50; }
+  .ab-hint { width: 100%; order: 3; justify-content: center; }
+  .train-stage, .done-stage { padding: 32px 18px; }
+  .done-actions { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 420px) {
+  .step span { display: none; }
+  .step.active span { display: inline; }
+  .rec-controls { gap: 12px; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar">
+  <div class="sb-logo">
+    <svg viewBox="0 0 34 34" fill="none">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse"><stop stop-color="#8B5CF6"/><stop offset=".5" stop-color="#EC4899"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs>
+      <rect x="1" y="20" width="4" height="11" rx="2" fill="url(#lg)" opacity=".45"/>
+      <rect x="7" y="13" width="4" height="18" rx="2" fill="url(#lg)" opacity=".65"/>
+      <rect x="13" y="5" width="4" height="26" rx="2" fill="url(#lg)"/>
+      <rect x="19" y="13" width="4" height="18" rx="2" fill="url(#lg)" opacity=".65"/>
+      <rect x="25" y="20" width="4" height="11" rx="2" fill="url(#lg)" opacity=".45"/>
+    </svg>
+    <span class="sb-wordmark">Mausam<em>Vox</em></span>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-group-label">Tools</div>
+    <div class="sb-link" onclick="toast('Voice Swap — open mausamvox-voiceswap.html')"><span class="sb-emoji">🔄</span> Voice Swap</div>
+    <div class="sb-link active"><span class="sb-emoji">🧬</span> Voice Lab</div>
+    <div class="sb-link" onclick="toast('Stem Studio — coming next')"><span class="sb-emoji">✂️</span> Stem Studio</div>
+    <div class="sb-link" onclick="toast('Choir Composer — coming next')"><span class="sb-emoji">🎼</span> Choir Composer</div>
+    <div class="sb-link" onclick="toast('Instruments — coming next')"><span class="sb-emoji">🎷</span> Instruments</div>
+    <div class="sb-link" onclick="toast('Song Studio — coming next')"><span class="sb-emoji">🎵</span> Song Studio</div>
+    <div class="sb-group-label">Library</div>
+    <div class="sb-link"><span class="sb-emoji">🎙️</span> My Voices <span class="sb-badge">3</span></div>
+    <div class="sb-link"><span class="sb-emoji">📁</span> Projects</div>
+    <div class="sb-link"><span class="sb-emoji">🛒</span> Marketplace</div>
+  </nav>
+  <div class="sb-foot">
+    <div class="credits-box">
+      <div class="credits-row"><span class="credits-lbl">Credits</span><span class="credits-num">20,400 / 30,000</span></div>
+      <div class="credits-track"><div class="credits-fill"></div></div>
+    </div>
+    <div class="sb-user">
+      <div class="sb-av">M</div>
+      <div><div class="sb-uname">Mausam</div><div class="sb-plan">Pro Plan</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ══ CENTRE ══ -->
+<div class="centre">
+
+  <div class="topbar">
+    <span class="topbar-title">Voice Lab</span>
+    <div class="topbar-divider"></div>
+    <span class="topbar-sub">Train your personal AI singing voice</span>
+    <div class="steps">
+      <div class="step active" id="st1"><div class="step-n">1</div><span>Setup</span></div>
+      <div class="step-sep"></div>
+      <div class="step" id="st2"><div class="step-n">2</div><span>Record</span></div>
+      <div class="step-sep"></div>
+      <div class="step" id="st3"><div class="step-n">3</div><span>Train</span></div>
+      <div class="step-sep"></div>
+      <div class="step" id="st4"><div class="step-n">4</div><span>Test</span></div>
+    </div>
+  </div>
+
+  <div class="workspace">
+
+    <!-- STEP 1: SETUP -->
+    <div class="step-panel on" id="p1">
+      <div class="type-grid">
+        <div class="type-card on" id="tcExpress" onclick="pickType('express')">
+          <div class="type-icon">⚡</div>
+          <div class="type-name">Express Clone</div>
+          <div class="type-time">3 min audio · Ready in 5 minutes</div>
+          <p class="type-desc">A fast, lower-fidelity clone — perfect for testing how your voice sounds before committing to a full studio session.</p>
+          <ul class="type-feats">
+            <li>3 minutes of recording</li>
+            <li>Ready in ~5 minutes</li>
+            <li>Unlimited on Pro plan</li>
+            <li class="dim">Standard fidelity only</li>
+            <li class="dim">No commercial use</li>
+          </ul>
+        </div>
+        <div class="type-card" id="tcStudio" onclick="pickType('studio')">
+          <div class="type-icon">🎙️</div>
+          <div class="type-name">Studio Clone</div>
+          <div class="type-time">10+ min audio · Ready in ~45 minutes</div>
+          <p class="type-desc">Full production-quality clone that captures your tone, vibrato, and emotional range. For releases and commercial work.</p>
+          <ul class="type-feats">
+            <li>10–30 minutes of recording</li>
+            <li>HD fidelity — release ready</li>
+            <li>Commercial use cleared</li>
+            <li>Multilingual singing</li>
+            <li>3 per month on Pro plan</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tip-strip">
+        <span class="tip-ico">💡</span>
+        <span class="tip-txt"><b>Pro tip:</b> Record in a quiet room with soft furnishings, keep the mic 15–20cm from your mouth, and sing naturally. The wizard checks your audio quality in real time — it will warn you before bad audio ruins a clone.</span>
+      </div>
+    </div>
+
+    <!-- STEP 2: RECORD -->
+    <div class="step-panel" id="p2">
+      <div class="rec-layout">
+
+        <!-- prompt + mic -->
+        <div class="prompt-card">
+          <div class="prompt-head">
+            <span class="prompt-count">Sentence <b id="sentCur">7</b> / <span id="sentTotal">12</span></span>
+            <div class="prompt-lang">
+              <div class="pl-opt on" onclick="setLang(this)">English</div>
+              <div class="pl-opt" onclick="setLang(this)">हिन्दी</div>
+            </div>
+          </div>
+          <div class="prompt-body">
+            <div class="prompt-label">Read this aloud — naturally, like you're singing to a friend</div>
+            <div class="prompt-text" id="promptText">"The <span class="hl">morning rain</span> sings a melody only the mountains remember."</div>
+            <div class="prompt-hint">Covers: long vowels · soft consonants · rising pitch</div>
+
+            <div class="mic-visual" id="micVis">
+              <span class="mic-idle-txt" id="micIdle">Press record to begin</span>
+            </div>
+
+            <div class="rec-controls">
+              <button class="rec-side-btn" onclick="toast('Previous sentence')" title="Previous">⏮</button>
+              <button class="rec-btn" id="recBtn" onclick="toggleRec()">
+                <svg id="recIco" width="22" height="22" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="7"/></svg>
+              </button>
+              <button class="rec-side-btn" onclick="nextSentence()" title="Next">⏭</button>
+            </div>
+            <div class="rec-timer"><span id="recTime">04:12</span> <span>/ 10:00 minimum</span></div>
+          </div>
+        </div>
+
+        <!-- live quality column -->
+        <div class="quality-col">
+          <div class="q-card">
+            <div class="q-title">Live Mic Quality</div>
+            <div class="q-meter">
+              <div class="qm-row">
+                <span class="qm-lbl">Noise Floor</span>
+                <div class="qm-track"><div class="qm-fill ok" id="qmNoise" style="width:18%"></div></div>
+                <span class="qm-status ok" id="qsNoise">GOOD</span>
+              </div>
+              <div class="qm-row">
+                <span class="qm-lbl">Clipping</span>
+                <div class="qm-track"><div class="qm-fill ok" id="qmClip" style="width:8%"></div></div>
+                <span class="qm-status ok" id="qsClip">GOOD</span>
+              </div>
+              <div class="qm-row">
+                <span class="qm-lbl">Room Echo</span>
+                <div class="qm-track"><div class="qm-fill warn" id="qmEcho" style="width:46%"></div></div>
+                <span class="qm-status warn" id="qsEcho">FAIR</span>
+              </div>
+              <div class="qm-row">
+                <span class="qm-lbl">Volume</span>
+                <div class="qm-track"><div class="qm-fill ok" id="qmVol" style="width:64%"></div></div>
+                <span class="qm-status ok" id="qsVol">GOOD</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="q-card">
+            <div class="q-title">Recording Progress</div>
+            <div class="prog-ring-wrap">
+              <div class="prog-ring">
+                <svg viewBox="0 0 60 60">
+                  <defs><linearGradient id="prg" x1="0" y1="0" x2="60" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#EC4899"/></linearGradient></defs>
+                  <circle cx="30" cy="30" r="25" fill="none" stroke="var(--border)" stroke-width="4.5"/>
+                  <circle cx="30" cy="30" r="25" fill="none" stroke="url(#prg)" stroke-width="4.5" stroke-dasharray="157" stroke-dashoffset="92" stroke-linecap="round" id="progCircle"/>
+                </svg>
+                <div class="prog-ring-txt" id="progPct">42%</div>
+              </div>
+              <div class="prog-meta">
+                <b>4:12</b> recorded<br/>
+                <b>5:48</b> remaining<br/>
+                Input score: <b style="color:var(--g)">84/100</b>
+              </div>
+            </div>
+          </div>
+
+          <div class="q-card" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+            <div class="q-title">Sentences</div>
+            <div class="sent-list">
+              <div class="sent done"><div class="sent-dot">✓</div>The river knows my name…</div>
+              <div class="sent done"><div class="sent-dot">✓</div>Sing louder than the storm…</div>
+              <div class="sent done"><div class="sent-dot">✓</div>हर सुबह एक नई धुन…</div>
+              <div class="sent done"><div class="sent-dot">✓</div>Whisper low, rise slowly…</div>
+              <div class="sent done"><div class="sent-dot">✓</div>Golden hour, fading light…</div>
+              <div class="sent done"><div class="sent-dot">✓</div>तुम्हारी आवाज़ में जादू है…</div>
+              <div class="sent cur"><div class="sent-dot">7</div>The morning rain sings…</div>
+              <div class="sent"><div class="sent-dot">8</div>Count the stars with me…</div>
+              <div class="sent"><div class="sent-dot">9</div>दिल की बात सुनो…</div>
+              <div class="sent"><div class="sent-dot">10</div>Echoes of a distant drum…</div>
+              <div class="sent"><div class="sent-dot">11</div>Hold the note, let it soar…</div>
+              <div class="sent"><div class="sent-dot">12</div>आख़िरी गीत साथ गाओ…</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- STEP 3: TRAINING -->
+    <div class="step-panel" id="p3">
+      <div class="train-stage">
+        <div class="train-orb"></div>
+        <div class="train-title" id="trainTitle">Training Your Studio Clone</div>
+        <div class="train-sub">GPT-SoVITS v2 · Your audio never leaves encrypted storage</div>
+        <div class="train-quality">
+          <div class="tq-row"><span>Model Quality (live)</span><b id="tqVal">0</b></div>
+          <div class="tq-track"><div class="tq-fill" id="tqFill"></div></div>
+          <p class="tq-note">Estimated time remaining: <b id="tqEta">~42 minutes</b><br/>You can close this page — we'll notify you when your voice is ready.</p>
+        </div>
+      </div>
+      <div class="tip-strip">
+        <span class="tip-ico">🔒</span>
+        <span class="tip-txt"><b>Private by default:</b> Your voice model belongs to you. Nobody can use it unless you explicitly share it — and you can delete it permanently at any time.</span>
+      </div>
+    </div>
+
+    <!-- STEP 4: TEST -->
+    <div class="step-panel" id="p4">
+      <div class="done-stage">
+        <div class="done-badge">🎉</div>
+        <div class="done-h">Your voice is ready!</div>
+        <p class="done-p">Studio Clone trained · Final quality score: <b>91/100</b> — excellent</p>
+        <div class="test-row">
+          <button class="test-play" onclick="playTest()">
+            <svg id="testIco" width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <div class="test-bars" id="testBars"></div>
+          <span class="test-lbl">Demo: your voice singing 12 sec</span>
+        </div>
+        <div class="done-actions">
+          <button class="btn-main" onclick="toast('Opening Voice Swap with your new voice…')">Swap a Song With It</button>
+          <button class="btn-sec" onclick="toast('Voice saved to My Voices')">Save to My Voices</button>
+          <button class="btn-sec" onclick="goStep(1)">Train Another</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- action bar -->
+  <div class="action-bar" id="abar">
+    <div class="ab-hint" id="abHint">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="var(--v)" stroke-width="1.5"/><path d="M12 8v4m0 4h.01" stroke="var(--v)" stroke-width="2" stroke-linecap="round"/></svg>
+      Studio clone uses <b>1 of 3</b> monthly slots on your Pro plan
+    </div>
+    <button class="btn-back" id="btnBack" onclick="goBack()" style="display:none">← Back</button>
+    <button class="btn-next" id="btnNext" onclick="goNext()">
+      Continue to Recording
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6l6 6-6 6" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+</div>
+
+<!-- ══ RIGHT PANEL ══ -->
+<div class="rpanel">
+  <div class="rp-head"><span class="rp-title">My Voices</span><span style="font-size:11px;color:var(--muted)">3 of 3 slots</span></div>
+  <div class="rp-body">
+    <div class="voice-item" onclick="toast('My Voice — trained May 28, used in 14 swaps')">
+      <div class="vi-top">
+        <div class="vi-av">👤</div>
+        <div style="flex:1;min-width:0"><div class="vi-name">My Voice</div><div class="vi-type">Trained May 28</div></div>
+        <span class="vi-badge studio">Studio</span>
+      </div>
+      <div class="vi-meta"><span>Score <b>91</b></span><span>Used <b>14×</b></span><span>Hindi + English</span></div>
+    </div>
+    <div class="voice-item" onclick="toast('Voice 2 — express clone')">
+      <div class="vi-top">
+        <div class="vi-av">🎤</div>
+        <div style="flex:1;min-width:0"><div class="vi-name">Voice 2</div><div class="vi-type">Trained Jun 2</div></div>
+        <span class="vi-badge express">Express</span>
+      </div>
+      <div class="vi-meta"><span>Score <b>72</b></span><span>Used <b>3×</b></span><span>English</span></div>
+    </div>
+    <div class="voice-item" onclick="toast('Voice 3 — studio clone')">
+      <div class="vi-top">
+        <div class="vi-av">🧑‍🎤</div>
+        <div style="flex:1;min-width:0"><div class="vi-name">Voice 3</div><div class="vi-type">Trained Jun 7</div></div>
+        <span class="vi-badge studio">Studio</span>
+      </div>
+      <div class="vi-meta"><span>Score <b>88</b></span><span>Used <b>9×</b></span><span>Hindi</span></div>
+    </div>
+  </div>
+  <div class="rp-foot">
+    <div class="rp-note">Slots reset on <b>Jul 1</b> · Retrain any voice to improve it with new audio</div>
+  </div>
+</div>
+
+</div>
+
+<div class="toast" id="toastEl"><div class="toast-dot"></div><span id="toastTxt"></span></div>
+
+<script>
+let curStep = 1, recording = false, micTimer = null, cloneType = 'express';
+let trainTimer = null;
+
+/* ── STEPS ── */
+function goStep(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById('p'+i).classList.toggle('on', i === n);
+    const s = document.getElementById('st'+i), sn = s.querySelector('.step-n');
+    s.classList.remove('active','done');
+    if (i < n) { s.classList.add('done'); sn.textContent = '✓'; }
+    else { sn.textContent = i; if (i === n) s.classList.add('active'); }
+  });
+  curStep = n;
+  updateActionBar();
+  if (n === 3) startTraining();
+  if (n === 4) buildTestBars();
+}
+
+function updateActionBar() {
+  const bar = document.getElementById('abar');
+  const next = document.getElementById('btnNext');
+  const back = document.getElementById('btnBack');
+  const hint = document.getElementById('abHint');
+  bar.style.display = (curStep === 3 || curStep === 4) ? 'none' : 'flex';
+  back.style.display = curStep > 1 ? 'block' : 'none';
+  if (curStep === 1) {
+    next.innerHTML = 'Continue to Recording <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6l6 6-6 6" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>';
+  } else if (curStep === 2) {
+    next.innerHTML = 'Start Training <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-6-6l6 6-6 6" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>';
+  }
+}
+
+function goNext() {
+  if (curStep === 2 && recording) toggleRec();
+  goStep(Math.min(4, curStep + 1));
+}
+function goBack() { goStep(Math.max(1, curStep - 1)); }
+
+/* ── CLONE TYPE ── */
+function pickType(t) {
+  cloneType = t;
+  document.getElementById('tcExpress').classList.toggle('on', t === 'express');
+  document.getElementById('tcStudio').classList.toggle('on', t === 'studio');
+  document.getElementById('abHint').innerHTML = t === 'studio'
+    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="var(--v)" stroke-width="1.5"/><path d="M12 8v4m0 4h.01" stroke="var(--v)" stroke-width="2" stroke-linecap="round"/></svg> Studio clone uses <b>1 of 3</b> monthly slots on your Pro plan'
+    : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="var(--v)" stroke-width="1.5"/><path d="M12 8v4m0 4h.01" stroke="var(--v)" stroke-width="2" stroke-linecap="round"/></svg> Express clones are <b>unlimited</b> on your Pro plan';
+}
+
+/* ── RECORDING / MIC VIS ── */
+function toggleRec() {
+  recording = !recording;
+  const btn = document.getElementById('recBtn');
+  const ico = document.getElementById('recIco');
+  const idle = document.getElementById('micIdle');
+  btn.classList.toggle('recording', recording);
+  if (recording) {
+    ico.innerHTML = '<rect x="7" y="7" width="10" height="10" rx="1.5"/>';
+    idle.style.display = 'none';
+    buildMicBars();
+    micTimer = setInterval(animateMic, 90);
+    toast('Recording — speak naturally');
+  } else {
+    ico.innerHTML = '<circle cx="12" cy="12" r="7"/>';
+    clearInterval(micTimer);
+    toast('Paused — sentence saved');
+  }
+}
+
+function buildMicBars() {
+  const vis = document.getElementById('micVis');
+  if (vis.querySelector('.mic-bar')) return;
+  const count = Math.floor(vis.offsetWidth / 5.5);
+  for (let i = 0; i < count; i++) {
+    const b = document.createElement('div');
+    b.className = 'mic-bar';
+    b.style.height = '4px';
+    vis.appendChild(b);
+  }
+}
+
+function animateMic() {
+  document.querySelectorAll('.mic-bar').forEach((b, i) => {
+    const base = Math.sin(Date.now()/180 + i*.4) * .5 + .5;
+    const noise = Math.random() * .55;
+    b.style.height = Math.max(3, (base*.5 + noise*.5) * 56) + 'px';
+  });
+  // occasionally wiggle quality meters
+  if (Math.random() < .12) {
+    const echo = 38 + Math.random()*18;
+    document.getElementById('qmEcho').style.width = echo + '%';
+    const vol = 55 + Math.random()*22;
+    document.getElementById('qmVol').style.width = vol + '%';
+  }
+}
+
+function nextSentence() {
+  const cur = document.getElementById('sentCur');
+  let n = parseInt(cur.textContent);
+  if (n < 12) { cur.textContent = n + 1; toast('Sentence ' + (n+1) + ' of 12'); }
+}
+
+function setLang(el) {
+  document.querySelectorAll('.pl-opt').forEach(o => o.classList.remove('on'));
+  el.classList.add('on');
+  const hindi = el.textContent.trim() !== 'English';
+  document.getElementById('promptText').innerHTML = hindi
+    ? '"हर <span class="hl">सुबह की किरण</span> एक नया गीत लेकर आती है।"'
+    : '"The <span class="hl">morning rain</span> sings a melody only the mountains remember."';
+}
+
+/* ── TRAINING ── */
+function startTraining() {
+  document.getElementById('trainTitle').textContent = cloneType === 'studio' ? 'Training Your Studio Clone' : 'Training Your Express Clone';
+  let q = 0;
+  const fill = document.getElementById('tqFill');
+  const val = document.getElementById('tqVal');
+  const eta = document.getElementById('tqEta');
+  clearInterval(trainTimer);
+  trainTimer = setInterval(() => {
+    q += Math.random() * 9 + 3;
+    if (q >= 91) {
+      q = 91;
+      clearInterval(trainTimer);
+      setTimeout(() => { goStep(4); toast('Training complete — quality 91/100!'); }, 700);
+    }
+    fill.style.width = q + '%';
+    val.textContent = Math.floor(q);
+    eta.textContent = '~' + Math.max(1, Math.floor(42 * (1 - q/100))) + ' minutes';
+  }, 600);
+}
+
+/* ── TEST BARS ── */
+function buildTestBars() {
+  const el = document.getElementById('testBars');
+  if (el.children.length) return;
+  const count = Math.floor((el.offsetWidth || 240) / 4.5);
+  for (let i = 0; i < count; i++) {
+    const b = document.createElement('div');
+    b.className = 'tb';
+    b.style.height = (Math.sin(i*.35)*.4 + .5) * 26 + 4 + 'px';
+    el.appendChild(b);
+  }
+}
+
+let testPlaying = false;
+function playTest() {
+  testPlaying = !testPlaying;
+  document.getElementById('testIco').innerHTML = testPlaying
+    ? '<rect x="6" y="4" width="4" height="16" fill="white"/><rect x="14" y="4" width="4" height="16" fill="white"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+  toast(testPlaying ? 'Playing your voice demo…' : 'Paused');
+  if (testPlaying) {
+    const bars = document.querySelectorAll('.tb');
+    let t = 0;
+    const anim = setInterval(() => {
+      if (!testPlaying) { clearInterval(anim); return; }
+      bars.forEach((b, i) => {
+        b.style.height = Math.max(4, (Math.sin(t/3 + i*.4)*.5 + .5) * 28) + 'px';
+      });
+      t++;
+      if (t > 120) { testPlaying = false; clearInterval(anim); document.getElementById('testIco').innerHTML = '<path d="M8 5v14l11-7z"/>'; }
+    }, 100);
+  }
+}
+
+/* ── TOAST ── */
+let tT;
+function toast(m) {
+  const t = document.getElementById('toastEl');
+  document.getElementById('toastTxt').textContent = m;
+  t.classList.add('show');
+  clearTimeout(tT);
+  tT = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+window.addEventListener('DOMContentLoaded', () => { goStep(1); });
+</script>
+</body>
+</html>
