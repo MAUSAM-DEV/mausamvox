@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── scrollbar ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #05050F; }
+::-webkit-scrollbar-thumb { background: #8B5CF6; border-radius: 2px; }
+
+/* ── gradient text utility ── */
+@layer utilities {
+  .grad-text {
+    background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .grad-bg {
+    background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+  }
+
+  .grad-border {
+    background: linear-gradient(#13132A, #13132A) padding-box,
+                linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4) border-box;
+    border: 1px solid transparent;
+  }
+}
+
+/* ── mobile overflow guard ── */
+html, body { max-width: 100vw; overflow-x: hidden; }
+
+/* ── section responsive padding ── */
+@media (max-width: 1024px) {
+  .sec-responsive { padding-left: 24px !important; padding-right: 24px !important; }
+}
+
+/* ── range input ── */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #1E1E3A;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8B5CF6;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+  transition: box-shadow 0.2s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.3);
+}
