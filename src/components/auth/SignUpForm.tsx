@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import isEmail from 'validator/lib/isEmail'
 import { AuthCard } from './AuthCard'
+
+const MAX_PASSWORD_LENGTH = 128
 
 export function SignUpForm() {
   const [email, setEmail]       = useState('')
@@ -14,20 +16,31 @@ export function SignUpForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-      },
+    // ── Client-side validation (before any network call) ──────────
+    if (!isEmail(email)) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      setError(`Password must be ${MAX_PASSWORD_LENGTH} characters or fewer.`)
+      return
+    }
+
+    setLoading(true)
+
+    const res = await fetch('/api/auth/sign-up', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
     })
 
-    if (error) {
-      setError(error.message)
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error ?? 'Sign-up failed. Please try again.')
       setLoading(false)
       return
     }
@@ -86,6 +99,7 @@ export function SignUpForm() {
             placeholder="8+ characters"
             required
             minLength={8}
+            maxLength={MAX_PASSWORD_LENGTH}
             autoComplete="new-password"
           />
         </div>

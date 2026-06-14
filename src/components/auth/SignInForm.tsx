@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import isEmail from 'validator/lib/isEmail'
 import { AuthCard } from './AuthCard'
 
 function SignInInner() {
@@ -18,14 +18,26 @@ function SignInInner() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // ── Client-side validation (before any network call) ──────────
+    if (!isEmail(email)) {
+      setError('Please enter a valid email address.')
+      return
+    }
 
-    if (error) {
-      setError(error.message)
+    setLoading(true)
+
+    const res = await fetch('/api/auth/sign-in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error ?? 'Sign-in failed. Please try again.')
       setLoading(false)
       return
     }
