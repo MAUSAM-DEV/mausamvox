@@ -27,12 +27,12 @@ export function VSidebar({ onToast }: VSidebarProps) {
     <>
       <aside className="vs-sidebar">
         {/* Logo */}
-        <div className="vs-logo-row">
+        <a href="/" className="vs-logo-row" style={{ textDecoration: 'none' }}>
           <LogoMark size={34} />
           <span className="vs-wordmark">
             Mausam<em className="grad-text" style={{ fontStyle: 'normal' }}>Vox</em>
           </span>
-        </div>
+        </a>
 
         {/* Nav */}
         <nav className="vs-sb-nav">
@@ -40,6 +40,11 @@ export function VSidebar({ onToast }: VSidebarProps) {
           {TOOLS.map((item) =>
             item.active ? (
               <Link key={item.href} href={item.href} className="vs-sb-link vs-sb-link--active">
+                <span className="vs-sb-ico">{item.emoji}</span>
+                <span className="vs-sb-lbl">{item.label}</span>
+              </Link>
+            ) : item.href !== '#' ? (
+              <Link key={item.href} href={item.href} className="vs-sb-link">
                 <span className="vs-sb-ico">{item.emoji}</span>
                 <span className="vs-sb-lbl">{item.label}</span>
               </Link>

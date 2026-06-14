@@ -26,12 +26,12 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
   return (
     <>
       <aside className="vls-sidebar">
-        <div className="vls-logo-row">
+        <a href="/" className="vls-logo-row" style={{ textDecoration: 'none' }}>
           <LogoMark size={34} />
           <span className="vls-wordmark">
             Mausam<em className="grad-text" style={{ fontStyle: 'normal' }}>Vox</em>
           </span>
-        </div>
+        </a>
 
         <nav className="vls-nav">
           <div className="vls-group-lbl">Tools</div>
@@ -41,11 +41,16 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
                 <span className="vls-ico">{item.emoji}</span>
                 <span className="vls-lbl">{item.label}</span>
               </Link>
+            ) : item.href !== '#' ? (
+              <Link key={item.href} href={item.href} className="vls-link">
+                <span className="vls-ico">{item.emoji}</span>
+                <span className="vls-lbl">{item.label}</span>
+              </Link>
             ) : (
               <div
                 key={item.label}
                 className="vls-link"
-                onClick={() => onToast(item.label + (item.href === '/voice-swap' ? '' : ' — coming soon'))}
+                onClick={() => onToast(item.label + ' — coming soon')}
               >
                 <span className="vls-ico">{item.emoji}</span>
                 <span className="vls-lbl">{item.label}</span>

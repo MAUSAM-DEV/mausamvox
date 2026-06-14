@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import type { Persona } from './OnboardingPage'
 
 const FINALE_SUB: Record<Persona, string> = {
@@ -23,6 +24,7 @@ interface FinaleScreenProps {
 }
 
 export function FinaleScreen({ persona, onToast }: FinaleScreenProps) {
+  const router = useRouter()
   return (
     <>
       <div className="ob-screen ob-sc-center">
@@ -43,7 +45,7 @@ export function FinaleScreen({ persona, onToast }: FinaleScreenProps) {
         <div className="ob-btn-row">
           <button
             className="ob-btn-big"
-            onClick={() => onToast('Opening your dashboard…')}
+            onClick={() => router.push('/voice-swap')}
           >
             Enter MausamVox
           </button>

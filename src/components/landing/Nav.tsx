@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { LogoFull } from '@/components/ui/Logo'
 
 const navLinks = [
@@ -31,7 +32,7 @@ export function Nav() {
       >
         <LogoFull size={38} />
 
-        <ul className="hidden lg:flex gap-9 list-none">
+        <ul className="nav-links">
           {navLinks.map((link) => (
             <li key={link.href}>
               <a
@@ -53,8 +54,10 @@ export function Nav() {
           ))}
         </ul>
 
-        <div className="flex gap-[10px] items-center nav-btns">
-          <button
+        <div className="nav-btns" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <Link
+            href="/auth/sign-in"
+            className="nav-signin"
             style={{
               padding: '8px 18px',
               borderRadius: '8px',
@@ -67,6 +70,8 @@ export function Nav() {
               cursor: 'pointer',
               transition: 'all 0.2s',
               whiteSpace: 'nowrap',
+              textDecoration: 'none',
+              display: 'inline-block',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = '#8B5CF6'
@@ -78,9 +83,10 @@ export function Nav() {
             }}
           >
             Sign In
-          </button>
+          </Link>
 
-          <button
+          <Link
+            href="/auth/sign-up"
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -94,6 +100,8 @@ export function Nav() {
               letterSpacing: '0.1px',
               transition: 'all 0.25s',
               whiteSpace: 'nowrap',
+              textDecoration: 'none',
+              display: 'inline-block',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-1px)'
@@ -105,18 +113,29 @@ export function Nav() {
             }}
           >
             Try for Free
-          </button>
+          </Link>
         </div>
       </nav>
 
       <style>{`
         .site-nav { padding: 0 60px; }
+        .nav-links {
+          display: none;
+          flex-direction: row;
+          gap: 36px;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        @media (min-width: 1024px) {
+          .nav-links { display: flex; }
+        }
         @media (max-width: 1024px) {
           .site-nav { padding: 0 24px; }
         }
         @media (max-width: 400px) {
           .site-nav { padding: 0 14px; }
-          .nav-btns button:first-child { display: none; }
+          .nav-signin { display: none; }
         }
       `}</style>
     </>

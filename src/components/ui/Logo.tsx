@@ -33,7 +33,7 @@ export function LogoMark({ size = 38, className }: LogoProps) {
 
 export function LogoFull({ size = 38 }: LogoProps) {
   return (
-    <a href="/" className="flex items-center gap-[11px] no-underline">
+    <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '11px', textDecoration: 'none' }}>
       <LogoMark size={size} />
       <span
         style={{

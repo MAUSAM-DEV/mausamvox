@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useReveal } from './useReveal'
 
 export function CtaBand() {
@@ -61,7 +62,8 @@ export function CtaBand() {
           Clone it. Swap it. Share it. Start free — no card needed, no commitment.
         </p>
         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button
+          <Link
+            href="/auth/sign-up"
             style={{
               padding: '15px 38px',
               borderRadius: '10px',
@@ -74,6 +76,8 @@ export function CtaBand() {
               cursor: 'pointer',
               transition: 'all 0.28s',
               letterSpacing: '0.2px',
+              textDecoration: 'none',
+              display: 'inline-block',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)'
@@ -85,8 +89,9 @@ export function CtaBand() {
             }}
           >
             Create Your Voice — Free
-          </button>
-          <button
+          </Link>
+          <a
+            href="#features"
             style={{
               padding: '14px 34px',
               borderRadius: '10px',
@@ -98,6 +103,8 @@ export function CtaBand() {
               fontWeight: 500,
               cursor: 'pointer',
               transition: 'all 0.28s',
+              textDecoration: 'none',
+              display: 'inline-block',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'rgba(139,92,246,.5)'
@@ -111,7 +118,7 @@ export function CtaBand() {
             }}
           >
             See All Features
-          </button>
+          </a>
         </div>
       </div>
     </div>

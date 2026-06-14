@@ -9,7 +9,7 @@ import { AuthCard } from './AuthCard'
 function SignInInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') ?? '/'
+  const redirect = searchParams.get('redirect') ?? '/voice-swap'
 
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useRef } from 'react'
 
 function WaveCanvas() {
@@ -261,7 +262,8 @@ export function Hero() {
             animation: 'fadeUp 0.7s 0.28s ease both',
           }}
         >
-          <button
+          <Link
+            href="/auth/sign-up"
             style={{
               padding: '15px 38px',
               borderRadius: '10px',
@@ -274,8 +276,8 @@ export function Hero() {
               cursor: 'pointer',
               transition: 'all 0.28s',
               letterSpacing: '0.2px',
-              position: 'relative',
-              overflow: 'hidden',
+              textDecoration: 'none',
+              display: 'inline-block',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)'
@@ -287,7 +289,7 @@ export function Hero() {
             }}
           >
             Start Free — No Card Needed
-          </button>
+          </Link>
 
           <button
             style={{

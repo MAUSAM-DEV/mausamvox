@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useReveal } from './useReveal'
 
 type PlanFeature = { text: string; dim?: boolean }
@@ -255,7 +256,8 @@ function PriceCard({ plan }: { plan: Plan }) {
         ))}
       </ul>
 
-      <button
+      <Link
+        href="/auth/sign-up"
         style={{
           display: 'block',
           width: '100%',
@@ -268,6 +270,9 @@ function PriceCard({ plan }: { plan: Plan }) {
           cursor: 'pointer',
           transition: 'all 0.25s',
           letterSpacing: '0.2px',
+          textAlign: 'center',
+          textDecoration: 'none',
+          boxSizing: 'border-box',
           ...(plan.btnVariant === 'solid'
             ? {
                 border: 'none',
@@ -299,7 +304,7 @@ function PriceCard({ plan }: { plan: Plan }) {
         }}
       >
         {plan.btnLabel}
-      </button>
+      </Link>
     </div>
   )
 }
