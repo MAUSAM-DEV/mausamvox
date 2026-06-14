@@ -46,8 +46,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         /* ── centering shell ───────────────────────────── */
         .au-center {
           position: relative; z-index: 1;
-          min-height: 100vh; display: flex; align-items: center;
+          height: 100vh; overflow-y: auto;
+          display: flex; align-items: center;
           justify-content: center; padding: 40px 20px;
+          box-sizing: border-box;
         }
 
         /* ── card ──────────────────────────────────────── */
@@ -157,7 +159,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         @media (max-width: 480px) {
           .au-card { padding: 28px 20px; border-radius: 16px; }
           .au-title { font-size: 20px; }
-          .au-center { padding: 20px 16px; align-items: flex-start; padding-top: 40px; }
+          .au-center { padding: 20px 16px; }
         }
       `}</style>
     </>
