@@ -14,6 +14,7 @@
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
+    "replicate": "^1.4.0",
     "validator": "^13.15.35"
   },
   "devDependencies": {

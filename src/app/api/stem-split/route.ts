@@ -1,32 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-// Vercel Pro allows up to 300s; hobby is capped at 60s.
-// Set to 180s — enough for typical Demucs jobs (~90s on warm GPUs).
+// Vercel Pro: up to 300s. Hobby: 60s (Demucs typically takes 60–120s).
 export const maxDuration = 180
 
-const REPLICATE_API = 'https://api.replicate.com/v1'
-const POLL_INTERVAL_MS = 3_000
-const MAX_POLLS = 60 // 60 × 3s = 3 minutes
-
-type PredictionStatus = 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled'
-
-interface Prediction {
-  id: string
-  status: PredictionStatus
-  output?: unknown
-  error?: string
-}
-
 function extractStems(output: unknown): { vocals: string; instrumental: string } | null {
+  // Demucs can return an object or a two-element array depending on SDK version
   if (Array.isArray(output) && output.length >= 2) {
-    return { vocals: output[0] as string, instrumental: output[1] as string }
+    return { vocals: String(output[0]), instrumental: String(output[1]) }
   }
   if (output && typeof output === 'object') {
-    const o = output as Record<string, string>
+    const o = output as Record<string, unknown>
     const vocals = o.vocals
     const instrumental = o.no_vocals ?? o.accompaniment ?? o.other
-    if (vocals && instrumental) return { vocals, instrumental }
+    if (typeof vocals === 'string' && typeof instrumental === 'string') {
+      return { vocals, instrumental }
+    }
   }
   return null
 }
@@ -44,85 +34,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'storagePath is required' }, { status: 400 })
   }
 
-  const token = process.env.REPLICATE_API_TOKEN
-  if (!token) {
+  if (!process.env.REPLICATE_API_TOKEN) {
     return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
   }
 
-  // ── 1. Generate a signed URL (bucket is private, Replicate needs to fetch it) ──
-  // 10-minute TTL — enough for Replicate to queue and download the file.
-  // Uses the service-role key (sb_secret_… or eyJ… both work transparently).
+  // ── 1. Signed URL — bucket is private, Replicate must be able to fetch the file ──
   const { data: signed, error: signErr } = await supabaseAdmin.storage
     .from('audio-uploads')
-    .createSignedUrl(storagePath, 600)
+    .createSignedUrl(storagePath, 600) // 10-min TTL
 
   if (signErr || !signed?.signedUrl) {
     return NextResponse.json(
-      { error: `Could not generate signed URL: ${signErr?.message ?? 'unknown'}` },
+      { error: `Could not sign storage URL: ${signErr?.message ?? 'unknown'}` },
       { status: 500 }
     )
   }
 
-  const audioUrl = signed.signedUrl
+  // ── 2. Run Demucs via Replicate SDK ─────────────────────────────
+  // replicate.run() polls internally — no manual loop needed.
+  // "ryan5453/demucs" resolves to the latest published version automatically.
+  try {
+    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
-  // ── 2. Start prediction ──────────────────────────────────────────
-  const createRes = await fetch(`${REPLICATE_API}/models/ryan5453/demucs/predictions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Token ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      input: { audio: audioUrl, two_stems: 'vocals' },
-    }),
-  })
-
-  if (!createRes.ok) {
-    const text = await createRes.text()
-    return NextResponse.json({ error: `Replicate error: ${text}` }, { status: 502 })
-  }
-
-  let prediction: Prediction = await createRes.json()
-
-  // ── 2. Poll for completion ───────────────────────────────────────
-  for (
-    let i = 0;
-    i < MAX_POLLS &&
-    prediction.status !== 'succeeded' &&
-    prediction.status !== 'failed' &&
-    prediction.status !== 'canceled';
-    i++
-  ) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-
-    const pollRes = await fetch(`${REPLICATE_API}/predictions/${prediction.id}`, {
-      headers: { Authorization: `Token ${token}` },
+    const output = await replicate.run('ryan5453/demucs', {
+      input: {
+        audio: signed.signedUrl,
+        model: 'htdemucs',
+        stem: 'vocals',       // two-stem mode: vocals + accompaniment
+        output_format: 'mp3', // smaller files for download links
+      },
     })
 
-    if (pollRes.ok) {
-      prediction = await pollRes.json()
+    const stems = extractStems(output)
+    if (!stems) {
+      return NextResponse.json(
+        { error: `Unexpected Replicate output: ${JSON.stringify(output)}` },
+        { status: 502 }
+      )
     }
-  }
 
-  // ── 3. Handle result ─────────────────────────────────────────────
-  if (prediction.status === 'failed' || prediction.status === 'canceled') {
-    return NextResponse.json(
-      { error: prediction.error ?? `Stem split ${prediction.status}` },
-      { status: 502 }
-    )
+    return NextResponse.json(stems)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Replicate call failed'
+    return NextResponse.json({ error: msg }, { status: 502 })
   }
-
-  if (prediction.status !== 'succeeded') {
-    return NextResponse.json({ error: 'Stem split timed out after 3 minutes' }, { status: 504 })
-  }
-
-  const stems = extractStems(prediction.output)
-  if (!stems) {
-    return NextResponse.json(
-      { error: 'Unexpected output format from Replicate' },
-      { status: 502 }
-    )
-  }
-
-  return NextResponse.json(stems)
 }
