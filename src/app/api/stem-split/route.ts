@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
 // Vercel Pro allows up to 300s; hobby is capped at 60s.
 // Set to 180s — enough for typical Demucs jobs (~90s on warm GPUs).
@@ -31,16 +32,16 @@ function extractStems(output: unknown): { vocals: string; instrumental: string }
 }
 
 export async function POST(req: NextRequest) {
-  let body: { audioUrl?: string; userId?: string }
+  let body: { storagePath?: string; userId?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { audioUrl } = body
-  if (!audioUrl) {
-    return NextResponse.json({ error: 'audioUrl is required' }, { status: 400 })
+  const { storagePath } = body
+  if (!storagePath) {
+    return NextResponse.json({ error: 'storagePath is required' }, { status: 400 })
   }
 
   const token = process.env.REPLICATE_API_TOKEN
@@ -48,7 +49,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
   }
 
-  // ── 1. Start prediction ──────────────────────────────────────────
+  // ── 1. Generate a signed URL (bucket is private, Replicate needs to fetch it) ──
+  // 10-minute TTL — enough for Replicate to queue and download the file.
+  // Uses the service-role key (sb_secret_… or eyJ… both work transparently).
+  const { data: signed, error: signErr } = await supabaseAdmin.storage
+    .from('audio-uploads')
+    .createSignedUrl(storagePath, 600)
+
+  if (signErr || !signed?.signedUrl) {
+    return NextResponse.json(
+      { error: `Could not generate signed URL: ${signErr?.message ?? 'unknown'}` },
+      { status: 500 }
+    )
+  }
+
+  const audioUrl = signed.signedUrl
+
+  // ── 2. Start prediction ──────────────────────────────────────────
   const createRes = await fetch(`${REPLICATE_API}/models/ryan5453/demucs/predictions`, {
     method: 'POST',
     headers: {

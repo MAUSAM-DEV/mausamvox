@@ -9,7 +9,7 @@ const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
 export interface StemResult {
-  audioUrl: string
+  storagePath: string
   vocalsUrl: string
   instrumentalUrl: string
   fileName: string
@@ -115,23 +115,21 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
 
-      const {
-        data: { publicUrl: audioUrl },
-      } = supabase.storage.from('audio-uploads').getPublicUrl(path)
-
+      // Bucket is private — send the storage path to the API route,
+      // which generates a signed URL server-side before calling Replicate.
       setPhase('splitting')
 
       const res = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl, userId }),
+        body: JSON.stringify({ storagePath: path, userId }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Stem split failed')
 
       const stemResult: StemResult = {
-        audioUrl,
+        storagePath: path,
         vocalsUrl: data.vocals,
         instrumentalUrl: data.instrumental,
         fileName: file.name,
