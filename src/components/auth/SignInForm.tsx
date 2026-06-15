@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import isEmail from 'validator/lib/isEmail'
 import { AuthCard } from './AuthCard'
+import { PasswordInput } from './PasswordInput'
 
 function SignInInner() {
   const router = useRouter()
@@ -73,12 +74,9 @@ function SignInInner() {
               Forgot password?
             </Link>
           </div>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="au-input"
-            placeholder="••••••••"
             required
             autoComplete="current-password"
           />

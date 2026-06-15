@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import isEmail from 'validator/lib/isEmail'
 import { AuthCard } from './AuthCard'
+import { PasswordInput } from './PasswordInput'
 
 const MAX_PASSWORD_LENGTH = 128
 
@@ -91,11 +92,9 @@ export function SignUpForm() {
         </div>
         <div className="au-field">
           <label className="au-label">Password</label>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="au-input"
             placeholder="8+ characters"
             required
             minLength={8}

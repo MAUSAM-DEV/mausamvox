@@ -101,6 +101,17 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         .au-input:focus { border-color: rgba(139,92,246,.6); }
         .au-input::placeholder { color: #3A3A60; }
 
+        /* ── password show/hide ────────────────────────── */
+        .au-pw-wrap { position: relative; }
+        .au-pw-wrap .au-input { padding-right: 44px; }
+        .au-pw-toggle {
+          position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; padding: 0; cursor: pointer;
+          color: #3A3A60; transition: color .2s; display: flex; align-items: center;
+          line-height: 0;
+        }
+        .au-pw-toggle:hover { color: #C4C4E0; }
+
         /* ── button ────────────────────────────────────── */
         .au-btn {
           width: 100%; padding: 14px; border-radius: 10px; border: none;

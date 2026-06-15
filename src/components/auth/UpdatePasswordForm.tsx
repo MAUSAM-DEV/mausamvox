@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AuthCard } from './AuthCard'
+import { PasswordInput } from './PasswordInput'
 
 export function UpdatePasswordForm() {
   const router = useRouter()
@@ -45,11 +46,9 @@ export function UpdatePasswordForm() {
       <form onSubmit={handleSubmit} className="au-form">
         <div className="au-field">
           <label className="au-label">New password</label>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="au-input"
             placeholder="8+ characters"
             required
             minLength={8}
@@ -58,12 +57,9 @@ export function UpdatePasswordForm() {
         </div>
         <div className="au-field">
           <label className="au-label">Confirm password</label>
-          <input
-            type="password"
+          <PasswordInput
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
-            className="au-input"
-            placeholder="••••••••"
             required
             autoComplete="new-password"
           />
