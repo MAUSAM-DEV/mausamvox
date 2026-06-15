@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
-import { UploadStep } from './UploadStep'
+import { UploadStep, StemResult } from './UploadStep'
 import { ConfigStep } from './ConfigStep'
 import { ResultStep } from './ResultStep'
 import { RightPanel } from './RightPanel'
@@ -18,10 +19,18 @@ type PlayerTab = 'Original' | 'Swapped' | 'A/B Compare'
 
 export function VoiceSwapPage() {
   // Navigation
-  const [step, setStep] = useState<Step>(2)
+  const [step, setStep] = useState<Step>(1)
 
-  // Upload
-  const [uploaded, setUploaded] = useState(true)
+  // Upload / stems
+  const [userId, setUserId] = useState<string | null>(null)
+  const [stemResult, setStemResult] = useState<StemResult | null>(null)
+
+  // Fetch user id once on mount
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setUserId(data.user?.id ?? null))
+  }, [])
 
   // Voice picker
   const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
@@ -80,14 +89,12 @@ export function VoiceSwapPage() {
     setStep(n)
   }
 
-  function handleUpload() {
-    setUploaded((v) => {
-      if (!v) {
-        showToast('Track loaded — Kesariya_Original.mp3')
-        setTimeout(() => setStep(2), 600)
-      }
-      return !v
-    })
+  function handleStemDone(result: StemResult) {
+    setStemResult(result)
+  }
+
+  function handleStemContinue() {
+    setStep(2)
   }
 
   function handleProcess(type: 'preview' | 'full') {
@@ -147,7 +154,7 @@ export function VoiceSwapPage() {
     setPlaying(false)
     setPlayProgress(0)
     setStep(1)
-    setUploaded(false)
+    setStemResult(null)
   }
 
   // Cleanup on unmount
@@ -170,7 +177,13 @@ export function VoiceSwapPage() {
           {/* Workspace */}
           <div className="vs-workspace">
             {step === 1 && (
-              <UploadStep uploaded={uploaded} onUpload={handleUpload} />
+              <UploadStep
+                userId={userId}
+                result={stemResult}
+                onDone={handleStemDone}
+                onContinue={handleStemContinue}
+                onToast={showToast}
+              />
             )}
             {step === 2 && (
               <ConfigStep
@@ -217,7 +230,7 @@ export function VoiceSwapPage() {
                 <button
                   className="vs-btn-ghost"
                   onClick={() => {
-                    if (step === 1 && !uploaded) {
+                    if (step === 1 && !stemResult) {
                       showToast('Upload a track first')
                       return
                     }
