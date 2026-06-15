@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   try {
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
-    const output = await replicate.run('cjwbw/demucs', {
+    const output = await replicate.run('cjwbw/demucs:25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953', {
       input: {
         audio: signed.signedUrl,
         stem: 'vocals',
