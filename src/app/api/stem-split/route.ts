@@ -5,17 +5,14 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 // Vercel Pro: up to 300s. Hobby: 60s (Demucs typically takes 60–120s).
 export const maxDuration = 180
 
-function extractStems(output: unknown): { vocals: string; instrumental: string } | null {
-  // Demucs can return an object or a two-element array depending on SDK version
-  if (Array.isArray(output) && output.length >= 2) {
-    return { vocals: String(output[0]), instrumental: String(output[1]) }
-  }
-  if (output && typeof output === 'object') {
-    const o = output as Record<string, unknown>
-    const vocals = o.vocals
-    const instrumental = o.no_vocals ?? o.accompaniment ?? o.other
-    if (typeof vocals === 'string' && typeof instrumental === 'string') {
-      return { vocals, instrumental }
+function extractStems(output: unknown): { bass: string; drums: string; other: string; vocals: string } | null {
+  // cjwbw/demucs returns [bass, drums, other, vocals] for htdemucs
+  if (Array.isArray(output) && output.length >= 4) {
+    return {
+      bass:   String(output[0]),
+      drums:  String(output[1]),
+      other:  String(output[2]),
+      vocals: String(output[3]),
     }
   }
   return null
@@ -56,12 +53,13 @@ export async function POST(req: NextRequest) {
   try {
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
-    const output = await replicate.run('ryan5453/demucs', {
+    const output = await replicate.run('cjwbw/demucs', {
       input: {
         audio: signed.signedUrl,
+        stem: 'vocals',
         model: 'htdemucs',
-        stem: 'vocals',       // two-stem mode: vocals + accompaniment
-        output_format: 'mp3', // smaller files for download links
+        mp3: true,
+        mp3_bitrate: 320,
       },
     })
 
@@ -73,6 +71,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Returns all 4 stems so callers can verify; vocals = output[3]
     return NextResponse.json(stems)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Replicate call failed'

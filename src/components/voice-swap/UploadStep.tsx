@@ -11,7 +11,9 @@ const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 export interface StemResult {
   storagePath: string
   vocalsUrl: string
-  instrumentalUrl: string
+  bassUrl: string
+  drumsUrl: string
+  otherUrl: string
   fileName: string
 }
 
@@ -130,9 +132,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       const stemResult: StemResult = {
         storagePath: path,
-        vocalsUrl: data.vocals,
-        instrumentalUrl: data.instrumental,
-        fileName: file.name,
+        vocalsUrl:  data.vocals,
+        bassUrl:    data.bass,
+        drumsUrl:   data.drums,
+        otherUrl:   data.other,
+        fileName:   file.name,
       }
 
       onDone(stemResult)
@@ -234,38 +238,31 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
             <UploadWaveCanvas />
 
-            {/* Stem download cards */}
+            {/* Stem download cards — all 4 stems from htdemucs */}
             <div className="vs-stems">
-              <a
-                className="vs-stem-card"
-                href={displayResult.vocalsUrl}
-                download="vocals.wav"
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => onToast('Downloading vocals…')}
-              >
-                <span className="vs-stem-icon">🎤</span>
-                <div>
-                  <div className="vs-stem-name">Vocals</div>
-                  <div className="vs-stem-hint">Isolated voice track</div>
-                </div>
-                <span className="vs-stem-dl">↓</span>
-              </a>
-              <a
-                className="vs-stem-card"
-                href={displayResult.instrumentalUrl}
-                download="instrumental.wav"
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => onToast('Downloading instrumental…')}
-              >
-                <span className="vs-stem-icon">🎸</span>
-                <div>
-                  <div className="vs-stem-name">Instrumental</div>
-                  <div className="vs-stem-hint">Music without vocals</div>
-                </div>
-                <span className="vs-stem-dl">↓</span>
-              </a>
+              {([
+                { url: displayResult.vocalsUrl, icon: '🎤', name: 'Vocals',      hint: 'Isolated voice track',   file: 'vocals.mp3' },
+                { url: displayResult.bassUrl,   icon: '🎸', name: 'Bass',        hint: 'Low-end bass line',      file: 'bass.mp3'   },
+                { url: displayResult.drumsUrl,  icon: '🥁', name: 'Drums',       hint: 'Percussion only',        file: 'drums.mp3'  },
+                { url: displayResult.otherUrl,  icon: '🎹', name: 'Other',       hint: 'Melody / instruments',   file: 'other.mp3'  },
+              ] as const).map(({ url, icon, name, hint, file }) => (
+                <a
+                  key={name}
+                  className="vs-stem-card"
+                  href={url}
+                  download={file}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => onToast(`Downloading ${name.toLowerCase()}…`)}
+                >
+                  <span className="vs-stem-icon">{icon}</span>
+                  <div>
+                    <div className="vs-stem-name">{name}</div>
+                    <div className="vs-stem-hint">{hint}</div>
+                  </div>
+                  <span className="vs-stem-dl">↓</span>
+                </a>
+              ))}
             </div>
 
             <button className="vs-continue-btn" onClick={onContinue}>
