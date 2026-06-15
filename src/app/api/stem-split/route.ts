@@ -6,7 +6,26 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 export const maxDuration = 180
 
 function extractStems(output: unknown): { bass: string; drums: string; other: string; vocals: string } | null {
-  // cjwbw/demucs returns [bass, drums, other, vocals] for htdemucs
+  // cjwbw/demucs returns an object: { bass: {url}, drums: {url}, other: {url}, vocals: {url} }
+  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    const o = output as Record<string, unknown>
+    const getUrl = (v: unknown): string => {
+      if (typeof v === 'string') return v
+      if (v && typeof v === 'object') {
+        const obj = v as Record<string, unknown>
+        if (typeof obj.url === 'string') return obj.url
+      }
+      return ''
+    }
+    const bass   = getUrl(o.bass)
+    const drums  = getUrl(o.drums)
+    const other  = getUrl(o.other)
+    const vocals = getUrl(o.vocals)
+    if (vocals || bass || drums || other) {
+      return { bass, drums, other, vocals }
+    }
+  }
+  // fallback: array format
   if (Array.isArray(output) && output.length >= 4) {
     return {
       bass:   String(output[0]),
