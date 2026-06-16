@@ -26,10 +26,22 @@ interface ConfigStepProps {
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
 
-const VOICES = [
-  { name: 'My Voice', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#8B5CF6,#EC4899)' },
-  { name: 'Voice 2', sub: 'Express Clone', avatarBg: 'linear-gradient(135deg,#EC4899,#06B6D4)' },
-  { name: 'Voice 3', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#06B6D4,#8B5CF6)' },
+// Placeholder RVC model — same test model for all 3 voices until per-voice
+// cloning/upload is wired up.
+const TEST_RVC_MODEL_URL = 'https://huggingface.co/theNeofr/ariana-grande-rvc-v2/resolve/main/ariana_grande.zip'
+
+export interface VoiceOption {
+  name: string
+  sub: string
+  avatarBg: string
+  modelUrl?: string
+  isAdd?: boolean
+}
+
+export const VOICES: VoiceOption[] = [
+  { name: 'My Voice', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#8B5CF6,#EC4899)', modelUrl: TEST_RVC_MODEL_URL },
+  { name: 'Voice 2', sub: 'Express Clone', avatarBg: 'linear-gradient(135deg,#EC4899,#06B6D4)', modelUrl: TEST_RVC_MODEL_URL },
+  { name: 'Voice 3', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#06B6D4,#8B5CF6)', modelUrl: TEST_RVC_MODEL_URL },
   { name: 'Add Voice', sub: 'Clone a new voice', avatarBg: '#1E1E3A', isAdd: true },
 ]
 
@@ -87,7 +99,7 @@ export function ConfigStep({
 
         <div className="vs-voice-grid">
           {VOICES.map((v, i) =>
-            (v as { isAdd?: boolean }).isAdd ? (
+            v.isAdd ? (
               <div
                 key="add"
                 className="vs-voice-card vs-voice-card--add"

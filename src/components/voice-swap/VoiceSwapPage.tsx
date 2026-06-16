@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
-import { ConfigStep } from './ConfigStep'
+import { ConfigStep, VOICES } from './ConfigStep'
 import { ResultStep } from './ResultStep'
 import { RightPanel } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
@@ -24,6 +24,7 @@ export function VoiceSwapPage() {
   // Upload / stems
   const [userId, setUserId] = useState<string | null>(null)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
+  const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
 
   // Fetch user id once on mount
   useEffect(() => {
@@ -97,24 +98,44 @@ export function VoiceSwapPage() {
     setStep(2)
   }
 
-  function handleProcess(type: 'preview' | 'full') {
-    setProcessingType(type)
-    setProcessing(true)
-    setOvSteps(['pending', 'pending', 'pending', 'pending'])
-
-    const base = type === 'preview' ? 500 : 700
-    const labels: StepStatus[] = ['pending', 'pending', 'pending', 'pending']
-
-    for (let i = 0; i < 4; i++) {
-      setTimeout(() => {
-        setOvSteps((prev) => prev.map((s, idx) => (idx === i ? 'active' : s)) as StepStatus[])
-      }, base * i + 200)
-      setTimeout(() => {
-        setOvSteps((prev) => prev.map((s, idx) => (idx === i ? 'done' : s)) as StepStatus[])
-      }, base * i + base - 100)
+  async function handleProcess(type: 'preview' | 'full') {
+    if (!stemResult) {
+      showToast('Upload a track first')
+      return
     }
 
-    setTimeout(() => {
+    const voice = VOICES[selectedVoice]
+    if (!voice?.modelUrl) {
+      showToast('Selected voice has no model configured')
+      return
+    }
+
+    setProcessingType(type)
+    setProcessing(true)
+    // Vocals are already isolated during upload, so step 1 starts done.
+    setOvSteps(['done', 'active', 'pending', 'pending'])
+
+    try {
+      const res = await fetch('/api/voice-convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vocalsUrl: stemResult.vocalsUrl,
+          voiceModelUrl: voice.modelUrl,
+          pitchShift,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Voice conversion failed')
+
+      setOvSteps(['done', 'done', 'active', 'pending'])
+      await new Promise((r) => setTimeout(r, 350))
+      setOvSteps(['done', 'done', 'done', 'active'])
+      await new Promise((r) => setTimeout(r, 350))
+      setOvSteps(['done', 'done', 'done', 'done'])
+
+      setConvertedVocalsUrl(data.convertedVocalsUrl)
       setProcessing(false)
       setStep(3)
       showToast(
@@ -122,7 +143,10 @@ export function VoiceSwapPage() {
           ? 'Preview ready! Quality score: 82/100'
           : 'Swap complete! Quality score: 82/100'
       )
-    }, base * 4 + 400)
+    } catch (err) {
+      setProcessing(false)
+      showToast(err instanceof Error ? err.message : 'Voice conversion failed')
+    }
   }
 
   function handleTogglePlay() {
@@ -155,6 +179,7 @@ export function VoiceSwapPage() {
     setPlayProgress(0)
     setStep(1)
     setStemResult(null)
+    setConvertedVocalsUrl(null)
   }
 
   // Cleanup on unmount
@@ -216,6 +241,7 @@ export function VoiceSwapPage() {
                 onSeek={handleSeek}
                 onNewSwap={handleNewSwap}
                 onToast={showToast}
+                convertedVocalsUrl={convertedVocalsUrl}
               />
             )}
           </div>

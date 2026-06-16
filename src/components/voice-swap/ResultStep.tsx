@@ -13,6 +13,7 @@ interface ResultStepProps {
   onSeek: (pct: number) => void
   onNewSwap: () => void
   onToast: (msg: string) => void
+  convertedVocalsUrl: string | null
 }
 
 const SCORE_BARS = [
@@ -146,10 +147,11 @@ function ScoreRing({ score }: { score: number }) {
 
 export function ResultStep({
   playerTab, setPlayerTab, playing, playProgress,
-  onTogglePlay, onSeek, onNewSwap, onToast,
+  onTogglePlay, onSeek, onNewSwap, onToast, convertedVocalsUrl,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
   const [regenCountdown, setRegenCountdown] = useState(600) // 10 min in seconds
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setBarsAnimated(true), 300)
@@ -161,13 +163,42 @@ export function ResultStep({
     return () => clearInterval(id)
   }, [])
 
+  // Drive real playback of the converted vocals alongside the visual waveform.
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) {
+      audio.play().catch(() => {})
+    } else {
+      audio.pause()
+    }
+  }, [playing])
+
   const mins = Math.floor(regenCountdown / 60)
   const secs = String(regenCountdown % 60).padStart(2, '0')
 
   function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = (e.clientX - rect.left) / rect.width
-    onSeek(Math.max(0, Math.min(1, pct)))
+    const clamped = Math.max(0, Math.min(1, pct))
+    onSeek(clamped)
+    const audio = audioRef.current
+    if (audio && audio.duration) {
+      audio.currentTime = clamped * audio.duration
+    }
+  }
+
+  function handleDownload() {
+    if (!convertedVocalsUrl) {
+      onToast('Nothing to download yet')
+      return
+    }
+    const a = document.createElement('a')
+    a.href = convertedVocalsUrl
+    a.download = 'swapped-vocals.mp3'
+    a.rel = 'noreferrer'
+    a.click()
+    onToast('Downloading swap…')
   }
 
   const elapsed = Math.round(playProgress * 272)
@@ -176,6 +207,9 @@ export function ResultStep({
 
   return (
     <>
+      {convertedVocalsUrl && (
+        <audio ref={audioRef} src={convertedVocalsUrl} preload="metadata" />
+      )}
       <div className="vs-panel">
         {/* Score row */}
         <div className="vs-result-top">
@@ -306,7 +340,7 @@ export function ResultStep({
         <div className="vs-dl-row">
           <button
             className="vs-dl-btn vs-dl-btn--primary"
-            onClick={() => onToast('Downloading swap…')}
+            onClick={handleDownload}
           >
             ↓ Download HD
           </button>
