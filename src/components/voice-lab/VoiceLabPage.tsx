@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { VLSidebar } from './VLSidebar'
 import { VLTopbar } from './VLTopbar'
 import { SetupStep } from './SetupStep'
-import { RecordStep } from './RecordStep'
+import { RecordStep, SavedVoice } from './RecordStep'
 import { TrainingStep } from './TrainingStep'
 import { TestStep } from './TestStep'
 import { VLRightPanel } from './VLRightPanel'
@@ -12,27 +13,36 @@ import { VToast } from '@/components/voice-swap/VToast'
 
 type Step = 1 | 2 | 3 | 4
 type CloneType = 'express' | 'studio'
-type Lang = 'english' | 'hindi'
-
-export interface QualityMeters {
-  noise: number
-  clip: number
-  echo: number
-  volume: number
-}
 
 export function VoiceLabPage() {
   const [step, setStep] = useState<Step>(1)
   const [cloneType, setCloneType] = useState<CloneType>('express')
 
-  // Record step state — seed with mid-session state to showcase the UI
-  const [recording, setRecording] = useState(false)
-  const [recSeconds, setRecSeconds] = useState(252) // 4:12
-  const [lang, setLang] = useState<Lang>('english')
-  const [sentenceIdx, setSentenceIdx] = useState(6) // 0-based → sentence 7 current
-  const [qualityMeters, setQualityMeters] = useState<QualityMeters>({
-    noise: 18, clip: 8, echo: 46, volume: 64,
-  })
+  // My Voices — real rows from voice_clones, fetched on mount and
+  // updated locally whenever RecordStep saves a new sample.
+  const [voices, setVoices] = useState<SavedVoice[]>([])
+  const [voicesLoading, setVoicesLoading] = useState(true)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id
+      if (!uid) { setVoicesLoading(false); return }
+
+      const { data: clones, error } = await supabase
+        .from('voice_clones')
+        .select('id, name, type, status, model_url, created_at')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+
+      if (!error && clones) setVoices(clones as SavedVoice[])
+      setVoicesLoading(false)
+    })
+  }, [])
+
+  function handleVoiceSaved(voice: SavedVoice) {
+    setVoices((prev) => [voice, ...prev])
+  }
 
   // Training step state
   const [trainProgress, setTrainProgress] = useState(0)
@@ -45,8 +55,6 @@ export function VoiceLabPage() {
   const [toast, setToast] = useState({ visible: false, message: '' })
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
-  const recTimerRef = useRef<ReturnType<typeof setInterval>>()
-  const qualityTimerRef = useRef<ReturnType<typeof setInterval>>()
   const trainTimerRef = useRef<ReturnType<typeof setInterval>>()
   const trainProgressRef = useRef(0)
 
@@ -76,34 +84,6 @@ export function VoiceLabPage() {
     toastTimerRef.current = setTimeout(() => setToast({ visible: false, message: '' }), 3000)
   }, [])
 
-  // Recording timer
-  useEffect(() => {
-    if (recording) {
-      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000)
-    } else {
-      clearInterval(recTimerRef.current)
-    }
-    return () => clearInterval(recTimerRef.current)
-  }, [recording])
-
-  // Quality meter wiggle while recording
-  useEffect(() => {
-    if (recording) {
-      qualityTimerRef.current = setInterval(() => {
-        if (Math.random() < 0.12) {
-          setQualityMeters(prev => ({
-            ...prev,
-            echo: 38 + Math.random() * 18,
-            volume: 55 + Math.random() * 22,
-          }))
-        }
-      }, 90)
-    } else {
-      clearInterval(qualityTimerRef.current)
-    }
-    return () => clearInterval(qualityTimerRef.current)
-  }, [recording])
-
   // Training animation — starts when step becomes 3
   useEffect(() => {
     if (step !== 3) return
@@ -131,38 +111,13 @@ export function VoiceLabPage() {
   // Global cleanup
   useEffect(() => {
     return () => {
-      clearInterval(recTimerRef.current)
-      clearInterval(qualityTimerRef.current)
       clearInterval(trainTimerRef.current)
       clearTimeout(toastTimerRef.current)
     }
   }, [])
 
   function goStep(n: Step) {
-    if (recording) setRecording(false)
     setStep(n)
-  }
-
-  function handleToggleRecord() {
-    const next = !recording
-    setRecording(next)
-    showToast(next ? 'Recording — speak naturally' : 'Paused — sentence saved')
-  }
-
-  function handleNextSentence() {
-    setSentenceIdx(i => {
-      const next = Math.min(11, i + 1)
-      showToast(`Sentence ${next + 1} of 12`)
-      return next
-    })
-  }
-
-  function handlePrevSentence() {
-    setSentenceIdx(i => {
-      const next = Math.max(0, i - 1)
-      showToast(`Sentence ${next + 1} of 12`)
-      return next
-    })
   }
 
   const showActionBar = step === 1 || step === 2
@@ -181,15 +136,9 @@ export function VoiceLabPage() {
             )}
             {step === 2 && (
               <RecordStep
-                recording={recording}
-                recSeconds={recSeconds}
-                lang={lang}
-                setLang={setLang}
-                sentenceIdx={sentenceIdx}
-                qualityMeters={qualityMeters}
-                onToggleRecord={handleToggleRecord}
-                onNextSentence={handleNextSentence}
-                onPrevSentence={handlePrevSentence}
+                cloneType={cloneType}
+                onToast={showToast}
+                onSaved={handleVoiceSaved}
               />
             )}
             {step === 3 && (
@@ -239,7 +188,7 @@ export function VoiceLabPage() {
           )}
         </div>
 
-        <VLRightPanel onToast={showToast} />
+        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} />
       </div>
 
       <VToast visible={toast.visible} message={toast.message} />

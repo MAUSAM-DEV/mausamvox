@@ -1,45 +1,60 @@
 'use client'
 
+import type { SavedVoice } from './RecordStep'
+
 interface VLRightPanelProps {
   onToast: (m: string) => void
+  voices: SavedVoice[]
+  voicesLoading: boolean
 }
 
-const VOICES = [
-  { emoji: '👤', name: 'My Voice',  date: 'Trained May 28', badge: 'studio',  score: 91, used: 14, langs: 'Hindi + English' },
-  { emoji: '🎤', name: 'Voice 2',   date: 'Trained Jun 2',  badge: 'express', score: 72, used: 3,  langs: 'English' },
-  { emoji: '🧑‍🎤', name: 'Voice 3', date: 'Trained Jun 7',  badge: 'studio',  score: 88, used: 9,  langs: 'Hindi' },
-]
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
-export function VLRightPanel({ onToast }: VLRightPanelProps) {
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  training: 'Training',
+  ready: 'Ready',
+  failed: 'Failed',
+}
+
+export function VLRightPanel({ onToast, voices, voicesLoading }: VLRightPanelProps) {
   return (
     <>
       <div className="vlrp">
         <div className="vlrp-head">
           <span className="vlrp-title">My Voices</span>
-          <span style={{ fontSize: 11, color: '#5A5A80' }}>3 of 3 slots</span>
+          <span style={{ fontSize: 11, color: '#5A5A80' }}>{voices.length} saved</span>
         </div>
 
         <div className="vlrp-body">
-          {VOICES.map((v) => (
+          {voicesLoading && <div className="vlrp-empty">Loading…</div>}
+
+          {!voicesLoading && voices.length === 0 && (
+            <div className="vlrp-empty">No voices yet — record or upload one to get started.</div>
+          )}
+
+          {!voicesLoading && voices.map((v) => (
             <div
-              key={v.name}
+              key={v.id}
               className="vlrp-item"
-              onClick={() => onToast(`${v.name} — ${v.date.toLowerCase()}, used in ${v.used} swaps`)}
+              onClick={() => onToast(`${v.name} — ${STATUS_LABEL[v.status] ?? v.status}, saved ${formatDate(v.created_at)}`)}
             >
               <div className="vlrp-vi-top">
-                <div className="vlrp-vi-av">{v.emoji}</div>
+                <div className="vlrp-vi-av">🎤</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="vlrp-vi-name">{v.name}</div>
-                  <div className="vlrp-vi-type">{v.date}</div>
+                  <div className="vlrp-vi-type">Saved {formatDate(v.created_at)}</div>
                 </div>
-                <span className={`vlrp-vi-badge vlrp-vi-badge--${v.badge}`}>
-                  {v.badge === 'studio' ? 'Studio' : 'Express'}
+                <span className={`vlrp-vi-badge vlrp-vi-badge--${v.type === 'studio' ? 'studio' : 'express'}`}>
+                  {v.type === 'studio' ? 'Studio' : 'Express'}
                 </span>
               </div>
               <div className="vlrp-vi-meta">
-                <span>Score <b>{v.score}</b></span>
-                <span>Used <b>{v.used}×</b></span>
-                <span>{v.langs}</span>
+                <span className={`vlrp-vi-status vlrp-vi-status--${v.status}`}>
+                  {STATUS_LABEL[v.status] ?? v.status}
+                </span>
               </div>
             </div>
           ))}
@@ -47,7 +62,7 @@ export function VLRightPanel({ onToast }: VLRightPanelProps) {
 
         <div className="vlrp-foot">
           <div className="vlrp-note">
-            Slots reset on <b>Jul 1</b> · Retrain any voice to improve it with new audio
+            Retrain any voice to improve it with new audio
           </div>
         </div>
       </div>
@@ -110,6 +125,12 @@ export function VLRightPanel({ onToast }: VLRightPanelProps) {
         }
         .vlrp-vi-meta { font-size: 10px; color: #5A5A80; display: flex; gap: 10px; }
         .vlrp-vi-meta b { color: #C4C4E0; font-weight: 600; }
+        .vlrp-vi-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .vlrp-vi-status--pending { color: #F59E0B; }
+        .vlrp-vi-status--training { color: #06B6D4; }
+        .vlrp-vi-status--ready { color: #10B981; }
+        .vlrp-vi-status--failed { color: #EF4444; }
+        .vlrp-empty { font-size: 11px; color: #5A5A80; text-align: center; padding: 24px 8px; line-height: 1.6; }
         .vlrp-foot { border-top: 1px solid #1E1E3A; padding: 10px; flex-shrink: 0; }
         .vlrp-note { font-size: 10px; color: #5A5A80; text-align: center; line-height: 1.6; padding: 4px; }
         .vlrp-note b { color: #8B5CF6; }
