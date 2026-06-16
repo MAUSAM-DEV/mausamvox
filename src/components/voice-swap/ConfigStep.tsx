@@ -1,14 +1,26 @@
 'use client'
 
+import Link from 'next/link'
+
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
 
+export interface VoiceOption {
+  id: string
+  name: string
+  sub: string
+  avatarBg: string
+  modelUrl?: string
+}
+
 interface ConfigStepProps {
   voiceTab: VoiceTab
   setVoiceTab: (t: VoiceTab) => void
-  selectedVoice: number
-  setSelectedVoice: (i: number) => void
+  voices: VoiceOption[]
+  voicesLoading: boolean
+  selectedVoiceId: string | null
+  setSelectedVoiceId: (id: string) => void
   gender: Gender
   setGender: (g: Gender) => void
   ageRange: AgeRange
@@ -21,30 +33,9 @@ interface ConfigStepProps {
   setStyleIntensity: (v: number) => void
   pitchShift: number
   setPitchShift: (v: number) => void
-  onToast: (msg: string) => void
 }
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
-
-// Placeholder RVC model — same test model for all 3 voices until per-voice
-// cloning/upload is wired up.
-const TEST_RVC_MODEL_URL = 'https://huggingface.co/theNeofr/ariana-grande-rvc-v2/resolve/main/ariana_grande.zip'
-
-export interface VoiceOption {
-  id: string
-  name: string
-  sub: string
-  avatarBg: string
-  modelUrl?: string
-  isAdd?: boolean
-}
-
-export const VOICES: VoiceOption[] = [
-  { id: 'my-voice', name: 'My Voice', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#8B5CF6,#EC4899)', modelUrl: TEST_RVC_MODEL_URL },
-  { id: 'voice-2', name: 'Voice 2', sub: 'Express Clone', avatarBg: 'linear-gradient(135deg,#EC4899,#06B6D4)', modelUrl: TEST_RVC_MODEL_URL },
-  { id: 'voice-3', name: 'Voice 3', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#06B6D4,#8B5CF6)', modelUrl: TEST_RVC_MODEL_URL },
-  { id: 'add-voice', name: 'Add Voice', sub: 'Clone a new voice', avatarBg: '#1E1E3A', isAdd: true },
-]
 
 const ACCENTS = ['Neutral', 'American', 'British', 'Indian', 'Australian', 'Irish']
 const LANGUAGES = ['Same as Source', 'Hindi', 'English', 'Spanish', 'French', 'Japanese', 'Korean']
@@ -74,11 +65,10 @@ function SegControl<T extends string>({
 }
 
 export function ConfigStep({
-  voiceTab, setVoiceTab, selectedVoice, setSelectedVoice,
+  voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
   gender, setGender, ageRange, setAgeRange,
   accent, setAccent, language, setLanguage,
   styleIntensity, setStyleIntensity, pitchShift, setPitchShift,
-  onToast,
 }: ConfigStepProps) {
   return (
     <>
@@ -98,25 +88,17 @@ export function ConfigStep({
           ))}
         </div>
 
-        <div className="vs-voice-grid">
-          {VOICES.map((v, i) =>
-            v.isAdd ? (
+        {voicesLoading ? (
+          <div className="vs-voice-loading">Loading your voices…</div>
+        ) : (
+          <div className="vs-voice-grid">
+            {voices.map((v) => (
               <div
-                key="add"
-                className="vs-voice-card vs-voice-card--add"
-                onClick={() => onToast('Voice cloning — coming soon')}
+                key={v.id}
+                className={`vs-voice-card ${selectedVoiceId === v.id ? 'vs-voice-card--selected' : ''}`}
+                onClick={() => setSelectedVoiceId(v.id)}
               >
-                <div className="vs-va-add-icon">+</div>
-                <div className="vs-va-name">{v.name}</div>
-                <div className="vs-va-sub">{v.sub}</div>
-              </div>
-            ) : (
-              <div
-                key={i}
-                className={`vs-voice-card ${selectedVoice === i ? 'vs-voice-card--selected' : ''}`}
-                onClick={() => setSelectedVoice(i)}
-              >
-                {selectedVoice === i && (
+                {selectedVoiceId === v.id && (
                   <div className="vs-va-check">✓</div>
                 )}
                 <div
@@ -128,9 +110,14 @@ export function ConfigStep({
                 <div className="vs-va-name">{v.name}</div>
                 <div className="vs-va-sub">{v.sub}</div>
               </div>
-            )
-          )}
-        </div>
+            ))}
+            <Link href="/voice-lab" className="vs-voice-card vs-voice-card--add">
+              <div className="vs-va-add-icon">+</div>
+              <div className="vs-va-name">Add Voice</div>
+              <div className="vs-va-sub">Clone a new voice</div>
+            </Link>
+          </div>
+        )}
 
         {/* Swap Controls */}
         <div className="vs-divider" />
@@ -283,6 +270,13 @@ export function ConfigStep({
           gap: 10px;
           margin-bottom: 24px;
         }
+        .vs-voice-loading {
+          font-size: 12px;
+          color: #5A5A80;
+          padding: 24px 0;
+          margin-bottom: 24px;
+          text-align: center;
+        }
         .vs-voice-card {
           background: #0E0E20;
           border: 1.5px solid #1E1E3A;
@@ -306,6 +300,7 @@ export function ConfigStep({
           border-style: dashed;
           border-color: #2A2A4A;
           color: #5A5A80;
+          text-decoration: none;
         }
         .vs-voice-card--add:hover { border-color: rgba(139,92,246,.4); color: #8B5CF6; }
         .vs-va-check {

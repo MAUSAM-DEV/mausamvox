@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
+type UploadMode = 'full' | 'vocals-only'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
@@ -92,6 +93,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   const [dragging, setDragging] = useState(false)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [uploadMode, setUploadMode] = useState<UploadMode>('full')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function processFile(file: File) {
@@ -124,7 +126,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
       const res = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: path, userId }),
+        body: JSON.stringify({ storagePath: path, userId, skipSplit: uploadMode === 'vocals-only' }),
       })
 
       const data = await res.json()
@@ -141,7 +143,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       onDone(stemResult)
       setPhase('done')
-      onToast('Stems separated — vocals and instrumental ready!')
+      onToast(
+        uploadMode === 'vocals-only'
+          ? 'Vocals ready — no separation needed!'
+          : 'Stems separated — vocals and instrumental ready!'
+      )
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'
       setErrorMsg(msg)
@@ -185,22 +191,47 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       <div className="vs-panel">
         <div className="vs-panel-title">Upload Your Track</div>
-        <div className="vs-panel-sub">MP3, WAV, M4A — up to 50 MB · Stems separated automatically</div>
+        <div className="vs-panel-sub">
+          {uploadMode === 'full'
+            ? 'MP3, WAV, M4A — up to 50 MB · Stems separated automatically'
+            : 'MP3, WAV, M4A — up to 50 MB · Used directly as your vocals stem'}
+        </div>
 
         {/* ── idle ─────────────────────────────────────────────── */}
         {phase === 'idle' && (
-          <div
-            className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <div className="vs-uz-icon">🎵</div>
-            <div className="vs-uz-title">Drop your track here</div>
-            <div className="vs-uz-sub">or click to browse files</div>
-            <div className="vs-uz-formats">MP3 · WAV · M4A · max 50 MB</div>
-          </div>
+          <>
+            <div className="vs-upload-mode">
+              <button
+                className={`vs-upload-mode-btn ${uploadMode === 'full' ? 'vs-upload-mode-btn--active' : ''}`}
+                onClick={() => setUploadMode('full')}
+              >
+                Upload Full Track
+              </button>
+              <button
+                className={`vs-upload-mode-btn ${uploadMode === 'vocals-only' ? 'vs-upload-mode-btn--active' : ''}`}
+                onClick={() => setUploadMode('vocals-only')}
+              >
+                Upload Vocals Only
+              </button>
+            </div>
+
+            <div
+              className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="vs-uz-icon">🎵</div>
+              <div className="vs-uz-title">Drop your track here</div>
+              <div className="vs-uz-sub">or click to browse files</div>
+              <div className="vs-uz-formats">
+                {uploadMode === 'full'
+                  ? 'MP3 · WAV · M4A · max 50 MB'
+                  : 'Already-isolated vocals · MP3 · WAV · M4A · max 50 MB'}
+              </div>
+            </div>
+          </>
         )}
 
         {/* ── uploading ────────────────────────────────────────── */}
@@ -217,8 +248,12 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           <div className="vs-progress-zone">
             <div className="vs-prog-spinner vs-prog-spinner--purple" />
             <div className="vs-prog-file">{displayFile.name}</div>
-            <div className="vs-prog-label">Separating vocals… this takes 1–2 minutes</div>
-            <div className="vs-prog-sub">Powered by Demucs · running on GPU</div>
+            <div className="vs-prog-label">
+              {uploadMode === 'full' ? 'Separating vocals… this takes 1–2 minutes' : 'Preparing your vocals…'}
+            </div>
+            <div className="vs-prog-sub">
+              {uploadMode === 'full' ? 'Powered by Demucs · running on GPU' : 'No separation needed'}
+            </div>
           </div>
         )}
 
@@ -230,7 +265,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
               <div>
                 <div className="vs-file-name">{displayResult.fileName}</div>
                 <div className="vs-file-meta">
-                  {currentFile ? formatSize(currentFile.size) + ' · ' : ''}Stems ready
+                  {currentFile ? formatSize(currentFile.size) + ' · ' : ''}
+                  {displayResult.bassUrl ? 'Stems ready' : 'Vocals ready'}
                 </div>
               </div>
               <span className="vs-file-remove" onClick={handleReset} title="Remove file">✕</span>
@@ -238,14 +274,14 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
             <UploadWaveCanvas />
 
-            {/* Stem download cards — all 4 stems from htdemucs */}
+            {/* Stem download cards — htdemucs gives 4; vocals-only uploads only have the one */}
             <div className="vs-stems">
               {([
                 { url: displayResult.vocalsUrl, icon: '🎤', name: 'Vocals',      hint: 'Isolated voice track',   file: 'vocals.mp3' },
                 { url: displayResult.bassUrl,   icon: '🎸', name: 'Bass',        hint: 'Low-end bass line',      file: 'bass.mp3'   },
                 { url: displayResult.drumsUrl,  icon: '🥁', name: 'Drums',       hint: 'Percussion only',        file: 'drums.mp3'  },
                 { url: displayResult.otherUrl,  icon: '🎹', name: 'Other',       hint: 'Melody / instruments',   file: 'other.mp3'  },
-              ] as const).map(({ url, icon, name, hint, file }) => (
+              ] as const).filter(({ url }) => url).map(({ url, icon, name, hint, file }) => (
                 <a
                   key={name}
                   className="vs-stem-card"
@@ -306,6 +342,35 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           letter-spacing: -0.5px; margin-bottom: 4px;
         }
         .vs-panel-sub { font-size: 13px; color: #5A5A80; margin-bottom: 28px; }
+
+        /* ── upload mode toggle ── */
+        .vs-upload-mode {
+          display: flex;
+          background: #0E0E20;
+          border: 1px solid #1E1E3A;
+          border-radius: 8px;
+          padding: 3px;
+          gap: 2px;
+          margin-bottom: 16px;
+        }
+        .vs-upload-mode-btn {
+          flex: 1;
+          padding: 8px 10px;
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          background: transparent;
+          color: #7878A0;
+        }
+        .vs-upload-mode-btn:hover { color: #F0F0FF; background: #1E1E3A; }
+        .vs-upload-mode-btn--active {
+          background: linear-gradient(135deg,#8B5CF6,#EC4899);
+          color: #fff;
+          font-weight: 600;
+        }
 
         /* ── drop zone ── */
         .vs-upload-zone {

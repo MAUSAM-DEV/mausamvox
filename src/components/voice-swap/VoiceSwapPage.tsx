@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
-import { ConfigStep, VOICES } from './ConfigStep'
+import { ConfigStep, VoiceOption } from './ConfigStep'
 import { ResultStep } from './ResultStep'
 import { RightPanel } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
@@ -17,6 +17,12 @@ type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
 type PlayerTab = 'Original' | 'Swapped' | 'A/B Compare'
 
+const AVATAR_PALETTE = [
+  'linear-gradient(135deg,#8B5CF6,#EC4899)',
+  'linear-gradient(135deg,#EC4899,#06B6D4)',
+  'linear-gradient(135deg,#06B6D4,#8B5CF6)',
+]
+
 export function VoiceSwapPage() {
   // Navigation
   const [step, setStep] = useState<Step>(1)
@@ -26,16 +32,44 @@ export function VoiceSwapPage() {
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
 
-  // Fetch user id once on mount
-  useEffect(() => {
-    createClient()
-      .auth.getUser()
-      .then(({ data }) => setUserId(data.user?.id ?? null))
-  }, [])
-
   // Voice picker
   const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
-  const [selectedVoice, setSelectedVoice] = useState(0)
+  const [voices, setVoices] = useState<VoiceOption[]>([])
+  const [voicesLoading, setVoicesLoading] = useState(true)
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null)
+
+  // Fetch user id, then the user's own voice clones, once on mount
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id ?? null
+      setUserId(uid)
+
+      if (!uid) {
+        setVoicesLoading(false)
+        return
+      }
+
+      const { data: clones, error } = await supabase
+        .from('voice_clones')
+        .select('id, name, type, status, model_url')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+
+      if (!error && clones) {
+        const mapped: VoiceOption[] = clones.map((c, i) => ({
+          id: c.id,
+          name: c.name,
+          sub: c.type === 'studio' ? 'Studio Clone' : 'Express Clone',
+          avatarBg: AVATAR_PALETTE[i % AVATAR_PALETTE.length],
+          modelUrl: c.model_url ?? undefined,
+        }))
+        setVoices(mapped)
+        if (mapped.length > 0) setSelectedVoiceId(mapped[0].id)
+      }
+      setVoicesLoading(false)
+    })
+  }, [])
 
   // Swap controls
   const [gender, setGender] = useState<Gender>('Female')
@@ -104,9 +138,13 @@ export function VoiceSwapPage() {
       return
     }
 
-    const voice = VOICES[selectedVoice]
-    if (!voice?.modelUrl) {
-      showToast('Selected voice has no model configured')
+    const voice = voices.find((v) => v.id === selectedVoiceId)
+    if (!voice) {
+      showToast('Select a voice first')
+      return
+    }
+    if (!voice.modelUrl) {
+      showToast('Selected voice has no model configured yet')
       return
     }
 
@@ -240,8 +278,10 @@ export function VoiceSwapPage() {
               <ConfigStep
                 voiceTab={voiceTab}
                 setVoiceTab={setVoiceTab}
-                selectedVoice={selectedVoice}
-                setSelectedVoice={setSelectedVoice}
+                voices={voices}
+                voicesLoading={voicesLoading}
+                selectedVoiceId={selectedVoiceId}
+                setSelectedVoiceId={setSelectedVoiceId}
                 gender={gender}
                 setGender={setGender}
                 ageRange={ageRange}
@@ -254,7 +294,6 @@ export function VoiceSwapPage() {
                 setStyleIntensity={setStyleIntensity}
                 pitchShift={pitchShift}
                 setPitchShift={setPitchShift}
-                onToast={showToast}
               />
             )}
             {step === 3 && (
