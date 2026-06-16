@@ -4,14 +4,40 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
-type UploadMode = 'full' | 'vocals-only'
+type UploadMode = 'full' | 'extracted-stems'
+type StemSlotKey = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other'
+type SlotStatus = 'idle' | 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
+const STEM_SLOTS: { key: StemSlotKey; label: string; hint: string; required: boolean; icon: string }[] = [
+  { key: 'vocals',       label: 'Vocals',              hint: 'Gets voice-converted',         required: true,  icon: '🎤' },
+  { key: 'instrumental', label: 'Instrumental / Music', hint: 'Mixed back with the swap',     required: true,  icon: '🎼' },
+  { key: 'bass',         label: 'Bass',                hint: 'Optional',                      required: false, icon: '🎸' },
+  { key: 'drums',        label: 'Drums',               hint: 'Optional',                      required: false, icon: '🥁' },
+  { key: 'other',        label: 'Other',               hint: 'Optional',                      required: false, icon: '🎹' },
+]
+
+interface SlotState {
+  file: File | null
+  status: SlotStatus
+  url: string
+  errorMsg: string
+}
+
+const emptySlots: Record<StemSlotKey, SlotState> = {
+  vocals:       { file: null, status: 'idle', url: '', errorMsg: '' },
+  instrumental: { file: null, status: 'idle', url: '', errorMsg: '' },
+  bass:         { file: null, status: 'idle', url: '', errorMsg: '' },
+  drums:        { file: null, status: 'idle', url: '', errorMsg: '' },
+  other:        { file: null, status: 'idle', url: '', errorMsg: '' },
+}
+
 export interface StemResult {
   storagePath: string
   vocalsUrl: string
+  instrumentalUrl: string
   bassUrl: string
   drumsUrl: string
   otherUrl: string
@@ -94,7 +120,10 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [uploadMode, setUploadMode] = useState<UploadMode>('full')
+  const [slots, setSlots] = useState<Record<StemSlotKey, SlotState>>(emptySlots)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const stemFileInputRef = useRef<HTMLInputElement>(null)
+  const pendingSlotRef = useRef<StemSlotKey | null>(null)
 
   async function processFile(file: File) {
     const validationError = validateFile(file)
@@ -126,7 +155,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
       const res = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: path, userId, skipSplit: uploadMode === 'vocals-only' }),
+        body: JSON.stringify({ storagePath: path, userId }),
       })
 
       const data = await res.json()
@@ -134,26 +163,94 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       const stemResult: StemResult = {
         storagePath: path,
-        vocalsUrl:  data.vocals,
-        bassUrl:    data.bass,
-        drumsUrl:   data.drums,
-        otherUrl:   data.other,
-        fileName:   file.name,
+        vocalsUrl:       data.vocals,
+        instrumentalUrl: '',
+        bassUrl:         data.bass,
+        drumsUrl:        data.drums,
+        otherUrl:        data.other,
+        fileName:        file.name,
       }
 
       onDone(stemResult)
       setPhase('done')
-      onToast(
-        uploadMode === 'vocals-only'
-          ? 'Vocals ready — no separation needed!'
-          : 'Stems separated — vocals and instrumental ready!'
-      )
+      onToast('Stems separated — vocals and instrumental ready!')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'
       setErrorMsg(msg)
       setPhase('error')
     }
   }
+
+  async function processSlotFile(key: StemSlotKey, file: File) {
+    const validationError = validateFile(file)
+    if (validationError) {
+      setSlots((s) => ({ ...s, [key]: { file, status: 'error', url: '', errorMsg: validationError } }))
+      return
+    }
+
+    setSlots((s) => ({ ...s, [key]: { file, status: 'uploading', url: '', errorMsg: '' } }))
+
+    try {
+      const supabase = createClient()
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${userId ?? 'anon'}/${Date.now()}-${key}-${safeName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('audio-uploads')
+        .upload(path, file, { contentType: file.type || 'audio/mpeg', upsert: false })
+
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
+
+      const res = await fetch('/api/stem-split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath: path, userId, skipSplit: true }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not prepare file')
+
+      setSlots((s) => ({ ...s, [key]: { file, status: 'done', url: data.url, errorMsg: '' } }))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong'
+      setSlots((s) => ({ ...s, [key]: { file, status: 'error', url: '', errorMsg: msg } }))
+    }
+  }
+
+  function openSlotPicker(key: StemSlotKey) {
+    pendingSlotRef.current = key
+    stemFileInputRef.current?.click()
+  }
+
+  function handleStemFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const key = pendingSlotRef.current
+    if (file && key) processSlotFile(key, file)
+    e.target.value = ''
+  }
+
+  function handleSlotDrop(key: StemSlotKey, e: React.DragEvent) {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) processSlotFile(key, file)
+  }
+
+  function handleContinueStems() {
+    const stemResult: StemResult = {
+      storagePath: '',
+      vocalsUrl: slots.vocals.url,
+      instrumentalUrl: slots.instrumental.url,
+      bassUrl: slots.bass.url,
+      drumsUrl: slots.drums.url,
+      otherUrl: slots.other.url,
+      fileName: slots.vocals.file?.name ?? 'Extracted stems',
+    }
+    onDone(stemResult)
+    setPhase('done')
+    onToast('Stems ready — vocals and instrumental loaded!')
+  }
+
+  const canContinueStems = slots.vocals.status === 'done' && slots.instrumental.status === 'done'
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -173,6 +270,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     setPhase('idle')
     setCurrentFile(null)
     setErrorMsg('')
+    setSlots(emptySlots)
   }
 
   const displayFile = currentFile ?? (result ? { name: result.fileName, size: 0 } : null)
@@ -180,7 +278,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
   return (
     <>
-      {/* Hidden file input */}
+      {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         type="file"
@@ -188,13 +286,20 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
         style={{ display: 'none' }}
         onChange={handleFileInput}
       />
+      <input
+        ref={stemFileInputRef}
+        type="file"
+        accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a"
+        style={{ display: 'none' }}
+        onChange={handleStemFileInput}
+      />
 
       <div className="vs-panel">
         <div className="vs-panel-title">Upload Your Track</div>
         <div className="vs-panel-sub">
           {uploadMode === 'full'
             ? 'MP3, WAV, M4A — up to 50 MB · Stems separated automatically'
-            : 'MP3, WAV, M4A — up to 50 MB · Used directly as your vocals stem'}
+            : 'MP3, WAV, M4A — up to 50 MB per stem · Vocals and instrumental required'}
         </div>
 
         {/* ── idle ─────────────────────────────────────────────── */}
@@ -208,29 +313,65 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
                 Upload Full Track
               </button>
               <button
-                className={`vs-upload-mode-btn ${uploadMode === 'vocals-only' ? 'vs-upload-mode-btn--active' : ''}`}
-                onClick={() => setUploadMode('vocals-only')}
+                className={`vs-upload-mode-btn ${uploadMode === 'extracted-stems' ? 'vs-upload-mode-btn--active' : ''}`}
+                onClick={() => setUploadMode('extracted-stems')}
               >
-                Upload Vocals Only
+                Upload Extracted Stems
               </button>
             </div>
 
-            <div
-              className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="vs-uz-icon">🎵</div>
-              <div className="vs-uz-title">Drop your track here</div>
-              <div className="vs-uz-sub">or click to browse files</div>
-              <div className="vs-uz-formats">
-                {uploadMode === 'full'
-                  ? 'MP3 · WAV · M4A · max 50 MB'
-                  : 'Already-isolated vocals · MP3 · WAV · M4A · max 50 MB'}
+            {uploadMode === 'full' && (
+              <div
+                className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="vs-uz-icon">🎵</div>
+                <div className="vs-uz-title">Drop your track here</div>
+                <div className="vs-uz-sub">or click to browse files</div>
+                <div className="vs-uz-formats">MP3 · WAV · M4A · max 50 MB</div>
               </div>
-            </div>
+            )}
+
+            {uploadMode === 'extracted-stems' && (
+              <>
+                <div className="vs-stem-slots">
+                  {STEM_SLOTS.map((slot) => {
+                    const s = slots[slot.key]
+                    return (
+                      <div
+                        key={slot.key}
+                        className={`vs-slot-zone vs-slot-zone--${s.status}`}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => handleSlotDrop(slot.key, e)}
+                        onClick={() => s.status !== 'uploading' && openSlotPicker(slot.key)}
+                      >
+                        {s.status === 'done' && <span className="vs-slot-check">✓</span>}
+                        <div className="vs-slot-icon">{slot.icon}</div>
+                        <div className="vs-slot-label">
+                          {slot.label}{slot.required && <span className="vs-slot-req"> *</span>}
+                        </div>
+                        <div className="vs-slot-status">
+                          {s.status === 'idle' && (slot.required ? 'Required — click or drop' : slot.hint)}
+                          {s.status === 'uploading' && 'Uploading…'}
+                          {s.status === 'done' && (s.file?.name ?? 'Ready')}
+                          {s.status === 'error' && s.errorMsg}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <button
+                  className="vs-continue-btn"
+                  disabled={!canContinueStems}
+                  onClick={handleContinueStems}
+                >
+                  Continue to Voice Swap →
+                </button>
+              </>
+            )}
           </>
         )}
 
@@ -248,12 +389,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           <div className="vs-progress-zone">
             <div className="vs-prog-spinner vs-prog-spinner--purple" />
             <div className="vs-prog-file">{displayFile.name}</div>
-            <div className="vs-prog-label">
-              {uploadMode === 'full' ? 'Separating vocals… this takes 1–2 minutes' : 'Preparing your vocals…'}
-            </div>
-            <div className="vs-prog-sub">
-              {uploadMode === 'full' ? 'Powered by Demucs · running on GPU' : 'No separation needed'}
-            </div>
+            <div className="vs-prog-label">Separating vocals… this takes 1–2 minutes</div>
+            <div className="vs-prog-sub">Powered by Demucs · running on GPU</div>
           </div>
         )}
 
@@ -266,7 +403,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
                 <div className="vs-file-name">{displayResult.fileName}</div>
                 <div className="vs-file-meta">
                   {currentFile ? formatSize(currentFile.size) + ' · ' : ''}
-                  {displayResult.bassUrl ? 'Stems ready' : 'Vocals ready'}
+                  {displayResult.bassUrl || displayResult.instrumentalUrl ? 'Stems ready' : 'Vocals ready'}
                 </div>
               </div>
               <span className="vs-file-remove" onClick={handleReset} title="Remove file">✕</span>
@@ -274,13 +411,14 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
             <UploadWaveCanvas />
 
-            {/* Stem download cards — htdemucs gives 4; vocals-only uploads only have the one */}
+            {/* Stem download cards — only render entries that have a URL */}
             <div className="vs-stems">
               {([
-                { url: displayResult.vocalsUrl, icon: '🎤', name: 'Vocals',      hint: 'Isolated voice track',   file: 'vocals.mp3' },
-                { url: displayResult.bassUrl,   icon: '🎸', name: 'Bass',        hint: 'Low-end bass line',      file: 'bass.mp3'   },
-                { url: displayResult.drumsUrl,  icon: '🥁', name: 'Drums',       hint: 'Percussion only',        file: 'drums.mp3'  },
-                { url: displayResult.otherUrl,  icon: '🎹', name: 'Other',       hint: 'Melody / instruments',   file: 'other.mp3'  },
+                { url: displayResult.vocalsUrl,       icon: '🎤', name: 'Vocals',       hint: 'Isolated voice track',   file: 'vocals.mp3' },
+                { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: 'Full backing track',     file: 'instrumental.mp3' },
+                { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',         hint: 'Low-end bass line',      file: 'bass.mp3'   },
+                { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',        hint: 'Percussion only',        file: 'drums.mp3'  },
+                { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',        hint: 'Melody / instruments',   file: 'other.mp3'  },
               ] as const).filter(({ url }) => url).map(({ url, icon, name, hint, file }) => (
                 <a
                   key={name}
@@ -372,6 +510,42 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           font-weight: 600;
         }
 
+        /* ── extracted-stems slot grid ── */
+        .vs-stem-slots {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+        .vs-slot-zone {
+          position: relative;
+          border: 1.5px dashed #2A2A4A; border-radius: 12px;
+          padding: 16px 14px; text-align: center; cursor: pointer;
+          transition: all 0.2s; background: rgba(139,92,246,.02);
+        }
+        .vs-slot-zone:hover { border-color: rgba(139,92,246,.5); background: rgba(139,92,246,.05); }
+        .vs-slot-zone--done {
+          border-style: solid; border-color: rgba(16,185,129,.35);
+          background: rgba(16,185,129,.04);
+        }
+        .vs-slot-zone--uploading { border-color: rgba(139,92,246,.4); cursor: default; }
+        .vs-slot-zone--error { border-color: rgba(239,68,68,.4); }
+        .vs-slot-icon { font-size: 22px; margin-bottom: 6px; }
+        .vs-slot-label {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 3px;
+        }
+        .vs-slot-req { color: #EC4899; }
+        .vs-slot-status { font-size: 10px; color: #5A5A80; line-height: 1.4; overflow-wrap: anywhere; }
+        .vs-slot-zone--error .vs-slot-status { color: #F87171; }
+        .vs-slot-check {
+          position: absolute; top: 8px; right: 8px;
+          width: 16px; height: 16px; border-radius: 50%;
+          background: #10B981; color: #fff;
+          font-size: 9px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+        }
+
         /* ── drop zone ── */
         .vs-upload-zone {
           border: 1.5px dashed #2A2A4A; border-radius: 14px;
@@ -456,10 +630,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           font-size: 14px; font-weight: 600; cursor: pointer;
           transition: all 0.25s; letter-spacing: 0.2px;
         }
-        .vs-continue-btn:hover {
+        .vs-continue-btn:hover:not(:disabled) {
           transform: translateY(-1px);
           box-shadow: 0 10px 30px rgba(139,92,246,.4);
         }
+        .vs-continue-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         /* ── error zone ── */
         .vs-error-zone {
@@ -482,6 +657,10 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           padding: 4px 12px; border-radius: 99px;
           background: #121225; border: 1px solid #1E1E3A;
           font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #5A5A80;
+        }
+
+        @media (max-width: 480px) {
+          .vs-stem-slots { grid-template-columns: 1fr; }
         }
       `}</style>
     </>

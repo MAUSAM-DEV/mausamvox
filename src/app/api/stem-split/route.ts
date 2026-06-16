@@ -79,9 +79,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── Vocals-only upload: the file already IS the vocals stem ──────
+    // Pre-separated stem upload: the file already IS the stem (vocals,
+    // instrumental, bass, drums, or other) — just hand back a signed URL.
     if (skipSplit) {
-      return NextResponse.json({ vocals: signed.signedUrl, bass: '', drums: '', other: '' })
+      return NextResponse.json({ url: signed.signedUrl })
     }
 
     if (!process.env.REPLICATE_API_TOKEN) {
