@@ -31,6 +31,7 @@ const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
 const TEST_RVC_MODEL_URL = 'https://huggingface.co/theNeofr/ariana-grande-rvc-v2/resolve/main/ariana_grande.zip'
 
 export interface VoiceOption {
+  id: string
   name: string
   sub: string
   avatarBg: string
@@ -39,10 +40,10 @@ export interface VoiceOption {
 }
 
 export const VOICES: VoiceOption[] = [
-  { name: 'My Voice', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#8B5CF6,#EC4899)', modelUrl: TEST_RVC_MODEL_URL },
-  { name: 'Voice 2', sub: 'Express Clone', avatarBg: 'linear-gradient(135deg,#EC4899,#06B6D4)', modelUrl: TEST_RVC_MODEL_URL },
-  { name: 'Voice 3', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#06B6D4,#8B5CF6)', modelUrl: TEST_RVC_MODEL_URL },
-  { name: 'Add Voice', sub: 'Clone a new voice', avatarBg: '#1E1E3A', isAdd: true },
+  { id: 'my-voice', name: 'My Voice', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#8B5CF6,#EC4899)', modelUrl: TEST_RVC_MODEL_URL },
+  { id: 'voice-2', name: 'Voice 2', sub: 'Express Clone', avatarBg: 'linear-gradient(135deg,#EC4899,#06B6D4)', modelUrl: TEST_RVC_MODEL_URL },
+  { id: 'voice-3', name: 'Voice 3', sub: 'Studio Clone', avatarBg: 'linear-gradient(135deg,#06B6D4,#8B5CF6)', modelUrl: TEST_RVC_MODEL_URL },
+  { id: 'add-voice', name: 'Add Voice', sub: 'Clone a new voice', avatarBg: '#1E1E3A', isAdd: true },
 ]
 
 const ACCENTS = ['Neutral', 'American', 'British', 'Indian', 'Australian', 'Irish']

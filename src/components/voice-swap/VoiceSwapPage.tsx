@@ -116,18 +116,44 @@ export function VoiceSwapPage() {
     setOvSteps(['done', 'active', 'pending', 'pending'])
 
     try {
-      const res = await fetch('/api/voice-convert', {
+      const startRes = await fetch('/api/voice-convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vocalsUrl: stemResult.vocalsUrl,
           voiceModelUrl: voice.modelUrl,
+          voiceId: voice.id,
           pitchShift,
+          styleIntensity,
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Voice conversion failed')
+      const startData = await startRes.json()
+      if (!startRes.ok) throw new Error(startData.error ?? 'Voice conversion failed to start')
+
+      const predictionId = startData.predictionId as string
+
+      // Poll the job until Replicate reports a terminal status.
+      const POLL_INTERVAL_MS = 2000
+      const MAX_ATTEMPTS = 90 // ~3 minutes
+      let final: { status: string; convertedVocalsUrl?: string; error?: string } | null = null
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+
+        const pollRes = await fetch(`/api/voice-convert?id=${predictionId}`)
+        const pollData = await pollRes.json()
+        if (!pollRes.ok) throw new Error(pollData.error ?? 'Voice conversion failed')
+
+        if (pollData.status === 'succeeded' || pollData.status === 'failed' || pollData.status === 'canceled') {
+          final = pollData
+          break
+        }
+        // still starting/processing — keep step 2 marked active and keep polling
+      }
+
+      if (!final) throw new Error('Voice conversion timed out')
+      if (final.status !== 'succeeded') throw new Error(final.error ?? 'Voice conversion failed')
 
       setOvSteps(['done', 'done', 'active', 'pending'])
       await new Promise((r) => setTimeout(r, 350))
@@ -135,7 +161,7 @@ export function VoiceSwapPage() {
       await new Promise((r) => setTimeout(r, 350))
       setOvSteps(['done', 'done', 'done', 'done'])
 
-      setConvertedVocalsUrl(data.convertedVocalsUrl)
+      setConvertedVocalsUrl(final.convertedVocalsUrl ?? null)
       setProcessing(false)
       setStep(3)
       showToast(
