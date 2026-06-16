@@ -5,33 +5,86 @@ import { createClient } from '@/lib/supabase/client'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
-type StemSlotKey = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other'
-type SlotStatus = 'idle' | 'uploading' | 'done' | 'error'
+type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'unknown'
+type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
-const STEM_SLOTS: { key: StemSlotKey; label: string; hint: string; required: boolean; icon: string }[] = [
-  { key: 'vocals',       label: 'Vocals',              hint: 'Gets voice-converted',         required: true,  icon: '🎤' },
-  { key: 'instrumental', label: 'Instrumental / Music', hint: 'Mixed back with the swap',     required: true,  icon: '🎼' },
-  { key: 'bass',         label: 'Bass',                hint: 'Optional',                      required: false, icon: '🎸' },
-  { key: 'drums',        label: 'Drums',               hint: 'Optional',                      required: false, icon: '🥁' },
-  { key: 'other',        label: 'Other',               hint: 'Optional',                      required: false, icon: '🎹' },
+const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
+  vocals:       { label: 'Vocals',       icon: '🎤', required: true },
+  instrumental: { label: 'Instrumental', icon: '🎼', required: true },
+  bass:         { label: 'Bass',         icon: '🎸', required: false },
+  drums:        { label: 'Drums',        icon: '🥁', required: false },
+  other:        { label: 'Other',        icon: '🎹', required: false },
+  unknown:      { label: 'Unrecognized', icon: '❓', required: false },
+}
+
+// Filename → category, checked in this order so e.g. "instrumental" (which
+// contains "inst") never gets miscategorized by a less specific rule.
+const CATEGORY_RULES: { category: StemCategory; keywords: string[] }[] = [
+  { category: 'vocals', keywords: ['vocal', 'voice', 'vox'] },
+  { category: 'instrumental', keywords: ['instrumental', 'music', 'inst', 'karaoke', 'accompaniment'] },
+  { category: 'bass', keywords: ['bass'] },
+  { category: 'drums', keywords: ['drum', 'percussion', 'perc'] },
+  { category: 'other', keywords: ['other', 'synth', 'melody', 'keys', 'guitar', 'piano'] },
 ]
 
-interface SlotState {
-  file: File | null
-  status: SlotStatus
+function detectCategory(filename: string): StemCategory {
+  const lower = filename.toLowerCase()
+  for (const rule of CATEGORY_RULES) {
+    if (rule.keywords.some((kw) => lower.includes(kw))) return rule.category
+  }
+  return 'unknown'
+}
+
+interface DetectedItem {
+  id: string
+  file: File
+  category: StemCategory
+  status: ItemStatus
   url: string
   errorMsg: string
 }
 
-const emptySlots: Record<StemSlotKey, SlotState> = {
-  vocals:       { file: null, status: 'idle', url: '', errorMsg: '' },
-  instrumental: { file: null, status: 'idle', url: '', errorMsg: '' },
-  bass:         { file: null, status: 'idle', url: '', errorMsg: '' },
-  drums:        { file: null, status: 'idle', url: '', errorMsg: '' },
-  other:        { file: null, status: 'idle', url: '', errorMsg: '' },
+// Recursively reads a dropped FileSystemEntry (folder or file) into Files.
+function readEntry(entry: FileSystemEntry): Promise<File[]> {
+  return new Promise((resolve) => {
+    if (entry.isFile) {
+      (entry as FileSystemFileEntry).file((file) => resolve([file]), () => resolve([]))
+      return
+    }
+    if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader()
+      const collected: File[] = []
+      const readBatch = () => {
+        reader.readEntries(async (entries) => {
+          if (entries.length === 0) { resolve(collected); return }
+          for (const e of entries) collected.push(...(await readEntry(e)))
+          readBatch() // directory readers page results — keep going until empty
+        }, () => resolve(collected))
+      }
+      readBatch()
+      return
+    }
+    resolve([])
+  })
+}
+
+// Drag-and-drop of a folder needs the (non-standard but universally
+// supported) webkitGetAsEntry API; a plain multi-file drop doesn't expose
+// entries at all, so fall back to dataTransfer.files in that case.
+async function getDroppedFiles(dt: DataTransfer): Promise<File[]> {
+  const items = Array.from(dt.items ?? [])
+  const entries = items
+    .map((item) => item.webkitGetAsEntry?.())
+    .filter((e): e is FileSystemEntry => !!e)
+
+  if (entries.length > 0) {
+    const nested = await Promise.all(entries.map(readEntry))
+    return nested.flat()
+  }
+  return Array.from(dt.files)
 }
 
 export interface StemResult {
@@ -120,10 +173,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [uploadMode, setUploadMode] = useState<UploadMode>('full')
-  const [slots, setSlots] = useState<Record<StemSlotKey, SlotState>>(emptySlots)
+  const [items, setItems] = useState<DetectedItem[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [stemsDragging, setStemsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const stemFileInputRef = useRef<HTMLInputElement>(null)
-  const pendingSlotRef = useRef<StemSlotKey | null>(null)
+  const stemsFileInputRef = useRef<HTMLInputElement>(null)
+  const stemsFolderInputRef = useRef<HTMLInputElement>(null)
+  const itemIdCounterRef = useRef(0)
 
   async function processFile(file: File) {
     const validationError = validateFile(file)
@@ -181,19 +237,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     }
   }
 
-  async function processSlotFile(key: StemSlotKey, file: File) {
-    const validationError = validateFile(file)
-    if (validationError) {
-      setSlots((s) => ({ ...s, [key]: { file, status: 'error', url: '', errorMsg: validationError } }))
-      return
-    }
-
-    setSlots((s) => ({ ...s, [key]: { file, status: 'uploading', url: '', errorMsg: '' } }))
-
+  async function uploadDetectedItem(id: string, file: File) {
     try {
       const supabase = createClient()
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `${userId ?? 'anon'}/${Date.now()}-${key}-${safeName}`
+      const path = `${userId ?? 'anon'}/${Date.now()}-${safeName}`
 
       const { error: uploadError } = await supabase.storage
         .from('audio-uploads')
@@ -210,47 +258,80 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not prepare file')
 
-      setSlots((s) => ({ ...s, [key]: { file, status: 'done', url: data.url, errorMsg: '' } }))
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.url } : it)))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'
-      setSlots((s) => ({ ...s, [key]: { file, status: 'error', url: '', errorMsg: msg } }))
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'error', errorMsg: msg } : it)))
     }
   }
 
-  function openSlotPicker(key: StemSlotKey) {
-    pendingSlotRef.current = key
-    stemFileInputRef.current?.click()
+  function handleStemFiles(files: File[]) {
+    if (files.length === 0) return
+
+    const newItems: DetectedItem[] = []
+    for (const file of files) {
+      const validationError = validateFile(file)
+      itemIdCounterRef.current += 1
+      const id = `${itemIdCounterRef.current}-${file.name}`
+      newItems.push({
+        id,
+        file,
+        category: detectCategory(file.name),
+        status: validationError ? 'error' : 'uploading',
+        url: '',
+        errorMsg: validationError ?? '',
+      })
+    }
+
+    setItems((prev) => [...prev, ...newItems])
+    newItems.filter((it) => it.status === 'uploading').forEach((it) => uploadDetectedItem(it.id, it.file))
   }
 
-  function handleStemFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    const key = pendingSlotRef.current
-    if (file && key) processSlotFile(key, file)
+  function handleStemsFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    handleStemFiles(Array.from(e.target.files ?? []))
     e.target.value = ''
   }
 
-  function handleSlotDrop(key: StemSlotKey, e: React.DragEvent) {
+  async function handleStemsDrop(e: React.DragEvent) {
     e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (file) processSlotFile(key, file)
+    setStemsDragging(false)
+    const files = await getDroppedFiles(e.dataTransfer)
+    handleStemFiles(files)
   }
+
+  function setItemCategory(id: string, category: StemCategory) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, category } : it)))
+    setEditingId(null)
+  }
+
+  function removeItem(id: string) {
+    setItems((prev) => prev.filter((it) => it.id !== id))
+  }
+
+  function urlFor(category: StemCategory): string {
+    // Last matching item wins if more than one file shares a category.
+    const match = [...items].reverse().find((it) => it.category === category && it.status === 'done')
+    return match?.url ?? ''
+  }
+
+  const hasVocals = items.some((it) => it.category === 'vocals' && it.status === 'done')
+  const hasInstrumental = items.some((it) => it.category === 'instrumental' && it.status === 'done')
+  const canContinueStems = hasVocals && hasInstrumental
 
   function handleContinueStems() {
     const stemResult: StemResult = {
       storagePath: '',
-      vocalsUrl: slots.vocals.url,
-      instrumentalUrl: slots.instrumental.url,
-      bassUrl: slots.bass.url,
-      drumsUrl: slots.drums.url,
-      otherUrl: slots.other.url,
-      fileName: slots.vocals.file?.name ?? 'Extracted stems',
+      vocalsUrl: urlFor('vocals'),
+      instrumentalUrl: urlFor('instrumental'),
+      bassUrl: urlFor('bass'),
+      drumsUrl: urlFor('drums'),
+      otherUrl: urlFor('other'),
+      fileName: items.find((it) => it.category === 'vocals')?.file.name ?? 'Extracted stems',
     }
     onDone(stemResult)
     setPhase('done')
     onToast('Stems ready — vocals and instrumental loaded!')
   }
-
-  const canContinueStems = slots.vocals.status === 'done' && slots.instrumental.status === 'done'
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -270,7 +351,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     setPhase('idle')
     setCurrentFile(null)
     setErrorMsg('')
-    setSlots(emptySlots)
+    setItems([])
+    setEditingId(null)
   }
 
   const displayFile = currentFile ?? (result ? { name: result.fileName, size: 0 } : null)
@@ -287,11 +369,21 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
         onChange={handleFileInput}
       />
       <input
-        ref={stemFileInputRef}
+        ref={stemsFileInputRef}
         type="file"
+        multiple
         accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a"
         style={{ display: 'none' }}
-        onChange={handleStemFileInput}
+        onChange={handleStemsFileInput}
+      />
+      <input
+        ref={stemsFolderInputRef}
+        type="file"
+        // @ts-expect-error -- non-standard but universally supported attribute for folder picking
+        webkitdirectory="true"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleStemsFileInput}
       />
 
       <div className="vs-panel">
@@ -337,32 +429,88 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
             {uploadMode === 'extracted-stems' && (
               <>
-                <div className="vs-stem-slots">
-                  {STEM_SLOTS.map((slot) => {
-                    const s = slots[slot.key]
-                    return (
-                      <div
-                        key={slot.key}
-                        className={`vs-slot-zone vs-slot-zone--${s.status}`}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => handleSlotDrop(slot.key, e)}
-                        onClick={() => s.status !== 'uploading' && openSlotPicker(slot.key)}
-                      >
-                        {s.status === 'done' && <span className="vs-slot-check">✓</span>}
-                        <div className="vs-slot-icon">{slot.icon}</div>
-                        <div className="vs-slot-label">
-                          {slot.label}{slot.required && <span className="vs-slot-req"> *</span>}
-                        </div>
-                        <div className="vs-slot-status">
-                          {s.status === 'idle' && (slot.required ? 'Required — click or drop' : slot.hint)}
-                          {s.status === 'uploading' && 'Uploading…'}
-                          {s.status === 'done' && (s.file?.name ?? 'Ready')}
-                          {s.status === 'error' && s.errorMsg}
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div
+                  className={`vs-upload-zone ${stemsDragging ? 'vs-upload-zone--drag' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setStemsDragging(true) }}
+                  onDragLeave={() => setStemsDragging(false)}
+                  onDrop={handleStemsDrop}
+                  onClick={() => stemsFileInputRef.current?.click()}
+                >
+                  <div className="vs-uz-icon">🎵</div>
+                  <div className="vs-uz-title">Drop your stems folder or files here</div>
+                  <div className="vs-uz-sub">
+                    or click to browse files ·{' '}
+                    <span
+                      className="vs-uz-folder-link"
+                      onClick={(e) => { e.stopPropagation(); stemsFolderInputRef.current?.click() }}
+                    >
+                      select a folder
+                    </span>
+                  </div>
+                  <div className="vs-uz-formats">Vocals + Instrumental required · MP3 · WAV · M4A · max 50 MB each</div>
                 </div>
+
+                {items.length > 0 && (
+                  <div className="vs-detected-card">
+                    {(!hasVocals || !hasInstrumental) && (
+                      <div className="vs-detected-missing">
+                        ⚠ Missing: {[!hasVocals && 'Vocals', !hasInstrumental && 'Instrumental'].filter(Boolean).join(' and ')} (required)
+                      </div>
+                    )}
+                    <div className="vs-detected-list">
+                      {items.map((it) => {
+                        const meta = CATEGORY_META[it.category]
+                        return (
+                          <div key={it.id} className={`vs-detected-row vs-detected-row--${it.status}`}>
+                            <span className="vs-detected-icon">{meta.icon}</span>
+                            <div className="vs-detected-info">
+                              <div className="vs-detected-name">{it.file.name}</div>
+                              <div className="vs-detected-sub">
+                                {it.status === 'uploading' && 'Uploading…'}
+                                {it.status === 'error' && it.errorMsg}
+                                {it.status === 'done' && formatSize(it.file.size)}
+                              </div>
+                            </div>
+
+                            {editingId === it.id ? (
+                              <select
+                                className="vs-detected-select"
+                                value={it.category}
+                                autoFocus
+                                onChange={(e) => setItemCategory(it.id, e.target.value as StemCategory)}
+                                onBlur={() => setEditingId(null)}
+                              >
+                                {(Object.keys(CATEGORY_META) as StemCategory[]).map((cat) => (
+                                  <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={`vs-detected-badge vs-detected-badge--${it.category}`}>
+                                {meta.label}{meta.required && ' *'}
+                              </span>
+                            )}
+
+                            <button
+                              className="vs-detected-edit"
+                              title="Re-categorize"
+                              onClick={() => setEditingId(editingId === it.id ? null : it.id)}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              className="vs-detected-remove"
+                              title="Remove"
+                              onClick={() => removeItem(it.id)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   className="vs-continue-btn"
                   disabled={!canContinueStems}
@@ -510,41 +658,48 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           font-weight: 600;
         }
 
-        /* ── extracted-stems slot grid ── */
-        .vs-stem-slots {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 10px;
-          margin-bottom: 16px;
+        /* ── detected stems summary ── */
+        .vs-uz-folder-link { color: #8B5CF6; text-decoration: underline; cursor: pointer; }
+        .vs-detected-card {
+          border: 1px solid #1E1E3A; border-radius: 12px;
+          padding: 14px; margin: 14px 0; background: rgba(139,92,246,.02);
         }
-        .vs-slot-zone {
-          position: relative;
-          border: 1.5px dashed #2A2A4A; border-radius: 12px;
-          padding: 16px 14px; text-align: center; cursor: pointer;
-          transition: all 0.2s; background: rgba(139,92,246,.02);
+        .vs-detected-missing {
+          font-size: 12px; color: #F59E0B; margin-bottom: 10px;
         }
-        .vs-slot-zone:hover { border-color: rgba(139,92,246,.5); background: rgba(139,92,246,.05); }
-        .vs-slot-zone--done {
-          border-style: solid; border-color: rgba(16,185,129,.35);
-          background: rgba(16,185,129,.04);
+        .vs-detected-list { display: flex; flex-direction: column; gap: 8px; }
+        .vs-detected-row {
+          display: flex; align-items: center; gap: 10px;
+          padding: 9px 10px; border-radius: 8px;
+          background: #0E0E20; border: 1px solid #1E1E3A;
         }
-        .vs-slot-zone--uploading { border-color: rgba(139,92,246,.4); cursor: default; }
-        .vs-slot-zone--error { border-color: rgba(239,68,68,.4); }
-        .vs-slot-icon { font-size: 22px; margin-bottom: 6px; }
-        .vs-slot-label {
-          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
-          font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 3px;
+        .vs-detected-row--error { border-color: rgba(239,68,68,.35); }
+        .vs-detected-icon { font-size: 16px; flex-shrink: 0; }
+        .vs-detected-info { flex: 1; min-width: 0; }
+        .vs-detected-name { font-size: 12px; font-weight: 600; color: #F0F0FF; overflow-wrap: anywhere; }
+        .vs-detected-sub { font-size: 10px; color: #5A5A80; }
+        .vs-detected-row--error .vs-detected-sub { color: #F87171; }
+        .vs-detected-badge {
+          padding: 3px 9px; border-radius: 99px;
+          font-size: 10px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+          background: #1E1E3A; color: #C4C4E0;
         }
-        .vs-slot-req { color: #EC4899; }
-        .vs-slot-status { font-size: 10px; color: #5A5A80; line-height: 1.4; overflow-wrap: anywhere; }
-        .vs-slot-zone--error .vs-slot-status { color: #F87171; }
-        .vs-slot-check {
-          position: absolute; top: 8px; right: 8px;
-          width: 16px; height: 16px; border-radius: 50%;
-          background: #10B981; color: #fff;
-          font-size: 9px; font-weight: 700;
-          display: flex; align-items: center; justify-content: center;
+        .vs-detected-badge--vocals,
+        .vs-detected-badge--instrumental {
+          background: rgba(139,92,246,.12); color: #8B5CF6;
         }
+        .vs-detected-badge--unknown { background: rgba(239,68,68,.1); color: #F87171; }
+        .vs-detected-select {
+          background: #0E0E20; border: 1px solid rgba(139,92,246,.5); border-radius: 6px;
+          padding: 4px 6px; font-size: 11px; color: #F0F0FF; flex-shrink: 0;
+        }
+        .vs-detected-edit, .vs-detected-remove {
+          width: 22px; height: 22px; border-radius: 6px; border: 1px solid #2A2A4A;
+          background: transparent; color: #7878A0; font-size: 11px; cursor: pointer;
+          flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+          transition: all 0.2s;
+        }
+        .vs-detected-edit:hover, .vs-detected-remove:hover { border-color: #8B5CF6; color: #8B5CF6; }
 
         /* ── drop zone ── */
         .vs-upload-zone {
@@ -657,10 +812,6 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           padding: 4px 12px; border-radius: 99px;
           background: #121225; border: 1px solid #1E1E3A;
           font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #5A5A80;
-        }
-
-        @media (max-width: 480px) {
-          .vs-stem-slots { grid-template-columns: 1fr; }
         }
       `}</style>
     </>
