@@ -239,28 +239,18 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
   async function uploadDetectedItem(id: string, file: File) {
     try {
-      const supabase = createClient()
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `${userId ?? 'anon'}/${Date.now()}-${safeName}`
+      // Use the server-side upload route (admin client) so RLS on storage.objects
+      // never blocks the request, and auth is validated via the session cookie.
+      const form = new FormData()
+      form.append('file', file)
 
-      const { error: uploadError } = await supabase.storage
-        .from('audio-uploads')
-        .upload(path, file, { contentType: file.type || 'audio/mpeg', upsert: false })
-
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
-
-      const res = await fetch('/api/stem-split', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: path, userId, skipSplit: true }),
-      })
-
+      const res = await fetch('/api/upload-stem', { method: 'POST', body: form })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not prepare file')
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
 
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.url } : it)))
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Something went wrong'
+      const msg = err instanceof Error ? err.message : 'Upload failed'
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'error', errorMsg: msg } : it)))
     }
   }
