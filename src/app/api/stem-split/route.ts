@@ -52,38 +52,34 @@ function safeStringify(v: unknown): string {
 export async function POST(req: NextRequest) {
   // Top-level catch ensures we always return JSON, never an HTML error page
   try {
-    let body: { storagePath?: string; userId?: string; skipSplit?: boolean }
+    console.log('[stem-split] handler entered')
+
+    let body: { storagePath?: string; userId?: string }
     try {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { storagePath, skipSplit } = body
+    const { storagePath } = body
     if (!storagePath) {
       return NextResponse.json({ error: 'storagePath is required' }, { status: 400 })
     }
 
     // ── 1. Signed URL (bucket is private) ───────────────────────────
-    // 6h TTL: when skipSplit is set, this URL goes straight back to the
-    // client and must still be valid whenever they later hit "Process",
-    // not just for the immediate Replicate fetch below.
     const { data: signed, error: signErr } = await supabaseAdmin.storage
       .from('audio-uploads')
       .createSignedUrl(storagePath, 21600)
 
     if (signErr || !signed?.signedUrl) {
+      console.error('[stem-split] createSignedUrl failed:', signErr?.message, 'for path:', storagePath)
       return NextResponse.json(
         { error: `Could not sign storage URL: ${signErr?.message ?? 'unknown'}` },
         { status: 500 }
       )
     }
 
-    // Pre-separated stem upload: the file already IS the stem (vocals,
-    // instrumental, bass, drums, or other) — just hand back a signed URL.
-    if (skipSplit) {
-      return NextResponse.json({ url: signed.signedUrl })
-    }
+    console.log('[stem-split] signed URL created, calling Replicate...')
 
     if (!process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })

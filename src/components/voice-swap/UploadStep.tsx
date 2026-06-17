@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
@@ -9,14 +8,6 @@ type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'un
 type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
-
-function guessMime(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  if (ext === 'mp3') return 'audio/mpeg'
-  if (ext === 'm4a') return 'audio/mp4'
-  if (ext === 'wav') return 'audio/wav'
-  return 'audio/mpeg'
-}
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
 const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
@@ -203,31 +194,27 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     setPhase('uploading')
 
     try {
-      const supabase = createClient()
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `${userId ?? 'anon'}/${Date.now()}-${safeName}`
+      // Upload via the server-side route so the admin client handles storage
+      // access — avoids RLS issues with the browser Supabase client.
+      const form = new FormData()
+      form.append('file', file)
+      const uploadRes = await fetch('/api/upload-stem', { method: 'POST', body: form })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
 
-      const { error: uploadError } = await supabase.storage
-        .from('audio-uploads')
-        .upload(path, file, { contentType: file.type || 'audio/mpeg', upsert: false })
-
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
-
-      // Bucket is private — send the storage path to the API route,
-      // which generates a signed URL server-side before calling Replicate.
       setPhase('splitting')
 
       const res = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: path, userId }),
+        body: JSON.stringify({ storagePath: uploadData.path }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Stem split failed')
 
       const stemResult: StemResult = {
-        storagePath: path,
+        storagePath: uploadData.path,
         vocalsUrl:       data.vocals,
         instrumentalUrl: '',
         bassUrl:         data.bass,
@@ -248,26 +235,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
   async function uploadDetectedItem(id: string, file: File) {
     try {
-      const mime = file.type || guessMime(file.name)
-
-      // Step 1 — ask the API for a presigned upload URL (no file bytes go through the server)
-      const res = await fetch('/api/upload-stem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: mime }),
-      })
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch('/api/upload-stem', { method: 'POST', body: form })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Failed to get upload URL')
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
 
-      // Step 2 — PUT the file directly to Supabase Storage
-      const uploadRes = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
-      })
-      if (!uploadRes.ok) throw new Error(`Storage upload failed (${uploadRes.status})`)
-
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.downloadUrl } : it)))
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.url } : it)))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed'
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'error', errorMsg: msg } : it)))
