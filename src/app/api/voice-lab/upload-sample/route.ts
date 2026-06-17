@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
     }
 
-    const mimeType = file.type || 'application/octet-stream'
+    // Strip codec parameters so "audio/webm;codecs=opus" matches "audio/webm"
+    const mimeType = (file.type || 'application/octet-stream').split(';')[0].trim()
     const ext = ALLOWED_TYPES[mimeType]
     if (!ext) {
       return NextResponse.json({ error: `Unsupported audio type: ${mimeType}` }, { status: 400 })

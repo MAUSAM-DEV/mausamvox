@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
-// Uploads a single stem file to audio-uploads using the service-role client so
-// RLS on storage.objects never blocks the request.  Auth is still enforced via
-// the session cookie — unauthenticated calls get a 401 before any upload happens.
+// Returns a presigned upload URL + a presigned download URL so the browser
+// can PUT the file directly to Supabase Storage without proxying bytes
+// through this route.  Auth is still enforced via the session cookie.
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -15,41 +15,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    const form = await req.formData()
-    const file = form.get('file')
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'file field is required' }, { status: 400 })
+    const { filename, contentType } = await req.json()
+    if (!filename || typeof filename !== 'string') {
+      return NextResponse.json({ error: 'filename is required' }, { status: 400 })
     }
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
     const path = `${user.id}/${Date.now()}-${safeName}`
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const contentType = file.type || guessMime(file.name)
+    const mime = contentType || guessMime(filename)
 
-    const { error: uploadError } = await supabaseAdmin.storage
+    const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
       .from('audio-uploads')
-      .upload(path, buffer, { contentType, upsert: false })
+      .createSignedUploadUrl(path)
 
-    if (uploadError) {
+    if (uploadErr || !uploadData?.signedUrl) {
       return NextResponse.json(
-        { error: `Upload failed: ${uploadError.message}` },
+        { error: `Could not create upload URL: ${uploadErr?.message ?? 'unknown'}` },
         { status: 500 }
       )
     }
 
-    // 6-hour signed URL — long enough for the user to finish the voice-swap session
-    const { data: signed, error: signErr } = await supabaseAdmin.storage
+    // 6-hour signed download URL — long enough for the voice-swap session
+    const { data: dlData, error: dlErr } = await supabaseAdmin.storage
       .from('audio-uploads')
       .createSignedUrl(path, 21600)
 
-    if (signErr || !signed?.signedUrl) {
+    if (dlErr || !dlData?.signedUrl) {
       return NextResponse.json(
-        { error: `Could not create signed URL: ${signErr?.message ?? 'unknown'}` },
+        { error: `Could not create download URL: ${dlErr?.message ?? 'unknown'}` },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ path, url: signed.signedUrl })
+    return NextResponse.json({
+      uploadUrl: uploadData.signedUrl,
+      downloadUrl: dlData.signedUrl,
+      path,
+      mime,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[upload-stem] unhandled error:', msg)

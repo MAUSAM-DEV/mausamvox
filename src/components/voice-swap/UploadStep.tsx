@@ -9,6 +9,14 @@ type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'un
 type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
+
+function guessMime(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  if (ext === 'mp3') return 'audio/mpeg'
+  if (ext === 'm4a') return 'audio/mp4'
+  if (ext === 'wav') return 'audio/wav'
+  return 'audio/mpeg'
+}
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
 const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
@@ -176,6 +184,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   const [items, setItems] = useState<DetectedItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [stemsDragging, setStemsDragging] = useState(false)
+  const [downloadingZip, setDownloadingZip] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const stemsFileInputRef = useRef<HTMLInputElement>(null)
   const stemsFolderInputRef = useRef<HTMLInputElement>(null)
@@ -239,16 +248,26 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
   async function uploadDetectedItem(id: string, file: File) {
     try {
-      // Use the server-side upload route (admin client) so RLS on storage.objects
-      // never blocks the request, and auth is validated via the session cookie.
-      const form = new FormData()
-      form.append('file', file)
+      const mime = file.type || guessMime(file.name)
 
-      const res = await fetch('/api/upload-stem', { method: 'POST', body: form })
+      // Step 1 — ask the API for a presigned upload URL (no file bytes go through the server)
+      const res = await fetch('/api/upload-stem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: mime }),
+      })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+      if (!res.ok) throw new Error(data.error ?? 'Failed to get upload URL')
 
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.url } : it)))
+      // Step 2 — PUT the file directly to Supabase Storage
+      const uploadRes = await fetch(data.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
+      })
+      if (!uploadRes.ok) throw new Error(`Storage upload failed (${uploadRes.status})`)
+
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.downloadUrl } : it)))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed'
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'error', errorMsg: msg } : it)))
@@ -317,6 +336,41 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   const hasVocals = items.some((it) => it.category === 'vocals' && it.status === 'done')
   const hasInstrumental = items.some((it) => it.category === 'instrumental' && it.status === 'done')
   const canContinueStems = hasVocals && hasInstrumental
+
+  async function downloadAllStems(stemResult: StemResult) {
+    setDownloadingZip(true)
+    try {
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+
+      const entries = [
+        { url: stemResult.vocalsUrl,       file: 'vocals.mp3' },
+        { url: stemResult.instrumentalUrl, file: 'instrumental.mp3' },
+        { url: stemResult.bassUrl,         file: 'bass.mp3' },
+        { url: stemResult.drumsUrl,        file: 'drums.mp3' },
+        { url: stemResult.otherUrl,        file: 'other.mp3' },
+      ].filter((s) => s.url)
+
+      await Promise.all(
+        entries.map(async ({ url, file }) => {
+          const res = await fetch(url)
+          zip.file(file, await res.blob())
+        })
+      )
+
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${stemResult.fileName.replace(/\.[^.]+$/, '')}-stems.zip`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      onToast('All stems downloaded as ZIP!')
+    } catch {
+      onToast('ZIP download failed — try individual files.')
+    } finally {
+      setDownloadingZip(false)
+    }
+  }
 
   function handleContinueStems() {
     const stemResult: StemResult = {
@@ -587,6 +641,14 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
               ))}
             </div>
 
+            <button
+              className="vs-zip-btn"
+              disabled={downloadingZip}
+              onClick={() => downloadAllStems(displayResult)}
+            >
+              {downloadingZip ? 'Preparing ZIP…' : '↓ Download All Stems (ZIP)'}
+            </button>
+
             <button className="vs-continue-btn" onClick={onContinue}>
               Continue to Voice Swap →
             </button>
@@ -775,6 +837,21 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           flex-shrink: 0; transition: background 0.2s;
         }
         .vs-stem-card:hover .vs-stem-dl { background: rgba(139,92,246,.2); }
+
+        /* ── zip download button ── */
+        .vs-zip-btn {
+          width: 100%; padding: 10px; border-radius: 10px;
+          border: 1px solid #2A2A4A;
+          background: #0E0E20; color: #8B5CF6;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s; letter-spacing: 0.2px;
+        }
+        .vs-zip-btn:hover:not(:disabled) {
+          border-color: rgba(139,92,246,.5);
+          background: rgba(139,92,246,.06);
+        }
+        .vs-zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* ── continue button ── */
         .vs-continue-btn {
