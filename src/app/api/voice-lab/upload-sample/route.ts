@@ -19,17 +19,23 @@ const ALLOWED_TYPES: Record<string, string> = {
 // so uploads go through this route (service role bypasses RLS) instead of
 // straight from the browser — auth is verified via the session cookie below.
 export async function POST(req: NextRequest) {
+  console.log('[voice-lab/upload-sample] handler entered')
   try {
+    console.log('[voice-lab/upload-sample] creating supabase client')
     const supabase = await createClient()
+    console.log('[voice-lab/upload-sample] getting user')
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
+    console.log('[voice-lab/upload-sample] user:', user.id)
 
+    console.log('[voice-lab/upload-sample] parsing form data')
     const form = await req.formData()
     const file = form.get('audio')
     const name = form.get('name')
     const cloneType = form.get('cloneType')
+    console.log('[voice-lab/upload-sample] file:', file instanceof File ? `${file.name} ${file.size}B ${file.type}` : typeof file, 'name:', name)
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'audio file is required' }, { status: 400 })
@@ -47,7 +53,9 @@ export async function POST(req: NextRequest) {
 
     const type = cloneType === 'studio' ? 'studio' : 'express'
     const path = `${user.id}/${Date.now()}-sample.${ext}`
+    console.log('[voice-lab/upload-sample] reading file buffer, size:', file.size)
     const buffer = Buffer.from(await file.arrayBuffer())
+    console.log('[voice-lab/upload-sample] uploading to storage, path:', path)
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from('voice-samples')
@@ -57,6 +65,7 @@ export async function POST(req: NextRequest) {
       console.error('[voice-lab/upload-sample] storage upload failed:', uploadError.message)
       return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
     }
+    console.log('[voice-lab/upload-sample] upload ok, creating signed URL')
 
     // Generate a 24-hour signed URL for the sample (used for playback reference)
     const { data: signed } = await supabaseAdmin.storage
@@ -82,10 +91,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Could not save voice: ${insertError.message}` }, { status: 500 })
     }
 
+    console.log('[voice-lab/upload-sample] done, voice id:', row?.id)
     return NextResponse.json({ voice: row })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
     console.error('[voice-lab/upload-sample] unhandled error:', msg)
+    if (stack) console.error('[voice-lab/upload-sample] stack:', stack)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

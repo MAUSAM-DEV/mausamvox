@@ -20,9 +20,17 @@ const LIBRARY = [
 
 interface VSidebarProps {
   onToast: (msg: string) => void
+  creditsRemaining: number | null
+  creditsTotal: number
 }
 
-export function VSidebar({ onToast }: VSidebarProps) {
+function fmtN(n: number) {
+  return n.toLocaleString('en-US')
+}
+
+export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarProps) {
+  const remaining = creditsRemaining ?? creditsTotal
+  const usedPct = creditsTotal > 0 ? Math.min(100, ((creditsTotal - remaining) / creditsTotal) * 100) : 0
   return (
     <>
       <aside className="vs-sidebar">
@@ -75,15 +83,18 @@ export function VSidebar({ onToast }: VSidebarProps) {
           <div className="vs-credits-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '11px', color: '#5A5A80' }}>Credits</span>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: '#C4C4E0' }}>20,400 / 30,000</span>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: creditsRemaining === null ? '#5A5A80' : '#C4C4E0' }}>
+                {creditsRemaining === null ? '…' : fmtN(remaining)} / {fmtN(creditsTotal)}
+              </span>
             </div>
             <div style={{ height: '4px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
-                  width: '68%',
+                  width: `${100 - usedPct}%`,
                   borderRadius: '2px',
                   background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                  transition: 'width 0.4s ease',
                 }}
               />
             </div>

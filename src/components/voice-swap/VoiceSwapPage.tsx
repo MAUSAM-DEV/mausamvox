@@ -7,7 +7,7 @@ import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
 import { ConfigStep, VoiceOption } from './ConfigStep'
 import { ResultStep } from './ResultStep'
-import { RightPanel } from './RightPanel'
+import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 
@@ -41,27 +41,62 @@ export function VoiceSwapPage() {
   const [voicesLoading, setVoicesLoading] = useState(true)
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null)
 
+  // Credits
+  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
+  const CREDITS_TOTAL = 30000
+
+  // Recent swaps
+  const [swaps, setSwaps] = useState<VoiceSwap[]>([])
+  const [swapsLoading, setSwapsLoading] = useState(true)
+
   // Restore last stem result from localStorage (5-hour TTL)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STEM_CACHE_KEY)
+      console.log('[stem-cache] restore attempt — raw:', raw ? raw.slice(0, 80) + '…' : 'null')
       if (!raw) return
       const { result, savedAt } = JSON.parse(raw) as { result: StemResult; savedAt: number }
-      if (Date.now() - savedAt < STEM_CACHE_TTL_MS) {
+      const ageMs = Date.now() - savedAt
+      console.log('[stem-cache] age', Math.round(ageMs / 60000), 'min, TTL', Math.round(STEM_CACHE_TTL_MS / 60000), 'min')
+      if (ageMs < STEM_CACHE_TTL_MS) {
+        console.log('[stem-cache] restoring result for', result.fileName)
         setStemResult(result)
       } else {
+        console.log('[stem-cache] expired — clearing')
         localStorage.removeItem(STEM_CACHE_KEY)
       }
-    } catch {
-      // ignore corrupted or missing cache
+    } catch (e) {
+      console.warn('[stem-cache] restore failed:', e)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch user id on mount (voices fetched reactively when step reaches 2)
+  // Fetch user id, credits, and recent swaps on mount
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id ?? null
+      setUserId(uid)
+      if (!uid) {
+        setSwapsLoading(false)
+        return
+      }
+
+      // Credits
+      supabase
+        .from('users')
+        .select('credits_remaining')
+        .eq('id', uid)
+        .single()
+        .then(({ data: u }) => { if (u) setCreditsRemaining(u.credits_remaining) })
+
+      // Recent swaps
+      supabase
+        .from('voice_swaps')
+        .select('id, song_name, voice_used, quality_score, result_url, created_at')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(4)
+        .then(({ data: s }) => { setSwaps(s ?? []); setSwapsLoading(false) })
     })
   }, [])
 
@@ -149,11 +184,55 @@ export function VoiceSwapPage() {
     setStep(n)
   }
 
+  async function deductCredits(amount: number, action: string) {
+    if (!userId) return
+    try {
+      const res = await fetch('/api/credits/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, amount, action }),
+      })
+      const data = await res.json()
+      if (res.ok && typeof data.creditsRemaining === 'number') {
+        setCreditsRemaining(data.creditsRemaining)
+      }
+    } catch { /* non-critical — don't block the user flow */ }
+  }
+
+  async function recordSwap(songName: string, voiceUsed: string, resultUrl: string | null) {
+    if (!userId) return
+    const supabase = createClient()
+    const { error } = await supabase.from('voice_swaps').insert({
+      user_id: userId,
+      song_name: songName,
+      voice_used: voiceUsed,
+      quality_score: 82,
+      result_url: resultUrl,
+    })
+    if (!error) {
+      const { data: s } = await supabase
+        .from('voice_swaps')
+        .select('id, song_name, voice_used, quality_score, result_url, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(4)
+      setSwaps(s ?? [])
+    }
+  }
+
   function handleStemDone(result: StemResult) {
     setStemResult(result)
     try {
-      localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result, savedAt: Date.now() }))
-    } catch { /* ignore quota errors */ }
+      const payload = JSON.stringify({ result, savedAt: Date.now() })
+      localStorage.setItem(STEM_CACHE_KEY, payload)
+      console.log('[stem-cache] saved', result.fileName, 'at', new Date().toISOString())
+    } catch (e) {
+      console.warn('[stem-cache] save failed:', e)
+    }
+    // Deduct credits only for server-driven stem splits (not manual extracted stems)
+    if (result.storagePath) {
+      deductCredits(50, 'stem_split')
+    }
   }
 
   function handleStemContinue() {
@@ -235,6 +314,18 @@ export function VoiceSwapPage() {
           ? 'Preview ready! Quality score: 82/100'
           : 'Swap complete! Quality score: 82/100'
       )
+
+      // Deduct credits and record swap (non-blocking)
+      if (type === 'full') {
+        deductCredits(200, 'voice_swap_full')
+        recordSwap(
+          stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+          voice?.name ?? 'Unknown Voice',
+          final.convertedVocalsUrl ?? null,
+        ).catch(() => { /* ignore — swap is still complete */ })
+      } else {
+        deductCredits(50, 'voice_swap_preview')
+      }
     } catch (err) {
       setProcessing(false)
       showToast(err instanceof Error ? err.message : 'Voice conversion failed')
@@ -286,7 +377,7 @@ export function VoiceSwapPage() {
   return (
     <>
       <div className="vs-shell">
-        <VSidebar onToast={showToast} />
+        <VSidebar onToast={showToast} creditsRemaining={creditsRemaining} creditsTotal={CREDITS_TOTAL} />
 
         {/* Centre column */}
         <div className="vs-centre">
@@ -373,7 +464,7 @@ export function VoiceSwapPage() {
           )}
         </div>
 
-        <RightPanel onToast={showToast} />
+        <RightPanel onToast={showToast} swaps={swaps} swapsLoading={swapsLoading} />
       </div>
 
       <ProcessingOverlay

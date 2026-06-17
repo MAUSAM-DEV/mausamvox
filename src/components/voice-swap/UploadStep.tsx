@@ -176,6 +176,17 @@ function formatSize(bytes: number) {
 
 export function UploadStep({ userId, result, onDone, onContinue, onToast }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
+
+  // When VoiceSwapPage restores a result from localStorage after initial render,
+  // the result prop changes but phase is already 'idle' (useState only uses the
+  // initial value once). Sync phase here so the done state renders correctly.
+  useEffect(() => {
+    if (result && phase === 'idle') {
+      console.log('[stem-cache] restored result detected — switching phase to done')
+      setPhase('done')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result])
   const [dragging, setDragging] = useState(false)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -338,8 +349,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   }
 
   const hasVocals = items.some((it) => it.category === 'vocals' && it.status === 'done')
-  const hasInstrumental = items.some((it) => it.category === 'instrumental' && it.status === 'done')
-  const canContinueStems = hasVocals && hasInstrumental
+  // Accept any backing track — instrumental OR at least one of bass / drums / other
+  const hasBackingTrack = items.some(
+    (it) => ['instrumental', 'bass', 'drums', 'other'].includes(it.category) && it.status === 'done'
+  )
+  const canContinueStems = hasVocals && hasBackingTrack
 
   async function downloadAllStems(stemResult: StemResult) {
     setDownloadingZip(true)
@@ -377,10 +391,12 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
   }
 
   function handleContinueStems() {
+    // If no explicit instrumental, fall back to the first available backing track
+    const instUrl = urlFor('instrumental') || urlFor('bass') || urlFor('drums') || urlFor('other')
     const stemResult: StemResult = {
       storagePath: '',
       vocalsUrl: urlFor('vocals'),
-      instrumentalUrl: urlFor('instrumental'),
+      instrumentalUrl: instUrl,
       bassUrl: urlFor('bass'),
       drumsUrl: urlFor('drums'),
       otherUrl: urlFor('other'),
@@ -388,7 +404,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     }
     onDone(stemResult)
     setPhase('done')
-    onToast('Stems ready — vocals and instrumental loaded!')
+    onToast('Stems ready — vocals and backing track loaded!')
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -510,9 +526,14 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
                 {items.length > 0 && (
                   <div className="vs-detected-card">
-                    {(!hasVocals || !hasInstrumental) && (
+                    {(!hasVocals || !hasBackingTrack) && (
                       <div className="vs-detected-missing">
-                        ⚠ Missing: {[!hasVocals && 'Vocals', !hasInstrumental && 'Instrumental'].filter(Boolean).join(' and ')} (required)
+                        ⚠ Missing:{' '}
+                        {[
+                          !hasVocals && 'Vocals',
+                          !hasBackingTrack && 'at least one of Instrumental / Bass / Drums / Other',
+                        ].filter(Boolean).join(' and ')}{' '}
+                        (required)
                       </div>
                     )}
                     <div className="vs-detected-list">

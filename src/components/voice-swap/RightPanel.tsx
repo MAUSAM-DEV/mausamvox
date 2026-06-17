@@ -33,18 +33,22 @@ function MiniWave({ seed }: { seed: number }) {
   )
 }
 
-const HISTORY = [
-  { emoji: '🎵', name: 'Kesariya — Remix', voice: 'My Voice · Female', score: 88, seed: 2, hi: true },
-  { emoji: '🎸', name: 'Tum Hi Ho — Cover', voice: 'My Voice · Neutral', score: 91, seed: 7, hi: true },
-  { emoji: '🎹', name: 'Blinding Lights', voice: 'Voice 2 · Male', score: 61, seed: 3, hi: false },
-  { emoji: '🎤', name: 'Channa Mereya', voice: 'My Voice · Female', score: 79, seed: 5, hi: true },
-]
+export interface VoiceSwap {
+  id: string
+  song_name: string
+  voice_used: string
+  quality_score: number | null
+  result_url: string | null
+  created_at: string
+}
 
 interface RightPanelProps {
   onToast: (msg: string) => void
+  swaps: VoiceSwap[]
+  swapsLoading: boolean
 }
 
-export function RightPanel({ onToast }: RightPanelProps) {
+export function RightPanel({ onToast, swaps, swapsLoading }: RightPanelProps) {
   return (
     <>
       <aside className="vs-rpanel">
@@ -59,27 +63,45 @@ export function RightPanel({ onToast }: RightPanelProps) {
         </div>
 
         <div className="vs-rp-list">
-          {HISTORY.map((item, i) => (
-            <div
-              key={i}
-              className="vs-rp-item"
-              onClick={() => onToast(`Loading: ${item.name}`)}
-            >
-              <div className="vs-rp-item-top">
-                <span className="vs-rp-emoji">{item.emoji}</span>
-                <div className="vs-rp-info">
-                  <div className="vs-rp-name">{item.name}</div>
-                  <div className="vs-rp-voice">{item.voice}</div>
-                </div>
-                <span
-                  className={`vs-rp-score ${item.hi ? 'vs-rp-score--hi' : 'vs-rp-score--mid'}`}
-                >
-                  {item.score}
-                </span>
-              </div>
-              <MiniWave seed={item.seed} />
+          {swapsLoading && (
+            <div className="vs-rp-empty">Loading…</div>
+          )}
+
+          {!swapsLoading && swaps.length === 0 && (
+            <div className="vs-rp-empty">
+              No swaps yet — upload a track to get started
             </div>
-          ))}
+          )}
+
+          {!swapsLoading && swaps.map((item, i) => {
+            const score = item.quality_score ?? null
+            const hi = score !== null && score >= 80
+            const seed = i * 3 + 2
+            return (
+              <div
+                key={item.id}
+                className="vs-rp-item"
+                onClick={() => item.result_url
+                  ? window.open(item.result_url, '_blank')
+                  : onToast(item.song_name)
+                }
+              >
+                <div className="vs-rp-item-top">
+                  <span className="vs-rp-emoji">🎵</span>
+                  <div className="vs-rp-info">
+                    <div className="vs-rp-name">{item.song_name}</div>
+                    <div className="vs-rp-voice">{item.voice_used}</div>
+                  </div>
+                  {score !== null && (
+                    <span className={`vs-rp-score ${hi ? 'vs-rp-score--hi' : 'vs-rp-score--mid'}`}>
+                      {score}
+                    </span>
+                  )}
+                </div>
+                <MiniWave seed={seed} />
+              </div>
+            )
+          })}
         </div>
 
         <div className="vs-rp-storage">
@@ -147,6 +169,13 @@ export function RightPanel({ onToast }: RightPanelProps) {
         }
         .vs-rp-list::-webkit-scrollbar { width: 4px; }
         .vs-rp-list::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vs-rp-empty {
+          font-size: 11px;
+          color: #5A5A80;
+          text-align: center;
+          padding: 28px 12px;
+          line-height: 1.6;
+        }
         .vs-rp-item {
           background: #0E0E20;
           border: 1px solid #1E1E3A;
