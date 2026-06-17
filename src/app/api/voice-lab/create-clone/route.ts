@@ -1,18 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 
 export const maxDuration = 15
 
 // Called AFTER the client has PUT the audio file to Supabase Storage via the
-// presigned URL from /api/voice-lab/presign. Creates the voice_clones row and
-// returns a 24-hour signed URL for sample playback.
+// presigned URL from /api/voice-lab/presign. Creates the voice_clones row using
+// the SERVICE ROLE client so RLS never blocks the insert.
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    // ── 1. Verify the admin client has a real service-role key ───────────────
+    // Without this key the insert would be treated as an anon request and fail
+    // with "permission denied for table voice_clones".
+    if (!adminConfigured) {
+      console.error(
+        '[voice-lab/create-clone] SUPABASE_SERVICE_ROLE_KEY is not configured. ' +
+        'Go to Vercel → Project Settings → Environment Variables and add it, then redeploy.'
+      )
+      return NextResponse.json(
+        { error: 'Server configuration error: service role key is missing. Contact support.' },
+        { status: 500 }
+      )
+    }
 
+    // ── 2. Authenticate the caller (anon client reads the session cookie) ─────
+    console.log('[voice-lab/create-clone] handler entered')
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      console.error('[voice-lab/create-clone] auth error:', authError.message)
+      return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    }
+    console.log('[voice-lab/create-clone] user:', user.id)
+
+    // ── 3. Parse and validate request body ───────────────────────────────────
     const body = await req.json()
     const { name, cloneType, path, mime } = body as {
       name: string
@@ -24,39 +48,60 @@ export async function POST(req: NextRequest) {
     if (!name?.trim()) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 })
     }
+    // Path must be scoped to this user to prevent ownership confusion
     if (!path || !path.startsWith(`${user.id}/`)) {
+      console.error('[voice-lab/create-clone] path ownership check failed:', { path, userId: user.id })
       return NextResponse.json({ error: 'Invalid storage path' }, { status: 400 })
     }
 
-    // Signed URL for sample playback (24-hour TTL)
-    const { data: signed } = await supabaseAdmin.storage
+    // ── 4. Generate a signed download URL for the sample (admin client) ───────
+    console.log('[voice-lab/create-clone] creating signed URL for path:', path)
+    const { data: signed, error: signError } = await supabaseAdmin.storage
       .from('voice-samples')
-      .createSignedUrl(path, 86400)
+      .createSignedUrl(path, 86400) // 24-hour TTL for playback
+    if (signError) {
+      console.warn('[voice-lab/create-clone] signed URL warning (non-fatal):', signError.message)
+    }
     const sampleUrl = signed?.signedUrl ?? null
 
+    // ── 5. Insert into voice_clones using the SERVICE ROLE client ─────────────
+    // supabaseAdmin bypasses all RLS policies. user_id is set explicitly from
+    // the verified session so the row is always owned by the correct user.
     const type = cloneType === 'studio' ? 'studio' : 'express'
+    console.log('[voice-lab/create-clone] inserting voice_clone for user', user.id)
+
     const { data: row, error: insertError } = await supabaseAdmin
       .from('voice_clones')
       .insert({
         user_id: user.id,
         name: name.trim(),
         type,
-        // Express voices are immediately usable for voice-swap style transfer.
-        // model_url is null until a full RVC training job completes (separate pipeline).
         status: 'ready',
         sample_path: path,
+        created_at: new Date().toISOString(),
         ...(sampleUrl ? { sample_url: sampleUrl } : {}),
       })
       .select('id, name, type, status, model_url, sample_url, created_at')
       .single()
 
     if (insertError) {
-      console.error('[voice-lab/create-clone] insert failed:', insertError.message)
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+      console.error(
+        '[voice-lab/create-clone] INSERT FAILED — code:', insertError.code,
+        '| message:', insertError.message,
+        '| details:', insertError.details,
+        '| hint:', insertError.hint
+      )
+      // Surface the real error (e.g. "permission denied", "column does not exist")
+      // so the Vercel log makes the root cause immediately clear.
+      return NextResponse.json(
+        { error: `Database error (${insertError.code}): ${insertError.message}` },
+        { status: 500 }
+      )
     }
 
-    console.log('[voice-lab/create-clone] created voice_clone', row?.id, 'for user', user.id)
+    console.log('[voice-lab/create-clone] created voice_clone id:', row?.id)
     return NextResponse.json({ voice: row })
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const stack = err instanceof Error ? err.stack : undefined
