@@ -27,7 +27,7 @@ const CATEGORY_RULES: { category: StemCategory; keywords: string[] }[] = [
   { category: 'instrumental', keywords: ['instrumental', 'music', 'inst', 'karaoke', 'accompaniment'] },
   { category: 'bass', keywords: ['bass'] },
   { category: 'drums', keywords: ['drum', 'percussion', 'perc'] },
-  { category: 'other', keywords: ['other', 'synth', 'melody', 'keys', 'guitar', 'piano'] },
+  { category: 'other', keywords: ['other', 'synth', 'melody', 'keys', 'keyboard', 'guitar', 'piano'] },
 ]
 
 function detectCategory(filename: string): StemCategory {
@@ -265,7 +265,17 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     }
   }
 
-  function handleStemFiles(files: File[]) {
+  function handleStemFiles(rawFiles: File[]) {
+    if (rawFiles.length === 0) return
+
+    // Silently drop hidden system files (.DS_Store etc.) and non-audio files
+    const audioExts = new Set(ACCEPTED_EXTS)
+    const files = rawFiles.filter((f) => {
+      if (f.name.startsWith('.')) return false
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
+      return audioExts.has(ext)
+    })
+
     if (files.length === 0) return
 
     const newItems: DetectedItem[] = []

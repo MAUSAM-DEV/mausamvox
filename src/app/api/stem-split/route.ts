@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       {
         input: {
           audio: signed.signedUrl,
-          stem: 'vocals',
+          stem: 'none',
           model: 'htdemucs',
           mp3: true,
           mp3_bitrate: 320,
