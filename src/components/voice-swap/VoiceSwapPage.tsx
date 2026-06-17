@@ -427,6 +427,7 @@ export function VoiceSwapPage() {
                 onNewSwap={handleNewSwap}
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
+                stemResult={stemResult}
               />
             )}
           </div>
