@@ -95,8 +95,9 @@ export function ConfigStep({
             {voices.map((v) => (
               <div
                 key={v.id}
-                className={`vs-voice-card ${selectedVoiceId === v.id ? 'vs-voice-card--selected' : ''}`}
+                className={`vs-voice-card ${selectedVoiceId === v.id ? 'vs-voice-card--selected' : ''} ${!v.modelUrl ? 'vs-voice-card--sample' : ''}`}
                 onClick={() => setSelectedVoiceId(v.id)}
+                title={!v.modelUrl ? 'Sample-only voice — full voice conversion requires model training' : undefined}
               >
                 {selectedVoiceId === v.id && (
                   <div className="vs-va-check">✓</div>
@@ -108,7 +109,7 @@ export function ConfigStep({
                   🎤
                 </div>
                 <div className="vs-va-name">{v.name}</div>
-                <div className="vs-va-sub">{v.sub}</div>
+                <div className="vs-va-sub">{v.sub}{!v.modelUrl ? ' · sample only' : ''}</div>
               </div>
             ))}
             <Link href="/voice-lab" className="vs-voice-card vs-voice-card--add">
@@ -292,6 +293,8 @@ export function ConfigStep({
           border-color: #8B5CF6;
           background: rgba(139,92,246,.06);
         }
+        .vs-voice-card--sample { opacity: 0.75; }
+        .vs-voice-card--sample .vs-va-sub { color: #F59E0B; }
         .vs-voice-card--add {
           display: flex;
           flex-direction: column;

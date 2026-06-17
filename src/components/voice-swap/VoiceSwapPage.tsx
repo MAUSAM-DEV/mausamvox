@@ -251,7 +251,7 @@ export function VoiceSwapPage() {
       return
     }
     if (!voice.modelUrl) {
-      showToast('Selected voice has no model configured yet')
+      showToast(`"${voice.name}" is sample-only — full model training needed for voice swap. Train it in Voice Lab.`)
       return
     }
 

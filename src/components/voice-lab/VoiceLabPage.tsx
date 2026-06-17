@@ -22,6 +22,8 @@ export function VoiceLabPage() {
   // updated locally whenever RecordStep saves a new sample.
   const [voices, setVoices] = useState<SavedVoice[]>([])
   const [voicesLoading, setVoicesLoading] = useState(true)
+  // The most recently saved voice — passed to TrainingStep and TestStep for real UI
+  const [savedVoice, setSavedVoice] = useState<SavedVoice | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -42,6 +44,7 @@ export function VoiceLabPage() {
 
   function handleVoiceSaved(voice: SavedVoice) {
     setVoices((prev) => [voice, ...prev])
+    setSavedVoice(voice)
   }
 
   // Training step state
@@ -146,6 +149,7 @@ export function VoiceLabPage() {
                 cloneType={cloneType}
                 trainProgress={trainProgress}
                 trainEta={trainEta}
+                voiceName={savedVoice?.name ?? null}
               />
             )}
             {step === 4 && (
@@ -154,6 +158,7 @@ export function VoiceLabPage() {
                 setTestPlaying={setTestPlaying}
                 onToast={showToast}
                 onTrainAnother={() => goStep(1)}
+                savedVoice={savedVoice}
               />
             )}
           </div>

@@ -15,6 +15,7 @@ export interface SavedVoice {
   type: string
   status: string
   model_url: string | null
+  sample_url: string | null
   created_at: string
 }
 
@@ -62,16 +63,33 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
     setSaveError('')
 
     try {
-      const form = new FormData()
-      form.append('audio', captured.blob, `sample.${extFromMimeType(captured.mimeType)}`)
-      form.append('name', name.trim())
-      form.append('cloneType', cloneType)
+      // Step 1: get a presigned upload URL (avoids Vercel's 4.5 MB body limit)
+      const presignRes = await fetch('/api/voice-lab/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentType: captured.mimeType }),
+      })
+      const presign = await presignRes.json()
+      if (!presignRes.ok) throw new Error(presign.error ?? 'Could not get upload URL')
 
-      const res = await fetch('/api/voice-lab/upload-sample', { method: 'POST', body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not save voice sample')
+      // Step 2: PUT the audio blob directly to Supabase Storage
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': presign.mime },
+        body: captured.blob,
+      })
+      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
 
-      onSaved(data.voice as SavedVoice)
+      // Step 3: create the voice_clones row (small JSON body — no Vercel limit concern)
+      const createRes = await fetch('/api/voice-lab/create-clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), cloneType, path: presign.path, mime: presign.mime }),
+      })
+      const createData = await createRes.json()
+      if (!createRes.ok) throw new Error(createData.error ?? 'Could not save voice')
+
+      onSaved(createData.voice as SavedVoice)
       onToast('Voice sample saved — it now shows up in My Voices')
       setCaptured(null)
     } catch (err) {

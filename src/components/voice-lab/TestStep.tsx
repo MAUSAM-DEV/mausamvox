@@ -1,12 +1,14 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
+import type { SavedVoice } from './RecordStep'
 
 interface TestStepProps {
   testPlaying: boolean
   setTestPlaying: (v: boolean) => void
   onToast: (m: string) => void
   onTrainAnother: () => void
+  savedVoice: SavedVoice | null
 }
 
 function TestBarsCanvas({ playing }: { playing: boolean }) {
@@ -54,33 +56,60 @@ function TestBarsCanvas({ playing }: { playing: boolean }) {
   return <canvas ref={canvasRef} style={{ flex: 1, height: 32, display: 'block' }} />
 }
 
-export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother }: TestStepProps) {
-  const playTimerRef = useRef<ReturnType<typeof setTimeout>>()
+export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother, savedVoice }: TestStepProps) {
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   function handlePlay() {
-    const next = !testPlaying
-    setTestPlaying(next)
-    if (next) {
-      onToast('Playing your voice demo…')
-      clearTimeout(playTimerRef.current)
-      playTimerRef.current = setTimeout(() => setTestPlaying(false), 12000)
+    const audio = audioRef.current
+    if (!audio || !savedVoice?.sample_url) {
+      onToast('No sample audio available')
+      return
+    }
+    if (testPlaying) {
+      audio.pause()
+      setTestPlaying(false)
     } else {
-      clearTimeout(playTimerRef.current)
-      onToast('Paused')
+      audio.currentTime = 0
+      audio.play()
+        .then(() => setTestPlaying(true))
+        .catch(() => { onToast('Could not play audio — sample URL may have expired'); setTestPlaying(false) })
     }
   }
 
+  // Clean up on unmount
   useEffect(() => {
-    return () => clearTimeout(playTimerRef.current)
+    return () => {
+      audioRef.current?.pause()
+    }
   }, [])
+
+  const voiceName = savedVoice?.name ?? 'Your Voice'
+  const isExpress = savedVoice?.type !== 'studio'
 
   return (
     <>
+      {/* Hidden audio element for real sample playback */}
+      {savedVoice?.sample_url && (
+        <audio
+          ref={audioRef}
+          src={savedVoice.sample_url}
+          onEnded={() => setTestPlaying(false)}
+          preload="metadata"
+        />
+      )}
+
       <div className="vlte-stage">
         <div className="vlte-badge">🎉</div>
-        <div className="vlte-h">Your voice is ready!</div>
+        <div className="vlte-h">{voiceName} is ready!</div>
         <p className="vlte-p">
-          Studio Clone trained · Final quality score: <b>91/100</b> — excellent
+          {isExpress ? 'Express Clone' : 'Studio Clone'} saved · Now available in Voice Swap
+          {isExpress && (
+            <>
+              {' '}<span className="vlte-note">
+                (full model training coming soon — currently uses your sample for voice reference)
+              </span>
+            </>
+          )}
         </p>
 
         <div className="vlte-test-row">
@@ -97,15 +126,23 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother 
             )}
           </button>
           <TestBarsCanvas playing={testPlaying} />
-          <span className="vlte-test-lbl">Demo: your voice singing 12 sec</span>
+          <span className="vlte-test-lbl">
+            {savedVoice?.sample_url ? 'Your recorded sample' : 'No sample available'}
+          </span>
         </div>
 
         <div className="vlte-actions">
-          <button className="vlte-btn-main" onClick={() => onToast('Opening Voice Swap with your new voice…')}>
+          <button
+            className="vlte-btn-main"
+            onClick={() => { window.location.href = '/voice-swap' }}
+          >
             Swap a Song With It
           </button>
-          <button className="vlte-btn-sec" onClick={() => onToast('Voice saved to My Voices')}>
-            Save to My Voices
+          <button
+            className="vlte-btn-sec"
+            onClick={() => onToast(`${voiceName} is already saved to My Voices ✓`)}
+          >
+            Already in My Voices ✓
           </button>
           <button className="vlte-btn-sec" onClick={onTrainAnother}>
             Train Another
@@ -151,12 +188,8 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother 
           font-size: 22px; font-weight: 700; color: #F0F0FF;
           margin-bottom: 6px; position: relative;
         }
-        .vlte-p { font-size: 13px; color: #5A5A80; margin-bottom: 24px; position: relative; }
-        .vlte-p b {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-          font-weight: 600;
-        }
+        .vlte-p { font-size: 13px; color: #5A5A80; margin-bottom: 24px; position: relative; line-height: 1.6; }
+        .vlte-note { font-size: 11px; color: #3A3A60; font-style: italic; }
         .vlte-test-row {
           display: flex; align-items: center; gap: 12px;
           max-width: 440px; margin: 0 auto 24px;

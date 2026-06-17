@@ -6,17 +6,18 @@ interface TrainingStepProps {
   cloneType: CloneType
   trainProgress: number
   trainEta: number
+  voiceName: string | null
 }
 
-export function TrainingStep({ cloneType, trainProgress, trainEta }: TrainingStepProps) {
+export function TrainingStep({ cloneType, trainProgress, trainEta, voiceName }: TrainingStepProps) {
   return (
     <>
       <div className="vltr-stage">
         <div className="vltr-orb" />
         <div className="vltr-title">
-          {cloneType === 'studio' ? 'Training Your Studio Clone' : 'Training Your Express Clone'}
+          {voiceName ? `Training "${voiceName}"` : cloneType === 'studio' ? 'Training Your Studio Clone' : 'Training Your Express Clone'}
         </div>
-        <div className="vltr-sub">GPT-SoVITS v2 · Your audio never leaves encrypted storage</div>
+        <div className="vltr-sub">Building voice profile · Your audio never leaves encrypted storage</div>
         <div className="vltr-quality">
           <div className="vltr-tq-row">
             <span>Model Quality (live)</span>
