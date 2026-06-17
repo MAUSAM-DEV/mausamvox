@@ -54,16 +54,31 @@ export async function POST(req: NextRequest) {
       .upload(path, buffer, { contentType: mimeType, upsert: false })
 
     if (uploadError) {
+      console.error('[voice-lab/upload-sample] storage upload failed:', uploadError.message)
       return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
     }
 
+    // Generate a 24-hour signed URL for the sample (used for playback reference)
+    const { data: signed } = await supabaseAdmin.storage
+      .from('voice-samples')
+      .createSignedUrl(path, 86400)
+    const sampleUrl = signed?.signedUrl ?? null
+
     const { data: row, error: insertError } = await supabaseAdmin
       .from('voice_clones')
-      .insert({ user_id: user.id, name: name.trim(), type, status: 'pending', sample_path: path })
+      .insert({
+        user_id: user.id,
+        name: name.trim(),
+        type,
+        status: 'ready',
+        sample_path: path,
+        ...(sampleUrl ? { sample_url: sampleUrl } : {}),
+      })
       .select('id, name, type, status, model_url, created_at')
       .single()
 
     if (insertError) {
+      console.error('[voice-lab/upload-sample] insert failed:', insertError.message)
       return NextResponse.json({ error: `Could not save voice: ${insertError.message}` }, { status: 500 })
     }
 

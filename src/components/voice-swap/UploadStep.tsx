@@ -10,6 +10,14 @@ type ItemStatus = 'uploading' | 'done' | 'error'
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
+function guessMime(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  if (ext === 'mp3') return 'audio/mpeg'
+  if (ext === 'm4a') return 'audio/mp4'
+  if (ext === 'wav') return 'audio/wav'
+  return 'audio/mpeg'
+}
+
 const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
   vocals:       { label: 'Vocals',       icon: '🎤', required: true },
   instrumental: { label: 'Instrumental', icon: '🎼', required: true },
@@ -235,13 +243,35 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
   async function uploadDetectedItem(id: string, file: File) {
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/upload-stem', { method: 'POST', body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+      const mime = file.type || guessMime(file.name)
 
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: data.url } : it)))
+      // Step 1 — get a presigned upload URL (no file bytes go through Vercel)
+      const presignRes = await fetch('/api/upload-stem/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: mime }),
+      })
+      const presign = await presignRes.json()
+      if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
+
+      // Step 2 — PUT file DIRECTLY to Supabase Storage (bypasses Vercel body size limit)
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
+      })
+      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+
+      // Step 3 — get a signed download URL now that the file exists in storage
+      const signRes = await fetch('/api/upload-stem/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: presign.path }),
+      })
+      const sign = await signRes.json()
+      if (!signRes.ok) throw new Error(sign.error ?? 'Failed to get download URL')
+
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'done', url: sign.url } : it)))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed'
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: 'error', errorMsg: msg } : it)))

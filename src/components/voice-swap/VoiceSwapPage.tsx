@@ -13,6 +13,9 @@ import { VToast } from './VToast'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
+
+const STEM_CACHE_KEY = 'mvox_stem_session'
+const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
 type PlayerTab = 'Original' | 'Swapped' | 'A/B Compare'
@@ -38,38 +41,60 @@ export function VoiceSwapPage() {
   const [voicesLoading, setVoicesLoading] = useState(true)
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null)
 
-  // Fetch user id, then the user's own voice clones, once on mount
+  // Restore last stem result from localStorage (5-hour TTL)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STEM_CACHE_KEY)
+      if (!raw) return
+      const { result, savedAt } = JSON.parse(raw) as { result: StemResult; savedAt: number }
+      if (Date.now() - savedAt < STEM_CACHE_TTL_MS) {
+        setStemResult(result)
+      } else {
+        localStorage.removeItem(STEM_CACHE_KEY)
+      }
+    } catch {
+      // ignore corrupted or missing cache
+    }
+  }, [])
+
+  // Fetch user id on mount (voices fetched reactively when step reaches 2)
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data }) => {
-      const uid = data.user?.id ?? null
-      setUserId(uid)
-
-      if (!uid) {
-        setVoicesLoading(false)
-        return
-      }
-
-      const { data: clones, error } = await supabase
-        .from('voice_clones')
-        .select('id, name, type, status, model_url')
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-
-      if (!error && clones) {
-        const mapped: VoiceOption[] = clones.map((c, i) => ({
-          id: c.id,
-          name: c.name,
-          sub: c.type === 'studio' ? 'Studio Clone' : 'Express Clone',
-          avatarBg: AVATAR_PALETTE[i % AVATAR_PALETTE.length],
-          modelUrl: c.model_url ?? undefined,
-        }))
-        setVoices(mapped)
-        if (mapped.length > 0) setSelectedVoiceId(mapped[0].id)
-      }
-      setVoicesLoading(false)
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
     })
   }, [])
+
+  // Fetch (or refresh) voices every time the user enters the configure step
+  useEffect(() => {
+    if (!userId) {
+      setVoicesLoading(false)
+      return
+    }
+    if (step !== 2) return
+
+    setVoicesLoading(true)
+    const supabase = createClient()
+    supabase
+      .from('voice_clones')
+      .select('id, name, type, status, model_url')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .then(({ data: clones, error }) => {
+        if (!error && clones) {
+          const mapped: VoiceOption[] = clones.map((c, i) => ({
+            id: c.id,
+            name: c.name,
+            sub: c.type === 'studio' ? 'Studio Clone' : 'Express Clone',
+            avatarBg: AVATAR_PALETTE[i % AVATAR_PALETTE.length],
+            modelUrl: c.model_url ?? undefined,
+          }))
+          setVoices(mapped)
+          if (mapped.length > 0 && !selectedVoiceId) setSelectedVoiceId(mapped[0].id)
+        }
+        setVoicesLoading(false)
+      })
+  }, [step, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Swap controls
   const [gender, setGender] = useState<Gender>('Female')
@@ -126,6 +151,9 @@ export function VoiceSwapPage() {
 
   function handleStemDone(result: StemResult) {
     setStemResult(result)
+    try {
+      localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result, savedAt: Date.now() }))
+    } catch { /* ignore quota errors */ }
   }
 
   function handleStemContinue() {
@@ -244,6 +272,7 @@ export function VoiceSwapPage() {
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
+    try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
   // Cleanup on unmount
