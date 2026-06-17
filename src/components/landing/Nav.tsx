@@ -1,6 +1,8 @@
 'use client'
 
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
 
 const navLinks = [
@@ -10,7 +12,46 @@ const navLinks = [
   { href: '#pricing', label: 'Pricing' },
 ]
 
+interface AuthUser {
+  name: string
+  email: string
+  initial: string
+}
+
 export function Nav() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [dropOpen, setDropOpen] = useState(false)
+  const dropRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user
+      if (!u) return
+      const name = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
+      const email = u.email ?? ''
+      const display = name || email.split('@')[0]
+      setAuthUser({ name: display, email, initial: (display[0] ?? 'U').toUpperCase() })
+    })
+  }, [])
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setDropOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setAuthUser(null)
+    setDropOpen(false)
+  }
+
   return (
     <>
       <nav
@@ -54,66 +95,147 @@ export function Nav() {
           ))}
         </ul>
 
+        {/* ── Right side: changes based on auth state ── */}
         <div className="nav-btns" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <Link
-            href="/auth/sign-in"
-            className="nav-signin"
-            style={{
-              padding: '8px 18px',
-              borderRadius: '8px',
-              border: '1px solid #2A2A4A',
-              background: 'transparent',
-              color: '#C8C8E8',
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-              textDecoration: 'none',
-              display: 'inline-block',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#8B5CF6'
-              e.currentTarget.style.color = '#F0F0FF'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#2A2A4A'
-              e.currentTarget.style.color = '#C8C8E8'
-            }}
-          >
-            Sign In
-          </Link>
+          {authUser ? (
+            <>
+              {/* Go to Dashboard CTA */}
+              <Link
+                href="/dashboard"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                  color: '#fff',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  letterSpacing: '0.1px',
+                  transition: 'all 0.25s',
+                  whiteSpace: 'nowrap',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(139,92,246,.4)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = ''
+                  e.currentTarget.style.boxShadow = ''
+                }}
+              >
+                Go to Dashboard
+              </Link>
 
-          <Link
-            href="/auth/sign-up"
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
-              color: '#fff',
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              letterSpacing: '0.1px',
-              transition: 'all 0.25s',
-              whiteSpace: 'nowrap',
-              textDecoration: 'none',
-              display: 'inline-block',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)'
-              e.currentTarget.style.boxShadow = '0 6px 24px rgba(139,92,246,.4)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = ''
-              e.currentTarget.style.boxShadow = ''
-            }}
-          >
-            Try for Free
-          </Link>
+              {/* Avatar + dropdown */}
+              <div ref={dropRef} style={{ position: 'relative' }}>
+                <button
+                  className="nav-avatar"
+                  onClick={() => setDropOpen((o) => !o)}
+                  aria-label="User menu"
+                  aria-expanded={dropOpen}
+                >
+                  {authUser.initial}
+                </button>
+
+                {dropOpen && (
+                  <div className="nav-drop">
+                    <div className="nav-drop-user">
+                      <div className="nav-drop-name">{authUser.name}</div>
+                      <div className="nav-drop-email">{authUser.email}</div>
+                    </div>
+                    <div className="nav-drop-sep" />
+                    <Link
+                      href="/dashboard"
+                      className="nav-drop-item"
+                      onClick={() => setDropOpen(false)}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      href="/voice-swap"
+                      className="nav-drop-item"
+                      onClick={() => setDropOpen(false)}
+                    >
+                      Voice Swap
+                    </Link>
+                    <a href="#" className="nav-drop-item" onClick={() => setDropOpen(false)}>
+                      Settings
+                    </a>
+                    <div className="nav-drop-sep" />
+                    <button className="nav-drop-item nav-drop-out" onClick={handleSignOut}>
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth/sign-in"
+                className="nav-signin"
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #2A2A4A',
+                  background: 'transparent',
+                  color: '#C8C8E8',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#8B5CF6'
+                  e.currentTarget.style.color = '#F0F0FF'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#2A2A4A'
+                  e.currentTarget.style.color = '#C8C8E8'
+                }}
+              >
+                Sign In
+              </Link>
+
+              <Link
+                href="/auth/sign-up"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                  color: '#fff',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  letterSpacing: '0.1px',
+                  transition: 'all 0.25s',
+                  whiteSpace: 'nowrap',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(139,92,246,.4)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = ''
+                  e.currentTarget.style.boxShadow = ''
+                }}
+              >
+                Try for Free
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -137,6 +259,54 @@ export function Nav() {
           .site-nav { padding: 0 14px; }
           .nav-signin { display: none; }
         }
+
+        /* avatar button */
+        .nav-avatar {
+          width: 34px; height: 34px; border-radius: 50%;
+          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          color: #fff; font-size: 13px; font-weight: 700;
+          border: none; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: transform 0.18s, box-shadow 0.18s;
+          flex-shrink: 0;
+        }
+        .nav-avatar:hover {
+          transform: scale(1.07);
+          box-shadow: 0 0 0 3px rgba(139,92,246,.3);
+        }
+
+        /* dropdown */
+        .nav-drop {
+          position: absolute; top: calc(100% + 10px); right: 0;
+          min-width: 210px;
+          background: #0E0E20; border: 1px solid #2A2A4A;
+          border-radius: 12px; padding: 6px;
+          box-shadow: 0 20px 60px rgba(0,0,0,.7);
+          animation: navDropIn 0.15s ease;
+          z-index: 400;
+        }
+        @keyframes navDropIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .nav-drop-user { padding: 10px 10px 8px; }
+        .nav-drop-name { font-size: 13px; font-weight: 600; color: #F0F0FF; }
+        .nav-drop-email {
+          font-size: 11px; color: #5A5A80; margin-top: 2px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .nav-drop-sep { height: 1px; background: #1E1E3A; margin: 4px 0; }
+        .nav-drop-item {
+          display: block; width: 100%;
+          padding: 8px 10px; border-radius: 7px;
+          font-size: 13px; font-weight: 500; color: #C4C4E0;
+          text-decoration: none; cursor: pointer;
+          border: none; background: none; text-align: left;
+          transition: all 0.15s;
+        }
+        .nav-drop-item:hover { background: rgba(139,92,246,.1); color: #F0F0FF; }
+        .nav-drop-out { color: #F87171 !important; }
+        .nav-drop-out:hover { background: rgba(239,68,68,.08) !important; }
       `}</style>
     </>
   )

@@ -1,0 +1,437 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { LogoFull } from '@/components/ui/Logo'
+
+const TOOLS = [
+  {
+    emoji: '🔄',
+    name: 'Voice Swap',
+    desc: 'Replace any song\'s vocals with your cloned AI voice in minutes.',
+    href: '/voice-swap',
+    live: true,
+    gradient: 'linear-gradient(135deg,#8B5CF6,#EC4899)',
+  },
+  {
+    emoji: '🧬',
+    name: 'Voice Lab',
+    desc: 'Record and train a photorealistic AI clone of your own voice.',
+    href: '/voice-lab',
+    live: true,
+    gradient: 'linear-gradient(135deg,#EC4899,#06B6D4)',
+  },
+  {
+    emoji: '✂️',
+    name: 'Stem Studio',
+    desc: 'Separate any track into bass, drums, vocals and more with Demucs.',
+    href: '#',
+    live: false,
+    gradient: 'linear-gradient(135deg,#06B6D4,#8B5CF6)',
+  },
+  {
+    emoji: '🎼',
+    name: 'Choir Composer',
+    desc: 'Generate full choir arrangements from a single vocal line.',
+    href: '#',
+    live: false,
+    gradient: 'linear-gradient(135deg,#8B5CF6,#06B6D4)',
+  },
+  {
+    emoji: '🎷',
+    name: 'Instruments',
+    desc: 'Clone any instrument\'s timbre and play it back with MIDI.',
+    href: '#',
+    live: false,
+    gradient: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
+  },
+  {
+    emoji: '🎵',
+    name: 'Song Studio',
+    desc: 'Write, arrange, and produce full songs with AI assistance.',
+    href: '#',
+    live: false,
+    gradient: 'linear-gradient(135deg,#06B6D4,#EC4899)',
+  },
+]
+
+const RECENT = [
+  { emoji: '🎵', name: 'Kesariya — Remix', voice: 'My Voice · Female', score: 88, hi: true },
+  { emoji: '🎸', name: 'Tum Hi Ho — Cover', voice: 'My Voice · Neutral', score: 91, hi: true },
+  { emoji: '🎹', name: 'Blinding Lights', voice: 'Voice 2 · Male', score: 61, hi: false },
+  { emoji: '🎤', name: 'Channa Mereya', voice: 'My Voice · Female', score: 79, hi: true },
+]
+
+export function DashboardPage() {
+  const [userName, setUserName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+  const [userInitial, setUserInitial] = useState('M')
+  const [dropOpen, setDropOpen] = useState(false)
+  const dropRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user
+      if (!u) return
+      const name = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
+      const email = u.email ?? ''
+      const display = name || email.split('@')[0]
+      setUserName(display)
+      setUserEmail(email)
+      setUserInitial((display[0] ?? 'M').toUpperCase())
+    })
+  }, [])
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setDropOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  }
+
+  const firstName = userName.split(' ')[0]
+
+  return (
+    <>
+      {/* ── Topbar ─────────────────────────────────────────────────── */}
+      <header className="db-topbar">
+        <LogoFull size={32} />
+
+        <nav className="db-topnav">
+          <Link href="/dashboard" className="db-tnav db-tnav--active">Dashboard</Link>
+          <Link href="/voice-swap" className="db-tnav">Voice Swap</Link>
+          <Link href="/voice-lab" className="db-tnav">Voice Lab</Link>
+        </nav>
+
+        <div ref={dropRef} className="db-topbar-end">
+          <div
+            className="db-avatar"
+            onClick={() => setDropOpen((o) => !o)}
+            aria-label="User menu"
+          >
+            {userInitial}
+          </div>
+
+          {dropOpen && (
+            <div className="db-drop">
+              <div className="db-drop-user">
+                <div className="db-drop-name">{userName}</div>
+                <div className="db-drop-email">{userEmail}</div>
+              </div>
+              <div className="db-drop-sep" />
+              <Link href="/dashboard" className="db-drop-item" onClick={() => setDropOpen(false)}>
+                Dashboard
+              </Link>
+              <a href="#" className="db-drop-item" onClick={() => setDropOpen(false)}>
+                Settings
+              </a>
+              <div className="db-drop-sep" />
+              <button className="db-drop-item db-drop-out" onClick={handleSignOut}>
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────── */}
+      <main className="db-main">
+
+        {/* Welcome */}
+        <div className="db-welcome">
+          <p className="db-welcome-eye">Welcome back</p>
+          <h1 className="db-welcome-h1">
+            Hey, <span className="grad-text">{firstName || 'there'}</span> 👋
+          </h1>
+          <p className="db-welcome-sub">Your AI music studio is ready. What are you creating today?</p>
+        </div>
+
+        {/* Quick stats row */}
+        <div className="db-stats">
+          {[
+            { label: 'Voice Swaps', value: '4', icon: '🔄' },
+            { label: 'Voice Clones', value: '3', icon: '🧬' },
+            { label: 'Credits Left', value: '20,400', icon: '⚡' },
+          ].map((s) => (
+            <div key={s.label} className="db-stat">
+              <span className="db-stat-ico">{s.icon}</span>
+              <div>
+                <div className="db-stat-val">{s.value}</div>
+                <div className="db-stat-lbl">{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tools */}
+        <section className="db-section">
+          <div className="db-sec-hdr">
+            <h2 className="db-sec-title">Tools</h2>
+          </div>
+          <div className="db-grid">
+            {TOOLS.map((tool) =>
+              tool.live ? (
+                <Link key={tool.name} href={tool.href} className="db-card db-card--live">
+                  <div className="db-card-top">
+                    <div className="db-card-ico" style={{ background: tool.gradient }}>
+                      {tool.emoji}
+                    </div>
+                    <span className="db-badge db-badge--live">Live</span>
+                  </div>
+                  <div className="db-card-name">{tool.name}</div>
+                  <div className="db-card-desc">{tool.desc}</div>
+                  <span className="db-card-arrow">Open →</span>
+                </Link>
+              ) : (
+                <div key={tool.name} className="db-card db-card--soon">
+                  <div className="db-card-top">
+                    <div className="db-card-ico db-card-ico--dim" style={{ background: tool.gradient }}>
+                      {tool.emoji}
+                    </div>
+                    <span className="db-badge db-badge--soon">Soon</span>
+                  </div>
+                  <div className="db-card-name">{tool.name}</div>
+                  <div className="db-card-desc">{tool.desc}</div>
+                </div>
+              )
+            )}
+          </div>
+        </section>
+
+        {/* Recent swaps */}
+        <section className="db-section">
+          <div className="db-sec-hdr">
+            <h2 className="db-sec-title">Recent Swaps</h2>
+            <Link href="/voice-swap" className="db-sec-more">New swap →</Link>
+          </div>
+          <div className="db-recent">
+            {RECENT.map((item, i) => (
+              <div key={i} className="db-row">
+                <span className="db-row-ico">{item.emoji}</span>
+                <div className="db-row-info">
+                  <div className="db-row-name">{item.name}</div>
+                  <div className="db-row-meta">{item.voice}</div>
+                </div>
+                <span className={`db-score ${item.hi ? 'db-score--hi' : 'db-score--mid'}`}>
+                  {item.score}
+                </span>
+                <Link href="/voice-swap" className="db-row-open">Open</Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <style suppressHydrationWarning>{`
+        /* ── topbar ── */
+        body { background: #05050F; }
+        .db-topbar {
+          position: sticky; top: 0; z-index: 100;
+          height: 60px;
+          display: flex; align-items: center; gap: 28px;
+          padding: 0 40px;
+          background: rgba(5,5,15,.85);
+          backdrop-filter: blur(24px);
+          border-bottom: 1px solid #1E1E3A;
+        }
+        .db-topnav { display: flex; gap: 2px; flex: 1; }
+        .db-tnav {
+          padding: 6px 14px; border-radius: 7px;
+          font-size: 13px; font-weight: 500; color: #7878A0;
+          text-decoration: none; transition: all 0.2s;
+        }
+        .db-tnav:hover { color: #F0F0FF; background: rgba(255,255,255,.04); }
+        .db-tnav--active { color: #F0F0FF; background: rgba(139,92,246,.12); }
+        .db-topbar-end { margin-left: auto; position: relative; flex-shrink: 0; }
+        .db-avatar {
+          width: 34px; height: 34px; border-radius: 50%;
+          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 13px; font-weight: 700; color: #fff;
+          cursor: pointer; transition: transform 0.18s, box-shadow 0.18s;
+          user-select: none;
+        }
+        .db-avatar:hover { transform: scale(1.07); box-shadow: 0 0 0 3px rgba(139,92,246,.3); }
+        .db-drop {
+          position: absolute; top: calc(100% + 10px); right: 0;
+          min-width: 210px;
+          background: #0E0E20; border: 1px solid #2A2A4A;
+          border-radius: 12px; padding: 6px;
+          box-shadow: 0 20px 60px rgba(0,0,0,.7);
+          animation: dbFade 0.15s ease;
+        }
+        @keyframes dbFade {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .db-drop-user { padding: 10px 10px 8px; }
+        .db-drop-name { font-size: 13px; font-weight: 600; color: #F0F0FF; }
+        .db-drop-email { font-size: 11px; color: #5A5A80; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-drop-sep { height: 1px; background: #1E1E3A; margin: 4px 0; }
+        .db-drop-item {
+          display: block; width: 100%;
+          padding: 8px 10px; border-radius: 7px;
+          font-size: 13px; font-weight: 500; color: #C4C4E0;
+          text-decoration: none; cursor: pointer;
+          border: none; background: none; text-align: left;
+          transition: all 0.15s;
+        }
+        .db-drop-item:hover { background: rgba(139,92,246,.1); color: #F0F0FF; }
+        .db-drop-out { color: #F87171 !important; }
+        .db-drop-out:hover { background: rgba(239,68,68,.08) !important; }
+
+        /* ── main ── */
+        .db-main {
+          max-width: 1040px; margin: 0 auto;
+          padding: 52px 40px 100px;
+        }
+
+        /* welcome */
+        .db-welcome { margin-bottom: 40px; }
+        .db-welcome-eye {
+          font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+          text-transform: uppercase; color: #5A5A80; margin: 0 0 10px;
+        }
+        .db-welcome-h1 {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 38px; font-weight: 700; letter-spacing: -1px;
+          color: #F0F0FF; margin: 0 0 10px; line-height: 1.1;
+        }
+        .db-welcome-sub { font-size: 15px; color: #5A5A80; margin: 0; }
+
+        /* stats */
+        .db-stats {
+          display: flex; gap: 14px; margin-bottom: 48px; flex-wrap: wrap;
+        }
+        .db-stat {
+          flex: 1; min-width: 140px;
+          display: flex; align-items: center; gap: 12px;
+          padding: 16px 18px; border-radius: 12px;
+          background: #09091A; border: 1px solid #1E1E3A;
+        }
+        .db-stat-ico { font-size: 20px; }
+        .db-stat-val {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 20px; font-weight: 700; color: #F0F0FF; line-height: 1;
+        }
+        .db-stat-lbl { font-size: 11px; color: #5A5A80; margin-top: 3px; }
+
+        /* sections */
+        .db-section { margin-bottom: 48px; }
+        .db-sec-hdr {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 16px;
+        }
+        .db-sec-title {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 17px; font-weight: 700; color: #F0F0FF; margin: 0;
+        }
+        .db-sec-more {
+          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          text-decoration: none; transition: color 0.2s;
+        }
+        .db-sec-more:hover { color: #C084FC; }
+
+        /* tool grid */
+        .db-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        .db-card {
+          display: flex; flex-direction: column; gap: 10px;
+          padding: 18px; border-radius: 14px;
+          border: 1px solid #1E1E3A;
+          background: #09091A;
+          text-decoration: none; position: relative;
+          transition: all 0.22s;
+        }
+        .db-card--live:hover {
+          border-color: rgba(139,92,246,.4);
+          background: rgba(139,92,246,.04);
+          transform: translateY(-2px);
+          box-shadow: 0 14px 40px rgba(0,0,0,.35);
+        }
+        .db-card--soon { opacity: 0.5; cursor: default; }
+        .db-card-top {
+          display: flex; align-items: flex-start; justify-content: space-between;
+        }
+        .db-card-ico {
+          width: 42px; height: 42px; border-radius: 10px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 20px; flex-shrink: 0;
+        }
+        .db-card-ico--dim { filter: saturate(0.5); }
+        .db-badge {
+          font-size: 9px; font-weight: 700; letter-spacing: 1px;
+          text-transform: uppercase;
+          padding: 3px 8px; border-radius: 99px; margin-top: 2px;
+        }
+        .db-badge--live { background: rgba(139,92,246,.15); color: #8B5CF6; }
+        .db-badge--soon { background: rgba(255,255,255,.05); color: #5A5A80; }
+        .db-card-name {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 14px; font-weight: 700; color: #F0F0FF;
+        }
+        .db-card-desc { font-size: 12px; color: #5A5A80; line-height: 1.55; flex: 1; }
+        .db-card-arrow {
+          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          opacity: 0; transition: opacity 0.2s, transform 0.2s;
+          margin-top: 4px;
+        }
+        .db-card--live:hover .db-card-arrow { opacity: 1; transform: translateX(2px); }
+
+        /* recent swaps */
+        .db-recent { display: flex; flex-direction: column; gap: 8px; }
+        .db-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 12px 14px; border-radius: 10px;
+          background: #09091A; border: 1px solid #1E1E3A;
+          transition: border-color 0.2s;
+        }
+        .db-row:hover { border-color: rgba(139,92,246,.25); }
+        .db-row-ico { font-size: 18px; flex-shrink: 0; }
+        .db-row-info { flex: 1; min-width: 0; }
+        .db-row-name { font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .db-row-meta { font-size: 11px; color: #5A5A80; }
+        .db-score {
+          font-size: 12px; font-weight: 700;
+          padding: 3px 9px; border-radius: 99px; flex-shrink: 0;
+        }
+        .db-score--hi { color: #34D399; background: rgba(52,211,153,.1); }
+        .db-score--mid { color: #F59E0B; background: rgba(245,158,11,.1); }
+        .db-row-open {
+          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          text-decoration: none; flex-shrink: 0;
+          padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(139,92,246,.25);
+          transition: all 0.18s;
+        }
+        .db-row-open:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+
+        @media (max-width: 860px) {
+          .db-topbar { padding: 0 20px; }
+          .db-main { padding: 32px 20px 60px; }
+          .db-grid { grid-template-columns: repeat(2, 1fr); }
+          .db-welcome-h1 { font-size: 28px; }
+        }
+        @media (max-width: 540px) {
+          .db-grid { grid-template-columns: 1fr; }
+          .db-topnav { display: none; }
+          .db-stats { gap: 10px; }
+          .db-stat { min-width: 0; }
+        }
+      `}</style>
+    </>
+  )
+}
