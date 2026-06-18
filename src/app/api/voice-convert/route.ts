@@ -3,7 +3,7 @@ import Replicate from 'replicate'
 
 export const maxDuration = 30
 
-const RVC_VERSION = 'd18e2e0a6a6d3af183cc09622cebba8555ec9a9e66983261fc64c8b1572b7dce'
+const RVC_VERSION = '0a9c7c558af4c0f20667c1bd1260ce32a2879944a0b9e44e1398660c077b1550'
 
 // Replicate SDK v1 wraps file outputs in a FileOutput class whose .url()
 // method returns a URL object. JSON.stringify() shows {} because the URL
@@ -66,14 +66,15 @@ export async function POST(req: NextRequest) {
     const prediction = await replicate.predictions.create({
       version: RVC_VERSION,
       input: {
-        input_audio: vocalsUrl,
+        song_input: vocalsUrl,
         rvc_model: 'CUSTOM',
         custom_rvc_model_download_url: voiceModelUrl,
-        pitch_change: pitchShift,
+        pitch_change: 'no-change',
+        pitch_change_all: pitchShift,
         index_rate: indexRate,
         filter_radius: 3,
         rms_mix_rate: 0.25,
-        f0_method: 'rmvpe',
+        pitch_detection_algorithm: 'rmvpe',
         crepe_hop_length: 128,
         protect: 0.33,
         output_format: 'mp3',
