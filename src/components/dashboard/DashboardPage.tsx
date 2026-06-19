@@ -67,6 +67,7 @@ export function DashboardPage() {
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
   const [userInitial, setUserInitial] = useState('M')
+  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
 
@@ -81,6 +82,16 @@ export function DashboardPage() {
       setUserName(display)
       setUserEmail(email)
       setUserInitial((display[0] ?? 'M').toUpperCase())
+
+      supabase
+        .from('users')
+        .select('credits_remaining')
+        .eq('id', u.id)
+        .single()
+        .then(({ data: row, error }) => {
+          if (row) setCreditsRemaining(row.credits_remaining)
+          else if (error) console.error('credits fetch failed', error)
+        })
     })
   }, [])
 
@@ -162,7 +173,7 @@ export function DashboardPage() {
           {[
             { label: 'Voice Swaps', value: '4', icon: '🔄' },
             { label: 'Voice Clones', value: '3', icon: '🧬' },
-            { label: 'Credits Left', value: '20,400', icon: '⚡' },
+            { label: 'Credits Left', value: creditsRemaining === null ? '…' : creditsRemaining.toLocaleString('en-US'), icon: '⚡' },
           ].map((s) => (
             <div key={s.label} className="db-stat">
               <span className="db-stat-ico">{s.icon}</span>

@@ -42,7 +42,7 @@ export function VoiceSwapPage() {
 
   // Credits
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
-  const CREDITS_TOTAL = 30000
+  const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
 
   // Recent swaps
   const [swaps, setSwaps] = useState<VoiceSwap[]>([])
@@ -83,10 +83,13 @@ export function VoiceSwapPage() {
       // Credits
       supabase
         .from('users')
-        .select('credits_remaining')
+        .select('credits_remaining, credits_total')
         .eq('id', uid)
         .single()
-        .then(({ data: u }) => { if (u) setCreditsRemaining(u.credits_remaining) })
+        .then(({ data: u, error }) => {
+          if (u) { setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
+          else if (error) console.error('credits fetch failed', error)
+        })
 
       // Recent swaps
       supabase
@@ -342,7 +345,7 @@ export function VoiceSwapPage() {
   return (
     <>
       <div className="vs-shell">
-        <VSidebar onToast={showToast} creditsRemaining={creditsRemaining} creditsTotal={CREDITS_TOTAL} />
+        <VSidebar onToast={showToast} creditsRemaining={creditsRemaining} creditsTotal={creditsTotal} />
 
         {/* Centre column */}
         <div className="vs-centre">

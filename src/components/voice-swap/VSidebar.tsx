@@ -21,7 +21,7 @@ const LIBRARY = [
 interface VSidebarProps {
   onToast: (msg: string) => void
   creditsRemaining: number | null
-  creditsTotal: number
+  creditsTotal: number | null
 }
 
 function fmtN(n: number) {
@@ -29,8 +29,9 @@ function fmtN(n: number) {
 }
 
 export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarProps) {
-  const remaining = creditsRemaining ?? creditsTotal
-  const usedPct = creditsTotal > 0 ? Math.min(100, ((creditsTotal - remaining) / creditsTotal) * 100) : 0
+  const hasCredits = creditsRemaining !== null && creditsTotal !== null && creditsTotal > 0
+  // Bar fill = remaining fraction; empty when data is unavailable (never a full bar on failure)
+  const remainingPct = hasCredits ? Math.min(100, Math.max(0, (creditsRemaining / creditsTotal) * 100)) : 0
   return (
     <>
       <aside className="vs-sidebar">
@@ -83,15 +84,15 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarPr
           <div className="vs-credits-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '11px', color: '#5A5A80' }}>Credits</span>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: creditsRemaining === null ? '#5A5A80' : '#C4C4E0' }}>
-                {creditsRemaining === null ? '…' : fmtN(remaining)} / {fmtN(creditsTotal)}
+              <span style={{ fontSize: '11px', fontWeight: 600, color: hasCredits ? '#C4C4E0' : '#5A5A80' }}>
+                {creditsRemaining === null ? '…' : fmtN(creditsRemaining)} / {creditsTotal === null ? '…' : fmtN(creditsTotal)}
               </span>
             </div>
             <div style={{ height: '4px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
-                  width: `${100 - usedPct}%`,
+                  width: `${remainingPct}%`,
                   borderRadius: '2px',
                   background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
                   transition: 'width 0.4s ease',

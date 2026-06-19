@@ -1,7 +1,9 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/ui/Logo'
+import { createClient } from '@/lib/supabase/client'
 
 const TOOLS = [
   { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap', active: false },
@@ -22,7 +24,35 @@ interface VLSidebarProps {
   onToast: (msg: string) => void
 }
 
+function fmtN(n: number) {
+  return n.toLocaleString('en-US')
+}
+
 export function VLSidebar({ onToast }: VLSidebarProps) {
+  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
+  const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id
+      if (!uid) return
+      supabase
+        .from('users')
+        .select('credits_remaining, credits_total')
+        .eq('id', uid)
+        .single()
+        .then(({ data: u, error }) => {
+          if (u) { setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
+          else if (error) console.error('credits fetch failed', error)
+        })
+    })
+  }, [])
+
+  const hasCredits = creditsRemaining !== null && creditsTotal !== null && creditsTotal > 0
+  // Bar fill = remaining fraction; empty when data is unavailable (never a full bar on failure)
+  const remainingPct = hasCredits ? Math.min(100, Math.max(0, (creditsRemaining / creditsTotal) * 100)) : 0
+
   return (
     <>
       <aside className="vls-sidebar">
@@ -72,10 +102,12 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
           <div className="vls-credits-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '11px', color: '#5A5A80' }}>Credits</span>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: '#C4C4E0' }}>20,400 / 30,000</span>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: hasCredits ? '#C4C4E0' : '#5A5A80' }}>
+                {creditsRemaining === null ? '…' : fmtN(creditsRemaining)} / {creditsTotal === null ? '…' : fmtN(creditsTotal)}
+              </span>
             </div>
             <div style={{ height: '4px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: '68%', borderRadius: '2px', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)' }} />
+              <div style={{ height: '100%', width: `${remainingPct}%`, borderRadius: '2px', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)' }} />
             </div>
           </div>
 
