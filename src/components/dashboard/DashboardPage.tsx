@@ -68,6 +68,8 @@ export function DashboardPage() {
   const [userEmail, setUserEmail] = useState('')
   const [userInitial, setUserInitial] = useState('M')
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
+  const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
+  const [voiceSwapsCount, setVoiceSwapsCount] = useState<number | null>(null)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
 
@@ -91,6 +93,24 @@ export function DashboardPage() {
         .then(({ data: row, error }) => {
           if (row) setCreditsRemaining(row.credits_remaining)
           else if (error) console.error('credits fetch failed', error)
+        })
+
+      supabase
+        .from('voice_clones')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', u.id)
+        .then(({ count, error }) => {
+          if (error) console.error('voice_clones count failed', error)
+          else setVoiceClonesCount(count ?? 0)
+        })
+
+      supabase
+        .from('voice_swaps')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', u.id)
+        .then(({ count, error }) => {
+          if (error) console.error('voice_swaps count failed', error)
+          else setVoiceSwapsCount(count ?? 0)
         })
     })
   }, [])
@@ -171,8 +191,8 @@ export function DashboardPage() {
         {/* Quick stats row */}
         <div className="db-stats">
           {[
-            { label: 'Voice Swaps', value: '4', icon: '🔄' },
-            { label: 'Voice Clones', value: '3', icon: '🧬' },
+            { label: 'Voice Swaps', value: voiceSwapsCount === null ? '—' : voiceSwapsCount.toLocaleString('en-US'), icon: '🔄' },
+            { label: 'Voice Clones', value: voiceClonesCount === null ? '—' : voiceClonesCount.toLocaleString('en-US'), icon: '🧬' },
             { label: 'Credits Left', value: creditsRemaining === null ? '…' : creditsRemaining.toLocaleString('en-US'), icon: '⚡' },
           ].map((s) => (
             <div key={s.label} className="db-stat">
