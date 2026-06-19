@@ -5,9 +5,9 @@ import { useReveal } from './useReveal'
 const techs = [
   {
     tag: 'Voice Clone',
-    title: 'GPT-SoVITS v2',
-    desc: '1 minute of voice data trains a usable model. Multilingual. 0.028 RTF — processes faster than real time on mid-range hardware.',
-    model: 'GPT-SoVITS · Open Source',
+    title: 'Studio Engine',
+    desc: 'Train a custom voice from your own samples and reuse it across every swap.',
+    model: 'Studio Engine · MausamVox',
   },
   {
     tag: 'Vocal Isolation',

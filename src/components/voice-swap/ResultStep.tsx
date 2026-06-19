@@ -3,16 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 
-type PlayerTab = 'Original' | 'Swapped' | 'A/B Compare'
-type MixState = 'mixing' | 'done' | 'fallback' | 'error'
+type AbSide = 'Original' | 'Swapped'
+type PlayMode = 'full' | 'vocals'
+// Full-song mix lifecycle: needs music stems → mixing → ready, or no-stems/error.
+type FullMixState = 'mixing' | 'ready' | 'error' | 'no-stems'
 
 interface ResultStepProps {
-  playerTab: PlayerTab
-  setPlayerTab: (t: PlayerTab) => void
-  playing: boolean
-  playProgress: number
-  onTogglePlay: () => void
-  onSeek: (pct: number) => void
   onNewSwap: () => void
   onToast: (msg: string) => void
   convertedVocalsUrl: string | null
@@ -26,7 +22,11 @@ const SCORE_BARS = [
   { label: 'Emotion Transfer', pct: 71 },
 ]
 
-const PLAYER_TABS: PlayerTab[] = ['Original', 'Swapped', 'A/B Compare']
+const AB_SIDES: AbSide[] = ['Original', 'Swapped']
+const PLAY_MODES: { id: PlayMode; label: string }[] = [
+  { id: 'full', label: 'Full song' },
+  { id: 'vocals', label: 'Vocals only' },
+]
 
 // ---------------------------------------------------------------------------
 // WAV encoder — pure 16-bit PCM, no external dependencies
@@ -207,20 +207,35 @@ function ScoreRing({ score }: { score: number }) {
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
-  playerTab, setPlayerTab, playing, playProgress,
-  onTogglePlay, onSeek, onNewSwap, onToast,
+  onNewSwap, onToast,
   convertedVocalsUrl, stemResult,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
   const [regenCountdown, setRegenCountdown] = useState(600)
 
-  // Mixed audio state
-  const [mixState, setMixState] = useState<MixState | null>(null)
-  const [mixedUrl, setMixedUrl] = useState<string | null>(null)
-  const [audioDuration, setAudioDuration] = useState<number | null>(null)
+  // Player controls (owned here — no fake timer in the parent anymore)
+  const [ab, setAb] = useState<AbSide>('Swapped')
+  const [mode, setMode] = useState<PlayMode>('full')
+
+  // Full-song mixes (built in the browser). Both sides share the same music bed.
+  const [fullMixState, setFullMixState] = useState<FullMixState>('mixing')
+  const [mixedOriginalUrl, setMixedOriginalUrl] = useState<string | null>(null)
+  const [mixedSwappedUrl, setMixedSwappedUrl] = useState<string | null>(null)
+  const mixedOriginalRef = useRef<string | null>(null) // object URLs to revoke
+  const mixedSwappedRef = useRef<string | null>(null)
+
+  // Real playback state — driven only by the <audio> element's events
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0) // 0..1
+  const [duration, setDuration] = useState(0) // seconds
+  const [currentTime, setCurrentTime] = useState(0) // seconds
+  const [audioError, setAudioError] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
-  const mixedBlobRef = useRef<string | null>(null) // track for cleanup
+  // Carried across a source swap so play position / state survive the toggle.
+  const pendingSeekRef = useRef(0)
+  const pendingPlayRef = useRef(false)
+  const seekingRef = useRef(false)
 
   // Animate score bars on mount
   useEffect(() => {
@@ -234,108 +249,173 @@ export function ResultStep({
     return () => clearInterval(id)
   }, [])
 
-  // Start mixing as soon as we have the converted vocals and stem URLs
+  // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
   useEffect(() => {
-    if (!convertedVocalsUrl) return
+    if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
 
-    // Collect non-empty music stem URLs
+    // Collect non-empty music stem URLs (the shared instrumental bed)
     const musicUrls = [
-      stemResult?.instrumentalUrl,
-      stemResult?.bassUrl,
-      stemResult?.drumsUrl,
-      stemResult?.otherUrl,
+      stemResult.instrumentalUrl,
+      stemResult.bassUrl,
+      stemResult.drumsUrl,
+      stemResult.otherUrl,
     ].filter((u): u is string => Boolean(u))
 
     if (musicUrls.length === 0) {
-      // No music stems — fall back to vocals-only
-      setMixState('fallback')
+      // No music stems — Full song mode is impossible. Force vocals-only.
+      setFullMixState('no-stems')
+      setMode('vocals')
       return
     }
 
-    setMixState('mixing')
-    mixStems(convertedVocalsUrl, musicUrls)
-      .then((blob) => {
-        if (!blob) {
-          setMixState('error')
+    let cancelled = false
+    setFullMixState('mixing')
+    Promise.all([
+      mixStems(stemResult.vocalsUrl, musicUrls),
+      mixStems(convertedVocalsUrl, musicUrls),
+    ])
+      .then(([origBlob, swapBlob]) => {
+        if (cancelled) return
+        if (!origBlob || !swapBlob) {
+          setFullMixState('error')
           return
         }
-        const url = URL.createObjectURL(blob)
-        mixedBlobRef.current = url
-        setMixedUrl(url)
-        setMixState('done')
+        const origUrl = URL.createObjectURL(origBlob)
+        const swapUrl = URL.createObjectURL(swapBlob)
+        mixedOriginalRef.current = origUrl
+        mixedSwappedRef.current = swapUrl
+        setMixedOriginalUrl(origUrl)
+        setMixedSwappedUrl(swapUrl)
+        setFullMixState('ready')
       })
       .catch(() => {
-        setMixState('error')
+        if (!cancelled) setFullMixState('error')
       })
-  }, [convertedVocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Revoke blob URL on unmount to avoid memory leak
+    return () => { cancelled = true }
+  }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Revoke both blob URLs on unmount to avoid memory leaks
   useEffect(() => {
     return () => {
-      if (mixedBlobRef.current) URL.revokeObjectURL(mixedBlobRef.current)
+      if (mixedOriginalRef.current) URL.revokeObjectURL(mixedOriginalRef.current)
+      if (mixedSwappedRef.current) URL.revokeObjectURL(mixedSwappedRef.current)
     }
   }, [])
 
-  // Drive real audio play/pause from external playing state
-  const activeUrl = mixedUrl || convertedVocalsUrl
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (playing && (mixState === 'done' || mixState === 'fallback')) {
-      audio.play().catch(() => {})
-    } else {
-      audio.pause()
+  // The active source for the current (mode, side) selection.
+  const fullReady = fullMixState === 'ready'
+  function srcFor(m: PlayMode, side: AbSide): string | null {
+    if (m === 'vocals') {
+      return side === 'Original' ? stemResult?.vocalsUrl ?? null : convertedVocalsUrl
     }
-  }, [playing, mixState])
+    // full
+    return side === 'Original' ? mixedOriginalUrl : mixedSwappedUrl
+  }
+  const activeUrl = srcFor(mode, ab)
 
   const mins = Math.floor(regenCountdown / 60)
   const secs = String(regenCountdown % 60).padStart(2, '0')
 
+  // Capture position + play state right before a source swap so we can restore.
+  function captureForSwap() {
+    const audio = audioRef.current
+    pendingSeekRef.current = audio ? audio.currentTime : 0
+    pendingPlayRef.current = audio ? !audio.paused : playing
+    seekingRef.current = true
+    setAudioError(false)
+  }
+
+  function handleSelectSide(side: AbSide) {
+    if (side === ab) return
+    captureForSwap()
+    setAb(side)
+  }
+
+  function handleSelectMode(m: PlayMode) {
+    if (m === mode) return
+    if (m === 'full' && !fullReady) return // disabled until the mix is ready
+    captureForSwap()
+    setMode(m)
+  }
+
+  function handleTogglePlay() {
+    const audio = audioRef.current
+    if (!audio || !activeUrl) return
+    if (audio.paused) audio.play().catch(() => setAudioError(true))
+    else audio.pause()
+  }
+
   function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
+    const audio = audioRef.current
+    if (!audio || !audio.duration) return
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    onSeek(pct)
+    audio.currentTime = pct * audio.duration
+  }
+
+  // Restore position + resume after a freshly-swapped source reports its length.
+  function handleLoadedMetadata() {
     const audio = audioRef.current
-    if (audio && audio.duration) audio.currentTime = pct * audio.duration
+    if (!audio) return
+    if (audio.duration && isFinite(audio.duration)) setDuration(audio.duration)
+    if (seekingRef.current) {
+      audio.currentTime = Math.min(pendingSeekRef.current, audio.duration || 0)
+      if (pendingPlayRef.current) audio.play().catch(() => setAudioError(true))
+      seekingRef.current = false
+    }
+  }
+
+  function handleTimeUpdate() {
+    const audio = audioRef.current
+    if (!audio) return
+    // Ignore the reset-to-0 tick that fires during a source swap.
+    if (seekingRef.current) return
+    setCurrentTime(audio.currentTime)
+    setProgress(audio.duration ? audio.currentTime / audio.duration : 0)
   }
 
   function handleDownload() {
     if (!activeUrl) { onToast('Nothing to download yet'); return }
-    const isMixed = mixState === 'done' && mixedUrl
+    const isMixed = mode === 'full'
     const a = document.createElement('a')
     a.href = activeUrl
-    a.download = isMixed ? 'voice-swap-mixed.wav' : 'voice-swap-vocals.mp3'
+    a.download = isMixed
+      ? `voice-swap-${ab.toLowerCase()}-mix.wav`
+      : `voice-swap-${ab.toLowerCase()}-vocals.mp3`
     a.rel = 'noreferrer'
     a.click()
-    onToast(isMixed ? 'Downloading mixed WAV…' : 'Downloading converted vocals…')
+    onToast(isMixed ? `Downloading ${ab} mix (WAV)…` : `Downloading ${ab} vocals…`)
   }
 
-  const elapsed = Math.round(playProgress * (audioDuration ?? 272))
-  const elapsedMins = Math.floor(elapsed / 60)
-  const elapsedSecs = String(elapsed % 60).padStart(2, '0')
-  const totalDur = audioDuration ?? 272
-  const totalMins = Math.floor(totalDur / 60)
-  const totalSecs = String(Math.round(totalDur % 60)).padStart(2, '0')
+  function fmt(t: number) {
+    const s = Math.max(0, Math.round(t))
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  }
 
-  const mixingInProgress = mixState === 'mixing' || mixState === null
+  // Full-song mix is still rendering and the user is sitting in Full mode.
+  const fullMixing = mode === 'full' && fullMixState === 'mixing'
 
   return (
     <>
-      {/* Real audio element — src switches to mixed WAV once ready */}
+      {/* Real audio element — the single source of truth for playback.
+          src switches with the (mode, side) selection; events drive all UI. */}
       {activeUrl && (
         <audio
           ref={audioRef}
           src={activeUrl}
           preload="metadata"
-          onLoadedMetadata={() => {
-            const audio = audioRef.current
-            if (audio && audio.duration && isFinite(audio.duration)) {
-              setAudioDuration(audio.duration)
-            }
-          }}
+          onLoadedMetadata={handleLoadedMetadata}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
           onEnded={() => {
-            if (playing) onTogglePlay()
+            // Rewind the element too, so a toggle right after a track ends
+            // captures position 0 — not the stale end-of-clip time.
+            if (audioRef.current) audioRef.current.currentTime = 0
+            setPlaying(false); setProgress(0); setCurrentTime(0)
           }}
+          onError={() => setAudioError(true)}
         />
       )}
 
@@ -349,7 +429,7 @@ export function ResultStep({
               82<span style={{ fontSize: '14px', fontWeight: 400, color: '#5A5A80', letterSpacing: 0, marginLeft: '6px', background: 'none', WebkitTextFillColor: '#5A5A80' }}> / 100</span>
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-              {['✓ Ready to download', mixState === 'done' ? '✓ Full mix included' : '✓ High fidelity'].map((c) => (
+              {['✓ Ready to download', fullReady ? '✓ Full mix included' : '✓ High fidelity'].map((c) => (
                 <span key={c} className="vs-result-chip">{c}</span>
               ))}
             </div>
@@ -372,45 +452,92 @@ export function ResultStep({
 
         {/* Player */}
         <div className="vs-player">
+          {/* Two controls: A/B side toggle + Full song / Vocals only mode */}
           <div className="vs-player-tabs">
-            {PLAYER_TABS.map((t) => (
-              <button key={t} className={`vs-ptab ${playerTab === t ? 'vs-ptab--active' : ''}`} onClick={() => setPlayerTab(t)}>{t}</button>
-            ))}
+            <div className="vs-toggle-group">
+              {AB_SIDES.map((s) => (
+                <button
+                  key={s}
+                  className={`vs-ptab ${ab === s ? 'vs-ptab--active' : ''}`}
+                  onClick={() => handleSelectSide(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="vs-toggle-spacer" />
+            <div className="vs-toggle-group">
+              {PLAY_MODES.map((m) => {
+                const disabled = m.id === 'full' && !fullReady
+                return (
+                  <button
+                    key={m.id}
+                    className={`vs-ptab ${mode === m.id ? 'vs-ptab--active' : ''}`}
+                    onClick={() => handleSelectMode(m.id)}
+                    disabled={disabled}
+                    title={
+                      disabled
+                        ? fullMixState === 'no-stems'
+                          ? 'No music stems available for this track'
+                          : fullMixState === 'error'
+                            ? 'Full-song mix failed'
+                            : 'Preparing full-song mix…'
+                        : undefined
+                    }
+                  >
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {mixingInProgress ? (
-            /* ---- Mixing state ---- */
+          {fullMixing ? (
+            /* ---- Full-song mix still rendering (vocals-only stays usable) ---- */
             <div className="vs-mixing-banner">
               <div className="vs-mixing-ring" />
               <div>
-                <div className="vs-mixing-title">Mixing your track…</div>
-                <div className="vs-mixing-sub">Blending converted vocals with music stems in your browser</div>
+                <div className="vs-mixing-title">Mixing your full song…</div>
+                <div className="vs-mixing-sub">Blending vocals with music stems in your browser. Switch to “Vocals only” to listen now.</div>
               </div>
             </div>
           ) : (
             <>
-              {mixState === 'fallback' && (
+              {fullMixState === 'no-stems' && (
                 <div className="vs-mix-note">
-                  ⚠ No music stems found — playing converted vocals only. Upload full track for a complete mix.
+                  ⚠ No music stems found — full-song mix unavailable. Playing vocals only.
                 </div>
               )}
-              {mixState === 'error' && (
+              {fullMixState === 'error' && mode === 'vocals' && (
                 <div className="vs-mix-note vs-mix-note--err">
-                  Mix failed — playing converted vocals. Some stem URLs may have expired.
+                  Full-song mix failed — some stem URLs may have expired. Vocals-only still works.
                 </div>
               )}
-              <div className="vs-wave-container">
-                <PlayerWaveCanvas playing={playing} />
-                <div className="vs-seek-overlay" onClick={handleSeek} />
-                <div className="vs-playhead" style={{ left: `${playProgress * 100}%` }} />
-              </div>
-              <div className="vs-player-controls">
-                <span className="vs-time">{elapsedMins}:{elapsedSecs}</span>
-                <button className="vs-play-btn" onClick={onTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-                  {playing ? '⏸' : '▶'}
-                </button>
-                <span className="vs-time">{totalMins}:{totalSecs}</span>
-              </div>
+              {audioError && (
+                <div className="vs-mix-note vs-mix-note--err">
+                  Couldn’t load this audio — the source may be missing or its link expired.
+                </div>
+              )}
+              {!activeUrl ? (
+                <div className="vs-mix-note vs-mix-note--err">
+                  No audio available for {ab} / {mode === 'full' ? 'Full song' : 'Vocals only'}.
+                </div>
+              ) : (
+                <>
+                  <div className="vs-wave-container">
+                    <PlayerWaveCanvas playing={playing} />
+                    <div className="vs-seek-overlay" onClick={handleSeek} />
+                    <div className="vs-playhead" style={{ left: `${progress * 100}%` }} />
+                  </div>
+                  <div className="vs-player-controls">
+                    <span className="vs-time">{fmt(currentTime)}</span>
+                    <button className="vs-play-btn" onClick={handleTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+                      {playing ? '⏸' : '▶'}
+                    </button>
+                    <span className="vs-time">{duration ? fmt(duration) : '—:—'}</span>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -433,13 +560,13 @@ export function ResultStep({
           <button
             className="vs-dl-btn vs-dl-btn--primary"
             onClick={handleDownload}
-            disabled={mixingInProgress}
+            disabled={fullMixing || !activeUrl}
           >
-            {mixingInProgress
+            {fullMixing
               ? '⏳ Mixing…'
-              : mixState === 'done'
-                ? '↓ Download HD Mix (WAV)'
-                : '↓ Download HD'}
+              : mode === 'full'
+                ? `↓ Download ${ab} Mix (WAV)`
+                : `↓ Download ${ab} Vocals`}
           </button>
           <button className="vs-dl-btn vs-dl-btn--outline" onClick={() => onToast('Link copied!')}>⬆ Share</button>
           <button className="vs-dl-btn vs-dl-btn--outline" onClick={onNewSwap}>+ New Swap</button>
@@ -461,13 +588,16 @@ export function ResultStep({
           background: #0E0E20; border: 1px solid #1E1E3A;
           border-radius: 12px; overflow: hidden; margin-bottom: 14px;
         }
-        .vs-player-tabs { display: flex; border-bottom: 1px solid #1E1E3A; padding: 0 4px; }
+        .vs-player-tabs { display: flex; align-items: center; border-bottom: 1px solid #1E1E3A; padding: 0 4px; }
+        .vs-toggle-group { display: flex; }
+        .vs-toggle-spacer { flex: 1; }
         .vs-ptab {
           padding: 8px 14px; border: none; background: transparent;
           font-size: 11px; font-weight: 500; color: #5A5A80;
           cursor: pointer; transition: all 0.2s; position: relative;
         }
-        .vs-ptab:hover { color: #F0F0FF; }
+        .vs-ptab:hover:not(:disabled) { color: #F0F0FF; }
+        .vs-ptab:disabled { color: #3A3A55; cursor: not-allowed; }
         .vs-ptab--active { color: #F0F0FF; font-weight: 600; }
         .vs-ptab--active::after {
           content: ''; position: absolute; bottom: 0; left: 4px; right: 4px;

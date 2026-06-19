@@ -4,7 +4,7 @@ export type StepStatus = 'pending' | 'active' | 'done'
 
 const STEP_LABELS = [
   'Isolating vocals — BS-RoFormer',
-  'Applying your voice clone — GPT-SoVITS',
+  'Applying your voice clone',
   'Mixing stems back together',
   'Scoring output quality',
 ]
@@ -65,7 +65,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
       <div style={{ fontSize: '12px', color: '#5A5A80', marginBottom: '28px' }}>
         {type === 'preview'
           ? 'Uses ~50 credits · Free to hear before committing'
-          : 'GPT-SoVITS · BS-RoFormer · Studio Clone'}
+          : 'Studio Engine · Studio Clone'}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '300px' }}>

@@ -18,7 +18,6 @@ const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
-type PlayerTab = 'Original' | 'Swapped' | 'A/B Compare'
 
 const AVATAR_PALETTE = [
   'linear-gradient(135deg,#8B5CF6,#EC4899)',
@@ -138,12 +137,6 @@ export function VoiceSwapPage() {
   const [language, setLanguage] = useState('Same as Source')
   const [styleIntensity, setStyleIntensity] = useState(6)
   const [pitchShift, setPitchShift] = useState(0)
-
-  // Player
-  const [playerTab, setPlayerTab] = useState<PlayerTab>('Swapped')
-  const [playing, setPlaying] = useState(false)
-  const [playProgress, setPlayProgress] = useState(0)
-  const playerTimerRef = useRef<ReturnType<typeof setInterval>>()
 
   // Processing overlay
   const [processing, setProcessing] = useState(false)
@@ -332,34 +325,7 @@ export function VoiceSwapPage() {
     }
   }
 
-  function handleTogglePlay() {
-    if (playing) {
-      clearInterval(playerTimerRef.current)
-      setPlaying(false)
-    } else {
-      setPlaying(true)
-      playerTimerRef.current = setInterval(() => {
-        setPlayProgress((prev) => {
-          const next = prev + 1 / 272
-          if (next >= 1) {
-            clearInterval(playerTimerRef.current)
-            setPlaying(false)
-            return 0
-          }
-          return next
-        })
-      }, 100)
-    }
-  }
-
-  function handleSeek(pct: number) {
-    setPlayProgress(pct)
-  }
-
   function handleNewSwap() {
-    clearInterval(playerTimerRef.current)
-    setPlaying(false)
-    setPlayProgress(0)
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
@@ -369,7 +335,6 @@ export function VoiceSwapPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      clearInterval(playerTimerRef.current)
       clearTimeout(toastTimerRef.current)
     }
   }, [])
@@ -418,12 +383,6 @@ export function VoiceSwapPage() {
             )}
             {step === 3 && (
               <ResultStep
-                playerTab={playerTab}
-                setPlayerTab={setPlayerTab}
-                playing={playing}
-                playProgress={playProgress}
-                onTogglePlay={handleTogglePlay}
-                onSeek={handleSeek}
                 onNewSwap={handleNewSwap}
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
