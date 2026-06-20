@@ -149,6 +149,9 @@ export function VoiceSwapPage() {
   // Toast
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  // Token for the in-flight background karaoke (lead/backing) split. Each new
+  // upload / New Swap bumps it so a stale poll can't apply to the wrong stems.
+  const karaokeJobRef = useRef(0)
 
   // Body overflow: hidden on desktop, auto on mobile
   useEffect(() => {
@@ -216,6 +219,65 @@ export function VoiceSwapPage() {
     }
   }
 
+  // Fires automatically after a server-side stem split to split the isolated
+  // vocal into lead vs backing in the background. Lives here (page level) — not
+  // in UploadStep — so it survives the user advancing to step 2/3 and UploadStep
+  // unmounting. Never blocks the user: on any failure/timeout we leave
+  // leadVocalsUrl/backingVocalsUrl empty and the swap falls back to the full
+  // vocal (StemResult fallbacks added in step 2).
+  async function runKaraokeSplit(result: StemResult) {
+    // Token guard: only the most recent upload's job may apply its result.
+    const jobId = ++karaokeJobRef.current
+    const POLL_INTERVAL_MS = 2000
+    const MAX_ATTEMPTS = 120 // ~4 minutes
+
+    try {
+      const startRes = await fetch('/api/karaoke-split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vocalsUrl: result.vocalsUrl }),
+      })
+      if (!startRes.ok) return
+      const predictionId = (await startRes.json()).predictionId as string | undefined
+      if (!predictionId) return
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        if (karaokeJobRef.current !== jobId) return // superseded by a newer upload / reset
+
+        const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`)
+        if (!pollRes.ok) return
+        const pollData = await pollRes.json()
+
+        if (pollData.status === 'succeeded') {
+          const leadVocalsUrl = pollData.leadVocalsUrl as string
+          const backingVocalsUrl = (pollData.backingVocalsUrl as string) ?? ''
+          if (!leadVocalsUrl || karaokeJobRef.current !== jobId) return
+
+          // Merge the two new fields into the live result, only if it's still
+          // the same upload — preserving everything else in StemResult.
+          setStemResult((prev) =>
+            prev && prev.storagePath === result.storagePath
+              ? { ...prev, leadVocalsUrl, backingVocalsUrl }
+              : prev
+          )
+          // Keep the cached session in sync so a later restore retains the split.
+          try {
+            const merged: StemResult = { ...result, leadVocalsUrl, backingVocalsUrl }
+            localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
+          } catch { /* ignore */ }
+          console.log('[karaoke-split] lead/backing ready for', result.fileName)
+          return
+        }
+        if (pollData.status === 'failed' || pollData.status === 'canceled') return
+        // otherwise keep polling
+      }
+      // timed out — leave fields empty (graceful fallback)
+    } catch {
+      // network/other error — leave fields empty (graceful fallback)
+    }
+  }
+
   function handleStemDone(result: StemResult) {
     setStemResult(result)
     try {
@@ -225,9 +287,11 @@ export function VoiceSwapPage() {
     } catch (e) {
       console.warn('[stem-cache] save failed:', e)
     }
-    // Deduct credits only for server-driven stem splits (not manual extracted stems)
+    // Server-driven stem splits (not manual extracted stems) cost credits and
+    // get the automatic background lead/backing split.
     if (result.storagePath) {
       deductCredits(50, 'stem_split')
+      void runKaraokeSplit(result)
     }
   }
 
@@ -329,6 +393,9 @@ export function VoiceSwapPage() {
   }
 
   function handleNewSwap() {
+    // Invalidate any in-flight background karaoke split so it can't apply to the
+    // cleared/next stems.
+    karaokeJobRef.current++
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
