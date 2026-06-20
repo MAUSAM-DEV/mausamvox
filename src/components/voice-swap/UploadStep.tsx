@@ -651,6 +651,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
             <div className="vs-stems">
               {([
                 { url: displayResult.vocalsUrl,       icon: '🎤', name: 'Vocals',       hint: 'Isolated voice track',   file: 'vocals.mp3' },
+                { url: displayResult.backingVocalsUrl, icon: '🎶', name: 'Backing Vocals', hint: 'Backing / harmony vocals', file: 'backing-vocals.mp3' },
                 { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: 'Full backing track',     file: 'instrumental.mp3' },
                 { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',         hint: 'Low-end bass line',      file: 'bass.mp3'   },
                 { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',        hint: 'Percussion only',        file: 'drums.mp3'  },
