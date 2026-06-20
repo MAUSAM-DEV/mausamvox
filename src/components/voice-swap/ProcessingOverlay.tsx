@@ -64,7 +64,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
 
       <div style={{ fontSize: '12px', color: '#5A5A80', marginBottom: '28px' }}>
         {type === 'preview'
-          ? 'Uses ~50 credits · Free to hear before committing'
+          ? 'First 2 previews of a track are free · 50 credits after'
           : 'Studio Engine · Studio Clone'}
       </div>
 
