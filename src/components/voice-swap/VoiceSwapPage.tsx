@@ -299,7 +299,11 @@ export function VoiceSwapPage() {
     setStep(2)
   }
 
-  async function handleProcess(type: 'preview' | 'full') {
+  // `charge` lets a free regeneration re-run the exact same swap without
+  // deducting credits. Defaults to true so the normal Preview/Full buttons
+  // bill as before.
+  async function handleProcess(type: 'preview' | 'full', opts: { charge?: boolean } = {}) {
+    const { charge = true } = opts
     if (!stemResult) {
       showToast('Upload a track first')
       return
@@ -330,11 +334,21 @@ export function VoiceSwapPage() {
           voiceId: voice.id,
           pitchShift,
           styleIntensity,
+          // Previews are gated + charged server-side (first 2 per track free,
+          // 3rd+ costs 50). trackKey is the upload storagePath; empty for
+          // manual-extracted stems, which are always free.
+          isPreview: type === 'preview',
+          trackKey: stemResult.storagePath || '',
         }),
       })
 
       const startData = await startRes.json()
       if (!startRes.ok) throw new Error(startData.error ?? 'Voice conversion failed to start')
+
+      // Server may have charged a paid (3rd+) preview — reflect the new balance.
+      if (typeof startData.creditsRemaining === 'number') {
+        setCreditsRemaining(startData.creditsRemaining)
+      }
 
       const predictionId = startData.predictionId as string
 
@@ -375,17 +389,19 @@ export function VoiceSwapPage() {
           : 'Swap complete! Quality score: 82/100'
       )
 
-      // Deduct credits and record swap (non-blocking)
+      // Deduct credits and record swap (non-blocking). A free regen passes
+      // charge=false so no credits are taken, but the result is still recorded.
       if (type === 'full') {
-        deductCredits(200, 'voice_swap_full')
+        if (charge) deductCredits(200, 'voice_swap_full')
         recordSwap(
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voice?.name ?? 'Unknown Voice',
           final.convertedVocalsUrl ?? null,
         ).catch(() => { /* ignore — swap is still complete */ })
-      } else {
-        deductCredits(50, 'voice_swap_preview')
       }
+      // Previews are no longer charged here — the server-side gate in
+      // /api/voice-convert handles the "first 2 free, then 50" pricing at job
+      // start (see isPreview/trackKey above).
     } catch (err) {
       setProcessing(false)
       showToast(err instanceof Error ? err.message : 'Voice conversion failed')
@@ -400,6 +416,17 @@ export function VoiceSwapPage() {
     setStemResult(null)
     setConvertedVocalsUrl(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
+  }
+
+  // Re-runs the current swap with the same inputs. Free while the result's
+  // regen window is open; once it closes, it bills like a full swap (200 cr)
+  // and is blocked up-front if the user can't afford it.
+  async function handleRegenerate(isFree: boolean) {
+    if (!isFree && creditsRemaining !== null && creditsRemaining < 200) {
+      showToast('Free regen window ended — regenerating costs 200 credits, and you don’t have enough. Top up to continue.')
+      return
+    }
+    await handleProcess('full', { charge: isFree ? false : true })
   }
 
   // Cleanup on unmount
@@ -454,6 +481,7 @@ export function VoiceSwapPage() {
             {step === 3 && (
               <ResultStep
                 onNewSwap={handleNewSwap}
+                onRegenerate={handleRegenerate}
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
                 stemResult={stemResult}
