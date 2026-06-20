@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
-export const maxDuration = 30
+// GET copies both stems into Supabase (2 downloads + 2 uploads) before
+// returning, so allow more time than a pure status check.
+export const maxDuration = 60
 
 // MVSEP "Male/Female separation" — splits a vocals-only track into separate
 // male and female vocal stems. We submit the vocal stem by URL and poll by job
@@ -67,6 +70,63 @@ async function fetchMvsep(url: string): Promise<{ ok: boolean; json: MvsepPayloa
 function pickStem(files: MvsepFile[], type: 'Male' | 'Female'): string {
   const f = files.find((x) => x?.type === type)
   return typeof f?.url === 'string' ? f.url : ''
+}
+
+// ── Supabase persistence ──────────────────────────────────────────────────
+// MVSEP output URLs have no documented retention, so we copy both stems into
+// the audio-uploads bucket (same upload + signed-URL pattern as upload-stem)
+// and hand callers durable signed URLs instead of the ephemeral MVSEP ones.
+const BUCKET = 'audio-uploads'
+const SIGNED_URL_TTL = 21600 // 6 hours, matching upload-stem
+
+// Returns a signed URL if the object already exists, else null. createSignedUrl
+// errors for a missing object, so it doubles as an existence probe.
+async function existingSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL)
+  if (error || !data?.signedUrl) return null
+  return data.signedUrl
+}
+
+// Download one MVSEP stem and upload it to Supabase; returns a signed URL.
+async function persistStem(mvsepUrl: string, path: string): Promise<string> {
+  const res = await fetch(mvsepUrl)
+  if (!res.ok) throw new Error(`download failed (http ${res.status})`)
+  const buffer = Buffer.from(await res.arrayBuffer())
+  const up = await supabaseAdmin.storage.from(BUCKET).upload(path, buffer, { contentType: 'audio/mpeg', upsert: true })
+  if (up.error) throw new Error(`upload failed: ${up.error.message}`)
+  const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL)
+  if (signed.error || !signed.data?.signedUrl) throw new Error(`sign failed: ${signed.error?.message ?? 'unknown'}`)
+  return signed.data.signedUrl
+}
+
+// Copy the mapped MVSEP stems into Supabase, returning durable signed URLs.
+// Idempotent: if both already exist (a re-poll), reuse them with no re-download.
+// Soft-fallback: on ANY failure, return the MVSEP URLs so the caller still gets
+// a usable (if ephemeral) result rather than nothing. Keyed by the create hash;
+// no userId folder yet (tier-gating is a later step).
+async function persistStems(createHash: string, maleUrl: string, femaleUrl: string): Promise<{ male: string; female: string }> {
+  const malePath = `gender-split/${createHash}-male.mp3`
+  const femalePath = `gender-split/${createHash}-female.mp3`
+  try {
+    const [existMale, existFemale] = await Promise.all([
+      maleUrl ? existingSignedUrl(malePath) : Promise.resolve(''),
+      femaleUrl ? existingSignedUrl(femalePath) : Promise.resolve(''),
+    ])
+    // Reuse if every present stem is already persisted (idempotent re-poll).
+    if ((!maleUrl || existMale) && (!femaleUrl || existFemale)) {
+      console.log(`[gender-split] reused persisted stems (no re-download) for ${createHash}`)
+      return { male: existMale || '', female: existFemale || '' }
+    }
+    const [male, female] = await Promise.all([
+      maleUrl ? persistStem(maleUrl, malePath) : Promise.resolve(''),
+      femaleUrl ? persistStem(femaleUrl, femalePath) : Promise.resolve(''),
+    ])
+    console.log(`[gender-split] persisted stems to Supabase for ${createHash}`)
+    return { male, female }
+  } catch (err) {
+    console.error('[gender-split] persistence failed, returning MVSEP URLs:', err instanceof Error ? err.message : String(err))
+    return { male: maleUrl, female: femaleUrl }
+  }
 }
 
 // Starts a Male/Female split job. Returns immediately with the MVSEP create
@@ -184,7 +244,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'failed', error: 'Could not parse male/female stems from output' })
       }
 
-      return NextResponse.json({ status: 'succeeded', maleVocalsUrl, femaleVocalsUrl })
+      // Copy to durable Supabase URLs (soft-fallback to MVSEP URLs on failure).
+      const durable = await persistStems(createHash, maleVocalsUrl, femaleVocalsUrl)
+      return NextResponse.json({ status: 'succeeded', maleVocalsUrl: durable.male, femaleVocalsUrl: durable.female })
     }
 
     return NextResponse.json({ status: 'failed', error: `Unexpected MVSEP status: ${String(result.json?.status)}` })
