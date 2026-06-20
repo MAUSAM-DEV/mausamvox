@@ -271,7 +271,7 @@ export function ResultStep({
     let cancelled = false
     setFullMixState('mixing')
     Promise.all([
-      mixStems(stemResult.vocalsUrl, musicUrls),
+      mixStems(stemResult.leadVocalsUrl || stemResult.vocalsUrl, musicUrls),
       mixStems(convertedVocalsUrl, musicUrls),
     ])
       .then(([origBlob, swapBlob]) => {
@@ -307,7 +307,7 @@ export function ResultStep({
   const fullReady = fullMixState === 'ready'
   function srcFor(m: PlayMode, side: AbSide): string | null {
     if (m === 'vocals') {
-      return side === 'Original' ? stemResult?.vocalsUrl ?? null : convertedVocalsUrl
+      return side === 'Original' ? (stemResult?.leadVocalsUrl || stemResult?.vocalsUrl) ?? null : convertedVocalsUrl
     }
     // full
     return side === 'Original' ? mixedOriginalUrl : mixedSwappedUrl

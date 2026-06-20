@@ -261,7 +261,7 @@ export function VoiceSwapPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vocalsUrl: stemResult.vocalsUrl,
+          vocalsUrl: stemResult.leadVocalsUrl || stemResult.vocalsUrl,
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift,

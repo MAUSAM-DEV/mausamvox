@@ -97,6 +97,11 @@ async function getDroppedFiles(dt: DataTransfer): Promise<File[]> {
 export interface StemResult {
   storagePath: string
   vocalsUrl: string
+  // Lead/backing split of vocalsUrl, populated by /api/karaoke-split.
+  // Optional: legacy cached results and the manual-stems path won't have them.
+  // Every consumer falls back to vocalsUrl when leadVocalsUrl is empty.
+  leadVocalsUrl?: string
+  backingVocalsUrl?: string
   instrumentalUrl: string
   bassUrl: string
   drumsUrl: string
@@ -234,7 +239,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
 
       const stemResult: StemResult = {
         storagePath: uploadData.path,
-        vocalsUrl:       data.vocals,
+        vocalsUrl:        data.vocals,
+        leadVocalsUrl:    '',
+        backingVocalsUrl: '',
         instrumentalUrl: '',
         bassUrl:         data.bass,
         drumsUrl:        data.drums,
@@ -396,6 +403,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
     const stemResult: StemResult = {
       storagePath: '',
       vocalsUrl: urlFor('vocals'),
+      leadVocalsUrl: '',
+      backingVocalsUrl: '',
       instrumentalUrl: instUrl,
       bassUrl: urlFor('bass'),
       drumsUrl: urlFor('drums'),
