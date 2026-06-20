@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
+
+// Gender-split is a PREMIUM feature. Cost is a placeholder — change here only.
+const GENDER_SPLIT_COST = 250
 
 // GET copies both stems into Supabase (2 downloads + 2 uploads) before
 // returning, so allow more time than a pure status check.
@@ -129,12 +133,42 @@ async function persistStems(createHash: string, maleUrl: string, femaleUrl: stri
   }
 }
 
+// Best-effort refund of GENDER_SPLIT_COST after a charge whose MVSEP job never
+// started. Re-reads the CURRENT balance first (rather than the pre-debit value)
+// so a concurrent legitimate top-up isn't clobbered. Never throws: a failed
+// refund is logged but must not mask the original error to the caller.
+async function refundCredits(userId: string): Promise<void> {
+  try {
+    const { data: current, error: readError } = await supabaseAdmin
+      .from('users')
+      .select('credits_remaining')
+      .eq('id', userId)
+      .single()
+    if (readError || !current) {
+      console.error('[gender-split] refund read failed:', readError?.message ?? 'user not found')
+      return
+    }
+    const { error: refundError } = await supabaseAdmin
+      .from('users')
+      .update({ credits_remaining: current.credits_remaining + GENDER_SPLIT_COST })
+      .eq('id', userId)
+    if (refundError) {
+      console.error('[gender-split] refund failed:', refundError.message)
+    }
+  } catch (err) {
+    console.error('[gender-split] refund threw:', err instanceof Error ? err.message : String(err))
+  }
+}
+
 // Starts a Male/Female split job. Returns immediately with the MVSEP create
 // hash — MVSEP runs behind a queue, so the client polls GET below.
 //
 // This stage is ADDITIVE and OPTIONAL: callers must treat any failure as
 // "no gender split — behave as today". This route never blocks the flow.
 export async function POST(req: NextRequest) {
+  // Set to the user's id once credits are debited, so the create-failure paths
+  // and the outer catch can refund a charge whose job never started.
+  let chargedUserId: string | null = null
   try {
     let body: { vocalsUrl?: string }
     try {
@@ -148,8 +182,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
 
+    // ── PREMIUM GATE ──────────────────────────────────────────────────────────
+    // This is the app's first paid gate. Everything here runs SERVER-SIDE and the
+    // user is derived from the verified session cookie — we never trust a userId
+    // from the request body. Deduct happens BEFORE the MVSEP create so a free
+    // user can't kick off paid work by racing; if the create then fails we refund
+    // (see below) so a job that never ran is never charged.
+    if (!adminConfigured) {
+      console.error('[gender-split] SUPABASE_SERVICE_ROLE_KEY is not configured')
+      return NextResponse.json(
+        { error: 'Server configuration error: service role key is missing. Contact support.' },
+        { status: 500 }
+      )
+    }
+
+    // 1. Authenticate the caller from the session cookie (anon client).
+    const sessionClient = await createClient()
+    const { data: { user }, error: authError } = await sessionClient.auth.getUser()
+    if (authError) {
+      return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    }
+
+    // 2. Fetch plan + balance via the service-role client (bypasses RLS).
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('users')
+      .select('plan, credits_remaining')
+      .eq('id', user.id)
+      .single()
+    if (profileError || !profile) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // 3. Plan gate — premium tiers are starter | pro | studio; only 'free' is blocked.
+    if (profile.plan === 'free') {
+      return NextResponse.json({ error: 'Premium feature' }, { status: 403 })
+    }
+
+    // 4. Balance gate.
+    if (profile.credits_remaining < GENDER_SPLIT_COST) {
+      return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
+    }
+
+    // 5. Deduct BEFORE starting MVSEP work.
+    // KNOWN LIMITATION: this read-then-write debit is not atomic, so concurrent
+    // requests can race and over/under-spend. Mirrors /api/credits/deduct.
+    // Future hardening: move to an atomic Postgres RPC (e.g. a `deduct_credits`
+    // SECURITY DEFINER function) so the check-and-decrement is a single statement.
+    const { error: debitError } = await supabaseAdmin
+      .from('users')
+      .update({ credits_remaining: profile.credits_remaining - GENDER_SPLIT_COST })
+      .eq('id', user.id)
+    if (debitError) {
+      console.error('[gender-split] debit failed:', debitError.message)
+      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+    }
+    chargedUserId = user.id
+    // ──────────────────────────────────────────────────────────────────────────
+
     const token = getToken()
     if (!token) {
+      await refundCredits(chargedUserId)
       return NextResponse.json({ error: 'MVSEP API token not configured' }, { status: 500 })
     }
 
@@ -174,6 +269,8 @@ export async function POST(req: NextRequest) {
     if (!res.ok || !isSuccess(data?.success) || !hash) {
       // Don't log the full body (can be large); surface a concise error.
       console.error(`[gender-split] create failed (http ${res.status})`)
+      // Job never started — refund the charge.
+      await refundCredits(chargedUserId)
       return NextResponse.json(
         { error: `MVSEP create failed: ${safeStringify(data?.data ?? json)}` },
         { status: 502 }
@@ -185,6 +282,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[gender-split] unhandled error:', msg)
+    // If we already debited but the create threw before starting a job, refund.
+    if (chargedUserId) await refundCredits(chargedUserId)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -1,0 +1,31 @@
+-- Grant the `service_role` role table-level access on public.users.
+--
+-- public.users was created with RLS enabled and owner-only policies. The
+-- earlier migration 20260619000000 granted table privileges to `authenticated`
+-- (so the browser, using each user's own session, can read its row) but never
+-- granted anything to `service_role`.
+--
+-- Every server route reaches this table through the service-role client
+-- (supabaseAdmin). Table-level privileges are checked BEFORE RLS, so a missing
+-- GRANT makes PostgREST hard-fail with HTTP 403 / Postgres 42501
+-- ("permission denied for table users") before RLS or the query even runs.
+--
+-- Symptoms this fixes:
+--   * POST /api/credits/deduct      — the balance fetch 42501'd, so the route's
+--                                     fetchError branch returned 404 "User not
+--                                     found" and the client silently swallowed it
+--                                     (server-side credit deduction never ran).
+--   * POST /api/gender-split (gate) — the plan/credits fetch would 42501 the same
+--                                     way, returning 404 instead of 403/402.
+--
+-- RLS is unchanged: the existing "select/update own" policies still apply. These
+-- grants only let `service_role` reach the table. (service_role also bypasses
+-- RLS, which is the intended behavior for trusted server-side writes.)
+--
+-- GRANT is idempotent — re-running this migration is safe and does not error.
+--
+-- NOTE: applied manually in the Supabase SQL editor, mirroring 20260619000000 —
+-- CLI apply is intentionally not used here. This file captures it in version
+-- control.
+
+grant select, update on public.users to service_role;
