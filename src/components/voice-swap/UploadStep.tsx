@@ -102,6 +102,12 @@ export interface StemResult {
   // Every consumer falls back to vocalsUrl when leadVocalsUrl is empty.
   leadVocalsUrl?: string
   backingVocalsUrl?: string
+  // Male/female split of vocalsUrl, populated by /api/gender-split (premium).
+  // Optional, same as lead/backing: empty until a gender split runs; consumers
+  // fall back to vocalsUrl. Nothing populates these yet (Layer 1 Step 1 adds the
+  // fields only — the runner/trigger/UI come in later steps).
+  maleVocalsUrl?: string
+  femaleVocalsUrl?: string
   instrumentalUrl: string
   bassUrl: string
   drumsUrl: string
@@ -242,6 +248,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
         vocalsUrl:        data.vocals,
         leadVocalsUrl:    '',
         backingVocalsUrl: '',
+        maleVocalsUrl:    '',
+        femaleVocalsUrl:  '',
         instrumentalUrl: '',
         bassUrl:         data.bass,
         drumsUrl:        data.drums,
@@ -405,6 +413,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
       vocalsUrl: urlFor('vocals'),
       leadVocalsUrl: '',
       backingVocalsUrl: '',
+      maleVocalsUrl: '',
+      femaleVocalsUrl: '',
       instrumentalUrl: instUrl,
       bassUrl: urlFor('bass'),
       drumsUrl: urlFor('drums'),
