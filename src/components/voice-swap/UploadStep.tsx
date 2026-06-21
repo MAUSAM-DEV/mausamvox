@@ -121,7 +121,16 @@ interface UploadStepProps {
   onDone: (result: StemResult) => void
   onContinue: () => void
   onToast: (msg: string) => void
+  // Premium duet (gender) split — gated on plan + credits client-side for UX;
+  // the server is the real gate. onSplitDuet triggers the page-level runner.
+  plan: string | null
+  creditsRemaining: number | null
+  genderSplitting: boolean
+  onSplitDuet: () => void
 }
+
+// Client mirror of the server's GENDER_SPLIT_COST (api/gender-split).
+const GENDER_SPLIT_COST = 250
 
 function UploadWaveCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -185,7 +194,7 @@ function formatSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function UploadStep({ userId, result, onDone, onContinue, onToast }: UploadStepProps) {
+export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
 
   // When VoiceSwapPage restores a result from localStorage after initial render,
@@ -694,6 +703,41 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
               {downloadingZip ? 'Preparing ZIP…' : '↓ Download All Stems (ZIP)'}
             </button>
 
+            {/* Premium duet split — separates the vocal stem into male/female
+                singers. State is derived from plan + credits; the server is the
+                real gate (the runner surfaces 402/403 if it disagrees). */}
+            {(() => {
+              const done = !!(displayResult.maleVocalsUrl || displayResult.femaleVocalsUrl)
+              const isFree = plan === 'free'
+              const tooPoor = !isFree && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST
+              // Free → upsell (clickable, not dead). Disabled only while running,
+              // already done, or premium-but-too-poor.
+              const disabled = genderSplitting || done || tooPoor
+              const label = done
+                ? '✓ Duet split'
+                : genderSplitting
+                  ? 'Splitting duet…'
+                  : isFree
+                    ? `🔒 Split duet · ${GENDER_SPLIT_COST} cr · Premium`
+                    : `Split duet · ${GENDER_SPLIT_COST} cr · Premium`
+              return (
+                <>
+                  <button
+                    className="vs-duet-btn"
+                    disabled={disabled}
+                    onClick={onSplitDuet}
+                  >
+                    {label}
+                  </button>
+                  {tooPoor && (
+                    <div className="vs-duet-reason">
+                      Need {GENDER_SPLIT_COST} cr — you have {creditsRemaining}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
             <button className="vs-continue-btn" onClick={onContinue}>
               Continue to Voice Swap →
             </button>
@@ -897,6 +941,26 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast }: Uplo
           background: rgba(139,92,246,.06);
         }
         .vs-zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── premium duet split button ── */
+        .vs-duet-btn {
+          width: 100%; margin-top: 8px; padding: 10px; border-radius: 10px;
+          border: 1px solid rgba(236,72,153,.4);
+          background: rgba(236,72,153,.06); color: #EC4899;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s; letter-spacing: 0.2px;
+        }
+        .vs-duet-btn:hover:not(:disabled) {
+          border-color: rgba(236,72,153,.7);
+          background: rgba(236,72,153,.12);
+        }
+        .vs-duet-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .vs-duet-reason {
+          margin-top: 4px; text-align: center;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 11px; color: #8A8AA8;
+        }
 
         /* ── continue button ── */
         .vs-continue-btn {

@@ -16,6 +16,9 @@ type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 
 const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
+// Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
+// premium-split button's affordability state; the server remains the real gate.
+const GENDER_SPLIT_COST = 250
 type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
 
@@ -33,6 +36,9 @@ export function VoiceSwapPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
+  // True while a premium gender (duet) split is in flight, so the trigger button
+  // can show a disabled "Splitting duet…" state and block double-starts.
+  const [genderSplitting, setGenderSplitting] = useState(false)
 
   // Voice picker
   const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
@@ -43,6 +49,9 @@ export function VoiceSwapPage() {
   // Credits
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
+  // Plan tier (free | starter | pro | studio) — gates premium features client-side
+  // for UX. The server is still the real gate; this only drives button states.
+  const [plan, setPlan] = useState<string | null>(null)
 
   // Recent swaps
   const [swaps, setSwaps] = useState<VoiceSwap[]>([])
@@ -80,14 +89,14 @@ export function VoiceSwapPage() {
         return
       }
 
-      // Credits
+      // Credits + plan (plan gates premium features client-side for UX only).
       supabase
         .from('users')
-        .select('credits_remaining, credits_total')
+        .select('plan, credits_remaining, credits_total')
         .eq('id', uid)
         .single()
         .then(({ data: u, error }) => {
-          if (u) { setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
+          if (u) { setPlan(u.plan); setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
           else if (error) console.error('credits fetch failed', error)
         })
 
@@ -357,6 +366,47 @@ export function VoiceSwapPage() {
     }
   }
 
+  // Re-reads plan + balance from the DB. Used after a gender split: the
+  // /api/gender-split route deducts 250 server-side but (unlike voice-convert)
+  // doesn't return the new balance, so we refetch to keep the display honest.
+  async function refreshCredits() {
+    if (!userId) return
+    const supabase = createClient()
+    const { data: u } = await supabase
+      .from('users')
+      .select('plan, credits_remaining, credits_total')
+      .eq('id', userId)
+      .single()
+    if (u) { setPlan(u.plan); setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
+  }
+
+  // Trigger for the premium duet split. Free users are routed to an upsell (not a
+  // dead click); the server still re-checks plan + balance and deducts, so the
+  // runner's 402/403 toasts catch any client/server disagreement. We don't deduct
+  // here (the route does) — only refresh the balance once a split lands.
+  async function handleSplitDuet() {
+    if (!stemResult) return
+    if (plan === 'free') {
+      showToast('Duet split is a Premium feature — upgrade to split male/female vocals.')
+      return
+    }
+    if (creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST) {
+      showToast(`Not enough credits for duet split (${GENDER_SPLIT_COST} needed).`)
+      return
+    }
+    if (genderSplitting) return // already running — block double-starts
+    setGenderSplitting(true)
+    try {
+      await runGenderSplit(stemResult)
+      // Always refetch the true balance afterwards: success charged 250, a 402/403
+      // race charged nothing, a mid-job failure was refunded — a read is correct
+      // in every case and keeps the displayed credits honest.
+      await refreshCredits()
+    } finally {
+      setGenderSplitting(false)
+    }
+  }
+
   function handleStemDone(result: StemResult) {
     setStemResult(result)
     try {
@@ -534,6 +584,10 @@ export function VoiceSwapPage() {
                 onDone={handleStemDone}
                 onContinue={handleStemContinue}
                 onToast={showToast}
+                plan={plan}
+                creditsRemaining={creditsRemaining}
+                genderSplitting={genderSplitting}
+                onSplitDuet={handleSplitDuet}
               />
             )}
             {step === 2 && (
