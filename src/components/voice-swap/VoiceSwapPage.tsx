@@ -152,6 +152,9 @@ export function VoiceSwapPage() {
   // Token for the in-flight background karaoke (lead/backing) split. Each new
   // upload / New Swap bumps it so a stale poll can't apply to the wrong stems.
   const karaokeJobRef = useRef(0)
+  // Same token-guard for the premium male/female (gender) split. Independent of
+  // karaoke's — they can be in flight at once and must not invalidate each other.
+  const genderSplitJobRef = useRef(0)
 
   // Body overflow: hidden on desktop, auto on mobile
   useEffect(() => {
@@ -270,6 +273,82 @@ export function VoiceSwapPage() {
           return
         }
         if (pollData.status === 'failed' || pollData.status === 'canceled') return
+        // otherwise keep polling
+      }
+      // timed out — leave fields empty (graceful fallback)
+    } catch {
+      // network/other error — leave fields empty (graceful fallback)
+    }
+  }
+
+  // Premium counterpart to runKaraokeSplit: splits the FULL vocal stem into
+  // separate male/female vocals via /api/gender-split (MVSEP). Lives at page
+  // level so it survives step changes. Additive + optional: on any failure we
+  // leave male/femaleVocalsUrl empty and nothing downstream breaks (nothing
+  // reads them yet — UI lands in a later step).
+  //
+  // Two deliberate differences from runKaraokeSplit:
+  //  1. Input is result.vocalsUrl — the FULL both-singers stem. NOT leadVocalsUrl
+  //     (that's the lead/backing axis and would drop the backing singer before
+  //     the male/female split even runs).
+  //  2. NO client-side deductCredits here. /api/gender-split deducts 250 credits
+  //     server-side (and refunds a job that never starts), so charging here too
+  //     would double-bill. The 402/403 branches below just surface the gate.
+  async function runGenderSplit(result: StemResult) {
+    // Token guard: only the most recent upload's job may apply its result.
+    const jobId = ++genderSplitJobRef.current
+    const POLL_INTERVAL_MS = 2000
+    const MAX_ATTEMPTS = 150 // ~5 min — the GET does 2 MVSEP hops + 2 Supabase copies, so it's heavier than karaoke's status check
+
+    try {
+      const startRes = await fetch('/api/gender-split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vocalsUrl: result.vocalsUrl }),
+      })
+      // Gated responses are NOT processing failures — surface them distinctly.
+      if (startRes.status === 403) {
+        showToast('Gender split is a premium feature — upgrade to use it.')
+        return
+      }
+      if (startRes.status === 402) {
+        showToast('Not enough credits for gender split (250 needed).')
+        return
+      }
+      if (!startRes.ok) return // real start failure — silent, graceful fallback
+      const hash = (await startRes.json()).hash as string | undefined
+      if (!hash) return
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        if (genderSplitJobRef.current !== jobId) return // superseded by a newer upload / reset
+
+        const pollRes = await fetch(`/api/gender-split?hash=${hash}`)
+        if (!pollRes.ok) return
+        const pollData = await pollRes.json()
+
+        if (pollData.status === 'succeeded') {
+          const maleVocalsUrl = (pollData.maleVocalsUrl as string) ?? ''
+          const femaleVocalsUrl = (pollData.femaleVocalsUrl as string) ?? ''
+          // Route guarantees at least one stem on success; bail if neither or superseded.
+          if ((!maleVocalsUrl && !femaleVocalsUrl) || genderSplitJobRef.current !== jobId) return
+
+          // Merge the two new fields into the live result, only if it's still
+          // the same upload — preserving everything else in StemResult.
+          setStemResult((prev) =>
+            prev && prev.storagePath === result.storagePath
+              ? { ...prev, maleVocalsUrl, femaleVocalsUrl }
+              : prev
+          )
+          // Keep the cached session in sync so a later restore retains the split.
+          try {
+            const merged: StemResult = { ...result, maleVocalsUrl, femaleVocalsUrl }
+            localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
+          } catch { /* ignore */ }
+          console.log('[gender-split] male/female ready for', result.fileName)
+          return
+        }
+        if (pollData.status === 'failed') return
         // otherwise keep polling
       }
       // timed out — leave fields empty (graceful fallback)
@@ -409,9 +488,10 @@ export function VoiceSwapPage() {
   }
 
   function handleNewSwap() {
-    // Invalidate any in-flight background karaoke split so it can't apply to the
-    // cleared/next stems.
+    // Invalidate any in-flight background karaoke + gender split so neither can
+    // apply to the cleared/next stems.
     karaokeJobRef.current++
+    genderSplitJobRef.current++
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
