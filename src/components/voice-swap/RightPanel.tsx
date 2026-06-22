@@ -104,20 +104,16 @@ export function RightPanel({ onToast, swaps, swapsLoading }: RightPanelProps) {
           })}
         </div>
 
+        {/* Storage usage isn't tracked yet — show an honest placeholder with an
+            empty bar rather than a fabricated figure. */}
         <div className="vs-rp-storage">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
             <span style={{ color: '#5A5A80' }}>Storage</span>
-            <span style={{ color: '#C4C4E0', fontWeight: 600 }}>1.2 GB / 5 GB</span>
+            <span style={{ color: '#5A5A80', fontWeight: 600 }}>—</span>
           </div>
-          <div style={{ height: '3px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: '24%',
-                background: 'linear-gradient(135deg,#8B5CF6,#EC4899)',
-                borderRadius: '2px',
-              }}
-            />
+          <div style={{ height: '3px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }} />
+          <div style={{ fontSize: '10px', color: '#5A5A80', marginTop: '6px' }}>
+            Storage tracking coming soon · Pro
           </div>
         </div>
       </aside>

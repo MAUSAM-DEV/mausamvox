@@ -10,6 +10,10 @@ type FullMixState = 'mixing' | 'ready' | 'error' | 'no-stems'
 
 interface ResultStepProps {
   onNewSwap: () => void
+  // isFree reflects whether the regen window is still open. The page bills
+  // (or blocks) accordingly; this component just reports which side of the
+  // window the click landed on.
+  onRegenerate: (isFree: boolean) => void
   onToast: (msg: string) => void
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
@@ -207,7 +211,7 @@ function ScoreRing({ score }: { score: number }) {
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
-  onNewSwap, onToast,
+  onNewSwap, onRegenerate, onToast,
   convertedVocalsUrl, stemResult,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
@@ -549,10 +553,16 @@ export function ResultStep({
               <path d="M4 4v5h5M20 20v-5h-5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
               <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            <strong style={{ color: '#8B5CF6' }}>Free regen</strong> available for
-            <span className="grad-text" style={{ fontWeight: 700 }}>{mins}:{secs}</span>
+            {regenCountdown > 0 ? (
+              <>
+                <strong style={{ color: '#8B5CF6' }}>Free regen</strong> available for
+                <span className="grad-text" style={{ fontWeight: 700 }}>{mins}:{secs}</span>
+              </>
+            ) : (
+              <>Free window ended · regen now costs <strong style={{ color: '#8B5CF6' }}>200 cr</strong></>
+            )}
           </div>
-          <button className="vs-regen-btn" onClick={() => onToast('Regenerating swap…')}>↺ Regenerate</button>
+          <button className="vs-regen-btn" onClick={() => onRegenerate(regenCountdown > 0)}>↺ Regenerate</button>
         </div>
 
         {/* Download / Share */}
@@ -568,7 +578,13 @@ export function ResultStep({
                 ? `↓ Download ${ab} Mix (WAV)`
                 : `↓ Download ${ab} Vocals`}
           </button>
-          <button className="vs-dl-btn vs-dl-btn--outline" onClick={() => onToast('Link copied!')}>⬆ Share</button>
+          <button
+            className="vs-dl-btn vs-dl-btn--outline vs-dl-btn--soon"
+            disabled
+            title="Shareable links coming soon for Pro"
+          >
+            ⬆ Share<span className="vs-soon-badge">Soon · Pro</span>
+          </button>
           <button className="vs-dl-btn vs-dl-btn--outline" onClick={onNewSwap}>+ New Swap</button>
         </div>
       </div>
@@ -678,6 +694,17 @@ export function ResultStep({
           background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0;
         }
         .vs-dl-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        /* Share is not live yet — dimmed, non-interactive, honestly labelled. */
+        .vs-dl-btn--soon {
+          display: inline-flex; align-items: center; gap: 7px;
+          opacity: 0.45; cursor: not-allowed;
+        }
+        .vs-dl-btn--soon:hover { border-color: #2A2A4A; color: #C4C4E0; }
+        .vs-soon-badge {
+          font-size: 9px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+          padding: 2px 6px; border-radius: 999px;
+          background: rgba(139,92,246,.15); color: #A78BFA; border: 1px solid rgba(139,92,246,.3);
+        }
       `}</style>
     </>
   )
