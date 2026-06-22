@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import type { SavedVoice } from './RecordStep'
 
 interface TestStepProps {
@@ -58,10 +58,27 @@ function TestBarsCanvas({ playing }: { playing: boolean }) {
 
 export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother, savedVoice }: TestStepProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const [freshSampleUrl, setFreshSampleUrl] = useState<string | null>(null)
+
+  // Fetch a fresh signed URL on mount (and whenever the voice changes). The
+  // stored sample_url is a 24-hour signed URL that expires and breaks playback;
+  // this replaces it with a 1-hour URL signed server-side on demand.
+  useEffect(() => {
+    if (!savedVoice?.id) return
+    setFreshSampleUrl(null)
+    fetch(`/api/voice-lab/sample-url?id=${encodeURIComponent(savedVoice.id)}`)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((d) => { if (d.signedUrl) setFreshSampleUrl(d.signedUrl) })
+      .catch(() => { /* fall back to stored sample_url */ })
+  }, [savedVoice?.id])
+
+  // Effective URL: fresh signed URL preferred, stored sample_url as fallback for
+  // voices where the server fetch failed or hasn't resolved yet.
+  const activeSampleUrl = freshSampleUrl ?? savedVoice?.sample_url ?? null
 
   function handlePlay() {
     const audio = audioRef.current
-    if (!audio || !savedVoice?.sample_url) {
+    if (!audio || !activeSampleUrl) {
       onToast('No sample audio available')
       return
     }
@@ -88,11 +105,12 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
 
   return (
     <>
-      {/* Hidden audio element for real sample playback */}
-      {savedVoice?.sample_url && (
+      {/* Hidden audio element — src is the fresh signed URL (sign-on-read);
+          falls back to the stored sample_url while the fetch resolves. */}
+      {activeSampleUrl && (
         <audio
           ref={audioRef}
-          src={savedVoice.sample_url}
+          src={activeSampleUrl}
           onEnded={() => setTestPlaying(false)}
           preload="metadata"
         />
@@ -127,7 +145,7 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           </button>
           <TestBarsCanvas playing={testPlaying} />
           <span className="vlte-test-lbl">
-            {savedVoice?.sample_url ? 'Your recorded sample' : 'No sample available'}
+            {activeSampleUrl ? 'Your recorded sample' : 'No sample available'}
           </span>
         </div>
 
