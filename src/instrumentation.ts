@@ -14,7 +14,10 @@ export async function register() {
   // Only the Node.js server runtime has sockets / undici. Skip the Edge runtime.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
-  const { Agent, setGlobalDispatcher } = await import('undici')
+  // webpackIgnore: true — prevents webpack from tracing undici into any bundle
+  // (including the Edge Runtime bundle for middleware). The NEXT_RUNTIME guard
+  // above means Edge never reaches this line at runtime anyway.
+  const { Agent, setGlobalDispatcher } = await import(/* webpackIgnore: true */ 'undici')
 
   setGlobalDispatcher(
     new Agent({
