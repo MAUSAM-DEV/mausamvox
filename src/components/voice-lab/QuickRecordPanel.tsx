@@ -81,6 +81,7 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const secondsRef = useRef(0)
   const mimeTypeRef = useRef<string>('audio/webm')
 
   function cleanupStream() {
@@ -130,14 +131,18 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
         setPreviewUrl(url)
         setPhase('recorded')
         cleanupStream()
-        onCaptured(blob, finalMime, seconds)
+        onCaptured(blob, finalMime, secondsRef.current)
       }
 
       recorderRef.current = recorder
       recorder.start()
+      secondsRef.current = 0
       setSeconds(0)
       setPhase('recording')
-      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
+      timerRef.current = setInterval(() => {
+        secondsRef.current += 1
+        setSeconds((s) => s + 1)
+      }, 1000)
     } catch (err) {
       setPhase('error')
       const name = err instanceof DOMException ? err.name : ''
@@ -158,6 +163,7 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
   function handleRerecord() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
+    secondsRef.current = 0
     setSeconds(0)
     setPhase('idle')
     onReset()

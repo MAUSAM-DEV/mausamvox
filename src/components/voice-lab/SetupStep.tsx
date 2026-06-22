@@ -8,11 +8,11 @@ interface SetupStepProps {
 }
 
 const EXPRESS_FEATS = [
-  { text: '3 minutes of recording', dim: false },
-  { text: 'Ready in ~5 minutes', dim: false },
-  { text: 'Unlimited on Pro plan', dim: false },
+  { text: 'Instant — no training wait', dim: false },
+  { text: 'Lower cost per clone', dim: false },
+  { text: 'Great for quick tests', dim: false },
   { text: 'Standard fidelity only', dim: true },
-  { text: 'No commercial use', dim: true },
+  { text: 'Coming soon', dim: true },
 ]
 
 const STUDIO_FEATS = [
@@ -28,14 +28,16 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
     <>
       <div className="vlst-grid">
         {([
-          { id: 'express' as CloneType, icon: '⚡', name: 'Express Clone', time: '3 min audio · Ready in 5 minutes', desc: 'A fast, lower-fidelity clone — perfect for testing how your voice sounds before committing to a full studio session.', feats: EXPRESS_FEATS },
-          { id: 'studio' as CloneType, icon: '🎙️', name: 'Studio Clone', time: '10+ min audio · Ready in ~45 minutes', desc: 'Full production-quality clone that captures your tone, vibrato, and emotional range. For releases and commercial work.', feats: STUDIO_FEATS },
+          { id: 'studio' as CloneType, icon: '🎙️', name: 'Studio Clone', time: '10+ min audio · Ready in ~45 minutes', desc: 'Full production-quality clone that trains a real model on your voice — capturing your tone, vibrato, and emotional range. For releases and commercial work.', feats: STUDIO_FEATS, soon: false },
+          { id: 'express' as CloneType, icon: '⚡', name: 'Express Clone', time: 'Instant zero-shot clone', desc: 'A fast, lower-fidelity clone with no training wait — perfect for quickly testing how your voice sounds.', feats: EXPRESS_FEATS, soon: true },
         ]).map((card) => (
           <div
             key={card.id}
-            className={`vlst-card${cloneType === card.id ? ' vlst-card--on' : ''}`}
-            onClick={() => setCloneType(card.id)}
+            className={`vlst-card${cloneType === card.id ? ' vlst-card--on' : ''}${card.soon ? ' vlst-card--soon' : ''}`}
+            onClick={() => { if (!card.soon) setCloneType(card.id) }}
+            aria-disabled={card.soon}
           >
+            {card.soon && <span className="vlst-soon-badge">Coming soon</span>}
             <div className="vlst-icon">{card.icon}</div>
             <div className="vlst-name">{card.name}</div>
             <div className="vlst-time">{card.time}</div>
@@ -97,6 +99,23 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
           border-radius: 99px;
           background: rgba(139,92,246,.12);
           border: 1px solid rgba(139,92,246,.25);
+        }
+        .vlst-card--soon {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+        .vlst-card--soon:hover { border-color: #1E1E3A; transform: none; }
+        .vlst-card--soon:hover::before { opacity: 0; }
+        .vlst-soon-badge {
+          position: absolute;
+          top: 14px; right: 14px;
+          font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+          color: #06B6D4;
+          padding: 3px 10px;
+          border-radius: 99px;
+          background: rgba(6,182,212,.1);
+          border: 1px solid rgba(6,182,212,.25);
+          z-index: 1;
         }
         .vlst-icon {
           width: 48px; height: 48px;

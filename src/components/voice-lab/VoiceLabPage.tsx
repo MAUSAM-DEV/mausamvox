@@ -9,6 +9,7 @@ import { RecordStep, SavedVoice } from './RecordStep'
 import { TrainingStep } from './TrainingStep'
 import { TestStep } from './TestStep'
 import { VLRightPanel } from './VLRightPanel'
+import { useStudioTraining } from './useTraining'
 import { VToast } from '@/components/voice-swap/VToast'
 
 type Step = 1 | 2 | 3 | 4
@@ -16,7 +17,8 @@ type CloneType = 'express' | 'studio'
 
 export function VoiceLabPage() {
   const [step, setStep] = useState<Step>(1)
-  const [cloneType, setCloneType] = useState<CloneType>('express')
+  // Studio is the real, working tier; Express (zero-shot) is coming soon.
+  const [cloneType, setCloneType] = useState<CloneType>('studio')
 
   // My Voices — real rows from voice_clones, fetched on mount and
   // updated locally whenever RecordStep saves a new sample.
@@ -33,11 +35,29 @@ export function VoiceLabPage() {
 
       const { data: clones, error } = await supabase
         .from('voice_clones')
-        .select('id, name, type, status, model_url, created_at')
+        .select('id, name, type, status, model_url, sample_url, created_at')
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
 
-      if (!error && clones) setVoices(clones as SavedVoice[])
+      if (!error && clones) {
+        const list = clones as SavedVoice[]
+        setVoices(list)
+        // Reconcile any voice still marked 'training': training may have finished
+        // while nobody was polling, so the row's status can be stale. One GET per
+        // such voice self-heals the row and refreshes the badge to the truth.
+        list.filter((v) => v.status === 'training').forEach(async (v) => {
+          try {
+            const res = await fetch(`/api/voice-lab/train?id=${encodeURIComponent(v.id)}`)
+            const d = await res.json().catch(() => ({}))
+            if (!res.ok) return
+            if (d.status === 'ready' && d.modelUrl) {
+              setVoices((prev) => prev.map((x) => x.id === v.id ? { ...x, status: 'ready', model_url: d.modelUrl } : x))
+            } else if (d.status === 'failed') {
+              setVoices((prev) => prev.map((x) => x.id === v.id ? { ...x, status: 'failed' } : x))
+            }
+          } catch { /* leave badge as-is on transient error */ }
+        })
+      }
       setVoicesLoading(false)
     })
   }, [])
@@ -47,10 +67,6 @@ export function VoiceLabPage() {
     setSavedVoice(voice)
   }
 
-  // Training step state
-  const [trainProgress, setTrainProgress] = useState(0)
-  const [trainEta, setTrainEta] = useState(42)
-
   // Test step state
   const [testPlaying, setTestPlaying] = useState(false)
 
@@ -58,8 +74,9 @@ export function VoiceLabPage() {
   const [toast, setToast] = useState({ visible: false, message: '' })
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
-  const trainTimerRef = useRef<ReturnType<typeof setInterval>>()
-  const trainProgressRef = useRef(0)
+  // Mirrors `step` for use inside async callbacks without stale closures.
+  const stepRef = useRef<Step>(step)
+  useEffect(() => { stepRef.current = step }, [step])
 
   // Body overflow: hidden on desktop, auto on mobile
   useEffect(() => {
@@ -87,40 +104,65 @@ export function VoiceLabPage() {
     toastTimerRef.current = setTimeout(() => setToast({ visible: false, message: '' }), 3000)
   }, [])
 
-  // Training animation — starts when step becomes 3
+  // Real training: when the backend confirms model_url has landed, persist it
+  // locally and advance to Test — but only if the user is still on the Train
+  // screen, so a background completion doesn't yank them out of another step.
+  const handleTrainingReady = useCallback((voiceId: string, modelUrl: string) => {
+    setVoices((prev) => prev.map((v) => v.id === voiceId ? { ...v, status: 'ready', model_url: modelUrl } : v))
+    setSavedVoice((prev) => prev && prev.id === voiceId ? { ...prev, status: 'ready', model_url: modelUrl } : prev)
+    if (stepRef.current === 3) setStep(4)
+    showToast('Your Studio Clone is ready!')
+  }, [showToast])
+
+  const training = useStudioTraining({ onReady: handleTrainingReady })
+  const trainingPhase = training.phase
+
+  // Keep the My Voices badge in sync with the active training run.
   useEffect(() => {
-    if (step !== 3) return
-    trainProgressRef.current = 0
-    setTrainProgress(0)
-    setTrainEta(42)
-    clearInterval(trainTimerRef.current)
-    trainTimerRef.current = setInterval(() => {
-      const prev = trainProgressRef.current
-      const next = Math.min(91, prev + Math.random() * 9 + 3)
-      trainProgressRef.current = next
-      setTrainProgress(next)
-      setTrainEta(Math.max(1, Math.floor(42 * (1 - next / 100))))
-      if (next >= 91) {
-        clearInterval(trainTimerRef.current)
-        setTimeout(() => {
-          setStep(4)
-          showToast('Training complete — quality 91/100!')
-        }, 700)
-      }
-    }, 600)
-    return () => clearInterval(trainTimerRef.current)
-  }, [step, showToast])
+    const id = savedVoice?.id
+    if (!id) return
+    if (trainingPhase === 'preparing' || trainingPhase === 'queued' || trainingPhase === 'training' || trainingPhase === 'finalizing') {
+      setVoices((prev) => prev.map((v) => v.id === id && v.status !== 'training' ? { ...v, status: 'training' } : v))
+    } else if (trainingPhase === 'failed') {
+      setVoices((prev) => prev.map((v) => v.id === id ? { ...v, status: 'failed' } : v))
+    }
+  }, [trainingPhase, savedVoice?.id])
 
   // Global cleanup
   useEffect(() => {
     return () => {
-      clearInterval(trainTimerRef.current)
       clearTimeout(toastTimerRef.current)
     }
   }, [])
 
   function goStep(n: Step) {
     setStep(n)
+  }
+
+  // Begin a real Studio training run for the most recently saved voice.
+  function handleStartTraining() {
+    if (!savedVoice) {
+      showToast('Record and save your voice first')
+      setStep(2)
+      return
+    }
+    setStep(3)
+    training.start(savedVoice)
+  }
+
+  // Open a voice from My Voices and reflect its true current status.
+  function handleOpenVoice(v: SavedVoice) {
+    setSavedVoice(v)
+    if (v.status === 'ready' && v.model_url) {
+      setStep(4)
+      return
+    }
+    setStep(3)
+    if (v.status === 'training' || v.status === 'failed') {
+      training.resume(v.id) // first poll corrects to the real status
+    } else {
+      training.start(v) // pending / never-trained — run the full flow
+    }
   }
 
   const showActionBar = step === 1 || step === 2
@@ -147,9 +189,10 @@ export function VoiceLabPage() {
             {step === 3 && (
               <TrainingStep
                 cloneType={cloneType}
-                trainProgress={trainProgress}
-                trainEta={trainEta}
+                phase={training.phase}
+                error={training.error}
                 voiceName={savedVoice?.name ?? null}
+                onRetry={() => savedVoice && training.retry(savedVoice)}
               />
             )}
             {step === 4 && (
@@ -182,7 +225,10 @@ export function VoiceLabPage() {
                     ← Back
                   </button>
                 )}
-                <button className="vl-btn-next" onClick={() => goStep((step + 1) as Step)}>
+                <button
+                  className="vl-btn-next"
+                  onClick={() => (step === 1 ? goStep(2) : handleStartTraining())}
+                >
                   {step === 1 ? 'Continue to Recording' : 'Start Training'}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                     <path d="M5 12h14m-6-6l6 6-6 6" stroke="white" strokeWidth="2" strokeLinecap="round"/>
@@ -193,7 +239,7 @@ export function VoiceLabPage() {
           )}
         </div>
 
-        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} />
+        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} onOpenVoice={handleOpenVoice} />
       </div>
 
       <VToast visible={toast.visible} message={toast.message} />

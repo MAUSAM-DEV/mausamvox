@@ -6,6 +6,7 @@ interface VLRightPanelProps {
   onToast: (m: string) => void
   voices: SavedVoice[]
   voicesLoading: boolean
+  onOpenVoice?: (v: SavedVoice) => void
 }
 
 function formatDate(iso: string) {
@@ -19,7 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
 }
 
-export function VLRightPanel({ onToast, voices, voicesLoading }: VLRightPanelProps) {
+export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice }: VLRightPanelProps) {
   return (
     <>
       <div className="vlrp">
@@ -39,7 +40,10 @@ export function VLRightPanel({ onToast, voices, voicesLoading }: VLRightPanelPro
             <div
               key={v.id}
               className="vlrp-item"
-              onClick={() => onToast(`${v.name} — ${STATUS_LABEL[v.status] ?? v.status}, saved ${formatDate(v.created_at)}`)}
+              onClick={() => {
+                if (onOpenVoice) onOpenVoice(v)
+                else onToast(`${v.name} — ${STATUS_LABEL[v.status] ?? v.status}, saved ${formatDate(v.created_at)}`)
+              }}
             >
               <div className="vlrp-vi-top">
                 <div className="vlrp-vi-av">🎤</div>
