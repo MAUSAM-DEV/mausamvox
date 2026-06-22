@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
-import { ConfigStep, VoiceOption } from './ConfigStep'
+import { ConfigStep, VoiceOption, DuetMode } from './ConfigStep'
 import { ResultStep } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
@@ -141,6 +141,11 @@ export function VoiceSwapPage() {
         setVoicesLoading(false)
       })
   }, [step, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Duet mode — only active when stemResult has both maleVocalsUrl + femaleVocalsUrl
+  const [duetMode, setDuetMode] = useState<DuetMode>('one')
+  const [duetSinger, setDuetSinger] = useState<'male' | 'female'>('male')
+  const [selectedVoiceId2, setSelectedVoiceId2] = useState<string | null>(null)
 
   // Swap controls
   const [gender, setGender] = useState<Gender>('Female')
@@ -545,6 +550,9 @@ export function VoiceSwapPage() {
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
+    setDuetMode('one')
+    setDuetSinger('male')
+    setSelectedVoiceId2(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
@@ -610,6 +618,13 @@ export function VoiceSwapPage() {
                 setStyleIntensity={setStyleIntensity}
                 pitchShift={pitchShift}
                 setPitchShift={setPitchShift}
+                hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}
+                duetMode={duetMode}
+                setDuetMode={setDuetMode}
+                duetSinger={duetSinger}
+                setDuetSinger={setDuetSinger}
+                selectedVoiceId2={selectedVoiceId2}
+                setSelectedVoiceId2={setSelectedVoiceId2}
               />
             )}
             {step === 3 && (
