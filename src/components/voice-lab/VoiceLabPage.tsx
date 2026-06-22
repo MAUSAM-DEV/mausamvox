@@ -150,6 +150,25 @@ export function VoiceLabPage() {
     training.start(savedVoice)
   }
 
+  // Delete a voice: remove storage files + row, reset UI if it was the active voice.
+  async function handleDeleteVoice(id: string) {
+    const res = await fetch(
+      `/api/voice-lab/delete-clone?id=${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    )
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error ?? 'Delete failed')
+    }
+    setVoices((prev) => prev.filter((v) => v.id !== id))
+    if (savedVoice?.id === id) {
+      setSavedVoice(null)
+      training.reset()
+      setStep(1)
+    }
+    showToast('Voice deleted')
+  }
+
   // Open a voice from My Voices and reflect its true current status.
   function handleOpenVoice(v: SavedVoice) {
     setSavedVoice(v)
@@ -239,7 +258,7 @@ export function VoiceLabPage() {
           )}
         </div>
 
-        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} onOpenVoice={handleOpenVoice} />
+        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} onOpenVoice={handleOpenVoice} onDeleteVoice={handleDeleteVoice} />
       </div>
 
       <VToast visible={toast.visible} message={toast.message} />
