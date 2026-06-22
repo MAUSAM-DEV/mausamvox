@@ -73,22 +73,20 @@ export async function POST(req: NextRequest) {
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
-    if (!voiceModelUrl) {
-      return NextResponse.json({ error: 'voiceModelUrl is required' }, { status: 400 })
+    if (!voiceId && !voiceModelUrl) {
+      return NextResponse.json({ error: 'voiceId or voiceModelUrl is required' }, { status: 400 })
     }
 
     if (!process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
-    // ── PREVIEW GATE (full swaps are untouched — charged client-side as before) ──
-    // First 2 previews of a track are free; the 3rd+ costs PREVIEW_COST. All
-    // decisions are server-side: the user comes from the session cookie (never the
-    // body), and the check+increment+charge is one atomic RPC. We charge BEFORE
-    // starting Replicate and refund only if the create itself fails.
-    let previewRefund: { userId: string; trackKey: string; amount: number } | null = null
-    let creditsRemaining: number | null = null
-    if (isPreview) {
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    // Run when voiceId is present (server-side model URL resolution) or when
+    // isPreview is true (credit gate). Full swaps with only a client-supplied
+    // voiceModelUrl and no voiceId skip auth — legacy path, no server lookup needed.
+    let user: { id: string } | null = null
+    if (voiceId || isPreview) {
       if (!adminConfigured) {
         console.error('[voice-convert] SUPABASE_SERVICE_ROLE_KEY is not configured')
         return NextResponse.json(
@@ -97,14 +95,66 @@ export async function POST(req: NextRequest) {
         )
       }
       const sessionClient = await createClient()
-      const { data: { user }, error: authError } = await sessionClient.auth.getUser()
+      const { data: { user: sessionUser }, error: authError } = await sessionClient.auth.getUser()
       if (authError) {
         return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
       }
-      if (!user) {
+      if (!sessionUser) {
         return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
       }
+      user = sessionUser
+    }
 
+    // ── Model URL resolution ──────────────────────────────────────────────────
+    // Prefer the durable Supabase copy (model_path, signed on read) so the voice
+    // still works after the ephemeral replicate.delivery URL expires. Fall back to
+    // model_url from DB (older voices not yet persisted), then to the client-supplied
+    // voiceModelUrl as a last resort for backwards compatibility.
+    let effectiveModelUrl = voiceModelUrl ?? ''
+    if (voiceId && user) {
+      const { data: clone } = await supabaseAdmin
+        .from('voice_clones')
+        .select('model_path, model_url')
+        .eq('id', voiceId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (clone?.model_path) {
+        const { data: signed, error: signErr } = await supabaseAdmin.storage
+          .from('voice-models')
+          .createSignedUrl(clone.model_path, 3600) // 1-hour TTL; Replicate fetches immediately
+        if (signed?.signedUrl) {
+          effectiveModelUrl = signed.signedUrl
+          console.log('[voice-convert] using durable model_path for', voiceId)
+        } else {
+          console.warn('[voice-convert] sign failed, falling back to model_url:', signErr?.message)
+          if (clone.model_url) effectiveModelUrl = clone.model_url
+        }
+      } else if (clone?.model_url) {
+        effectiveModelUrl = clone.model_url
+        console.log('[voice-convert] model_path null, using model_url from DB for', voiceId)
+      }
+      // else: clone not found or both null — keep client-supplied voiceModelUrl
+    }
+
+    if (!effectiveModelUrl) {
+      return NextResponse.json({ error: 'No model URL available for this voice' }, { status: 400 })
+    }
+
+    // ── PREVIEW GATE (full swaps are untouched — charged client-side as before) ──
+    // First 2 previews of a track are free; the 3rd+ costs PREVIEW_COST. All
+    // decisions are server-side: the user comes from the session cookie (never the
+    // body), and the check+increment+charge is one atomic RPC. We charge BEFORE
+    // starting Replicate and refund only if the create itself fails.
+    // Auth and adminConfigured already verified above (isPreview was in the condition
+    // that triggered auth); user is guaranteed non-null here when isPreview is true.
+    let previewRefund: { userId: string; trackKey: string; amount: number } | null = null
+    let creditsRemaining: number | null = null
+    if (isPreview) {
+      if (!user) {
+        // Defensive — can't happen: auth ran above when isPreview is true.
+        return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+      }
       // Manual-extracted-stems tracks have no storagePath — always free, so skip
       // the RPC entirely and never touch preview_uses.
       if (trackKey) {
@@ -147,7 +197,7 @@ export async function POST(req: NextRequest) {
         input: {
           song_input: vocalsUrl,
           rvc_model: 'CUSTOM',
-          custom_rvc_model_download_url: voiceModelUrl,
+          custom_rvc_model_download_url: effectiveModelUrl,
           pitch_change: 'no-change',
           pitch_change_all: pitchShift,
           index_rate: indexRate,
