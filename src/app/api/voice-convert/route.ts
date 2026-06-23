@@ -120,16 +120,14 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (clone?.model_path) {
-        const { data: signed, error: signErr } = await supabaseAdmin.storage
-          .from('voice-models')
-          .createSignedUrl(clone.model_path, 3600) // 1-hour TTL; Replicate fetches immediately
-        if (signed?.signedUrl) {
-          effectiveModelUrl = signed.signedUrl
-          console.log('[voice-convert] using durable model_path for', voiceId)
-        } else {
-          console.warn('[voice-convert] sign failed, falling back to model_url:', signErr?.message)
-          if (clone.model_url) effectiveModelUrl = clone.model_url
-        }
+        // Route Replicate through our proxy (/api/voice-model/<id>/model.zip) so
+        // the last URL segment is the clean string "model.zip". The RVC container
+        // derives its local filename from url.split('/')[-1] without stripping
+        // query strings — passing a signed Supabase URL directly produces
+        // "uuid.zip?token=<JWT>" (300+ chars), hitting Errno 36 (name too long).
+        const origin = new URL(req.url).origin
+        effectiveModelUrl = `${origin}/api/voice-model/${voiceId}/model.zip`
+        console.log('[voice-convert] using model proxy for', voiceId)
       } else if (clone?.model_url) {
         effectiveModelUrl = clone.model_url
         console.log('[voice-convert] model_path null, using model_url from DB for', voiceId)
