@@ -11,21 +11,21 @@ const techs = [
   },
   {
     tag: 'Vocal Isolation',
-    title: 'BS-RoFormer',
-    desc: '2026 SDX leaderboard champion. 95%+ clean vocal isolation. Transformer-based — the same tech powering the best pro tools.',
-    model: 'BS-RoFormer · Replicate',
+    title: 'Studio Engine',
+    desc: '2026-grade vocal separation. 95%+ clean isolation, tuned for dense mixes and layered harmonies.',
+    model: 'Studio Engine · MausamVox',
   },
   {
     tag: 'Full Stem Split',
-    title: 'HTDemucs FT',
-    desc: "Meta's fine-tuned Hybrid Transformer Demucs. The standard for clean 6-stem splits in 2026. Ensemble mode with MDX-Net for dense mixes.",
-    model: 'HTDemucs FT · Replicate',
+    title: 'Studio Engine',
+    desc: 'Clean 6-stem separation built for production work — vocals, bass, drums, and more, isolated with studio-grade clarity.',
+    model: 'Studio Engine · MausamVox',
   },
   {
     tag: 'Infrastructure',
-    title: 'Replicate + RunPod',
-    desc: 'Pay-per-second GPU compute. No upfront infrastructure cost. Scales from zero to enterprise without changing the architecture.',
-    model: 'RunPod · Burst GPU',
+    title: 'Elastic Cloud Compute',
+    desc: 'Pay-per-second processing. No upfront infrastructure cost. Scales from zero to enterprise without changing the architecture.',
+    model: 'Auto-Scaling',
   },
 ]
 
@@ -61,7 +61,7 @@ export function TechSection() {
           World-class models.<br />Not just the fastest ones.
         </h2>
         <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
-          We chose each AI model based on 2026 benchmark results. Here&apos;s exactly what runs under the hood.
+          Built and tuned specifically for vocals — not retrofitted speech models.
         </p>
 
         <div

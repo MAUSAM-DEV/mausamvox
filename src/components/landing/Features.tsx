@@ -22,8 +22,8 @@ const features = [
   {
     icon: '✂️',
     title: 'Smart Stem Studio',
-    desc: '6-stem separation using BS-RoFormer (world\'s top vocal model) + HTDemucs. BPM and key detection. In-browser per-stem editing. Smart file naming.',
-    tag: '6 Stems · BS-RoFormer',
+    desc: '6-stem separation, tuned for clean isolation even on dense mixes. BPM and key detection. In-browser per-stem editing. Smart file naming.',
+    tag: '6 Stems · Studio Engine',
     tagType: 'c',
   },
   {
