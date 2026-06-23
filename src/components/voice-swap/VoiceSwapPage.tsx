@@ -653,8 +653,10 @@ export function VoiceSwapPage() {
   // regen window is open; once it closes, it bills like a full swap (200 cr)
   // and is blocked up-front if the user can't afford it.
   async function handleRegenerate(isFree: boolean) {
-    if (!isFree && creditsRemaining !== null && creditsRemaining < 200) {
-      showToast('Free regen window ended — regenerating costs 200 credits, and you don’t have enough. Top up to continue.')
+    const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl) && (duetMode === "both-split" || duetMode === "both-same")
+    const regenCost = isDualMode ? 400 : 200
+    if (!isFree && creditsRemaining !== null && creditsRemaining < regenCost) {
+      showToast(`Free regen window ended — regenerating costs ${regenCost} credits, and you don't have enough. Top up to continue.`)
       return
     }
     await handleProcess('full', { charge: isFree ? false : true })
