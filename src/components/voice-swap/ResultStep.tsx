@@ -240,6 +240,10 @@ export function ResultStep({
   const [mixedSwappedUrl, setMixedSwappedUrl] = useState<string | null>(null)
   const mixedOriginalRef = useRef<string | null>(null) // object URLs to revoke
   const mixedSwappedRef = useRef<string | null>(null)
+  // Vocals-only blend for duet modes (no music stems). Null in standard mode;
+  // srcFor falls back to convertedVocalsUrl when null.
+  const [mixedSwappedVocalsUrl, setMixedSwappedVocalsUrl] = useState<string | null>(null)
+  const mixedSwappedVocalsRef = useRef<string | null>(null)
 
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
@@ -323,11 +327,40 @@ export function ResultStep({
     return () => { cancelled = true }
   }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Revoke both blob URLs on unmount to avoid memory leaks
+  // Vocals-only blend for duet modes: mixes the N swapped/untouched vocal
+  // channels with no music so the Vocals-only tab hears all singers.
+  // Standard (single-vocal) swaps skip this — srcFor falls back to
+  // convertedVocalsUrl directly, so there's no regression.
+  useEffect(() => {
+    const swapVocalUrls = [
+      convertedVocalsUrl,
+      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
+      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
+    ].filter(Boolean) as string[]
+
+    if (swapVocalUrls.length <= 1) {
+      setMixedSwappedVocalsUrl(null)
+      return
+    }
+
+    let cancelled = false
+    mixStems(swapVocalUrls, []).then((blob) => {
+      if (cancelled || !blob) return
+      if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
+      const url = URL.createObjectURL(blob)
+      mixedSwappedVocalsRef.current = url
+      setMixedSwappedVocalsUrl(url)
+    }).catch(() => {})
+
+    return () => { cancelled = true }
+  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Revoke all three blob URLs on unmount to avoid memory leaks
   useEffect(() => {
     return () => {
       if (mixedOriginalRef.current) URL.revokeObjectURL(mixedOriginalRef.current)
       if (mixedSwappedRef.current) URL.revokeObjectURL(mixedSwappedRef.current)
+      if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
     }
   }, [])
 
@@ -335,9 +368,11 @@ export function ResultStep({
   const fullReady = fullMixState === 'ready'
   function srcFor(m: PlayMode, side: AbSide): string | null {
     if (m === 'vocals') {
-      return side === 'Original' ? (stemResult?.leadVocalsUrl || stemResult?.vocalsUrl) ?? null : convertedVocalsUrl
+      if (side === 'Original') return (stemResult?.leadVocalsUrl || stemResult?.vocalsUrl) ?? null
+      // Swapped: prefer the pre-mixed duet blend (Mode 1/2/3); fall back to
+      // the single converted vocal for standard (non-duet) swaps.
+      return mixedSwappedVocalsUrl ?? convertedVocalsUrl
     }
-    // full
     return side === 'Original' ? mixedOriginalUrl : mixedSwappedUrl
   }
   const activeUrl = srcFor(mode, ab)
