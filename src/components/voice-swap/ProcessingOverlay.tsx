@@ -3,7 +3,7 @@
 export type StepStatus = 'pending' | 'active' | 'done'
 
 const STEP_LABELS = [
-  'Isolating vocals — BS-RoFormer',
+  'Isolating vocals — Studio Engine',
   'Applying your voice clone',
   'Mixing stems back together',
   'Scoring output quality',

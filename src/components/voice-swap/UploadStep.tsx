@@ -645,7 +645,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
             <div className="vs-prog-spinner vs-prog-spinner--purple" />
             <div className="vs-prog-file">{displayFile.name}</div>
             <div className="vs-prog-label">Separating vocals… this takes 1–2 minutes</div>
-            <div className="vs-prog-sub">Powered by Demucs · running on GPU</div>
+            <div className="vs-prog-sub">Powered by Studio Engine · running on GPU</div>
           </div>
         )}
 
