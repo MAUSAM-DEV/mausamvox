@@ -17,6 +17,9 @@ interface ResultStepProps {
   onToast: (msg: string) => void
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
+  // Duet Mode 1: the singer that was NOT converted. When present, the swapped
+  // full-song mix blends this unchanged stem alongside convertedVocalsUrl.
+  duetUntouchedVocalsUrl?: string | null
 }
 
 const SCORE_BARS = [
@@ -64,10 +67,11 @@ function encodeWav(buffer: AudioBuffer): Blob {
 // ---------------------------------------------------------------------------
 // Browser mixing via OfflineAudioContext
 // Returns a WAV Blob or null if mixing fails.
-// vocalsGain: 1.0 (natural level), musicGain: 0.8 (slightly under)
+// Vocal gain uses equal-power law (1/√N) so two vocal channels at N=2 have
+// the same perceived loudness as a single channel at N=1. musicGain: 0.8.
 // ---------------------------------------------------------------------------
 async function mixStems(
-  vocalsUrl: string,
+  vocalsUrls: string[],
   musicUrls: string[],
 ): Promise<Blob | null> {
   const decodeCtx = new AudioContext()
@@ -83,17 +87,21 @@ async function mixStems(
     }
   }
 
-  const [vocalsBuf, ...musicBufs] = await Promise.all([
-    fetchDecode(vocalsUrl),
-    ...musicUrls.map(fetchDecode),
+  const [vocalBufs, musicBufs] = await Promise.all([
+    Promise.all(vocalsUrls.map(fetchDecode)),
+    Promise.all(musicUrls.map(fetchDecode)),
   ])
   await decodeCtx.close()
 
-  if (!vocalsBuf) return null
+  const validVocals = vocalBufs.filter((b): b is AudioBuffer => b !== null)
+  if (validVocals.length === 0) return null
   const validMusic = musicBufs.filter((b): b is AudioBuffer => b !== null)
 
   const SAMPLE_RATE = 44100
-  const duration = Math.max(vocalsBuf.duration, ...validMusic.map((b) => b.duration))
+  const duration = Math.max(
+    ...validVocals.map((b) => b.duration),
+    ...validMusic.map((b) => b.duration),
+  )
   const numFrames = Math.ceil(duration * SAMPLE_RATE)
 
   const offline = new OfflineAudioContext(2, numFrames, SAMPLE_RATE)
@@ -108,7 +116,9 @@ async function mixStems(
     src.start(0)
   }
 
-  addSource(vocalsBuf, 1.0)
+  // 1/√N per vocal channel: keeps perceived loudness flat as N increases.
+  const vocalGain = 1 / Math.sqrt(validVocals.length)
+  for (const buf of validVocals) addSource(buf, vocalGain)
   for (const buf of validMusic) addSource(buf, 0.8)
 
   const rendered = await offline.startRendering()
@@ -212,7 +222,7 @@ function ScoreRing({ score }: { score: number }) {
 // ---------------------------------------------------------------------------
 export function ResultStep({
   onNewSwap, onRegenerate, onToast,
-  convertedVocalsUrl, stemResult,
+  convertedVocalsUrl, stemResult, duetUntouchedVocalsUrl,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
   const [regenCountdown, setRegenCountdown] = useState(600)
@@ -272,11 +282,19 @@ export function ResultStep({
       return
     }
 
+    // Swapped mix: converted singer + untouched duet partner (Mode 1 only).
+    // Extra URLs are filtered to non-empty strings so a missing stem doesn't
+    // create a dead fetch; vocalGain auto-scales via 1/√N in mixStems.
+    const swapVocalUrls = [
+      convertedVocalsUrl,
+      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
+    ]
+
     let cancelled = false
     setFullMixState('mixing')
     Promise.all([
-      mixStems(stemResult.leadVocalsUrl || stemResult.vocalsUrl, musicUrls),
-      mixStems(convertedVocalsUrl, musicUrls),
+      mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
+      mixStems(swapVocalUrls, musicUrls),
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return

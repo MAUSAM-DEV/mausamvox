@@ -459,11 +459,19 @@ export function VoiceSwapPage() {
     setOvSteps(['done', 'active', 'pending', 'pending'])
 
     try {
+      // Mode 1 duet: convert only the chosen singer's isolated stem.
+      const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
+      let vocalsToConvert = stemResult.leadVocalsUrl || stemResult.vocalsUrl
+      if (hasDuetStems && duetMode === 'one') {
+        const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
+        if (singerUrl) vocalsToConvert = singerUrl
+      }
+
       const startRes = await fetch('/api/voice-convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vocalsUrl: stemResult.leadVocalsUrl || stemResult.vocalsUrl,
+          vocalsUrl: vocalsToConvert,
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift,
@@ -634,6 +642,11 @@ export function VoiceSwapPage() {
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
                 stemResult={stemResult}
+                duetUntouchedVocalsUrl={
+                  stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl && duetMode === 'one'
+                    ? (duetSinger === 'male' ? stemResult.femaleVocalsUrl : stemResult.maleVocalsUrl)
+                    : null
+                }
               />
             )}
           </div>
