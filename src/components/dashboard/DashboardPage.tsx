@@ -73,6 +73,7 @@ export function DashboardPage() {
   const [voiceSwapsCount, setVoiceSwapsCount] = useState<number | null>(null)
   const [recentSwaps, setRecentSwaps] = useState<RecentSwap[]>([])
   const [swapsLoading, setSwapsLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
 
@@ -130,6 +131,19 @@ export function DashboardPage() {
     document.addEventListener('mousedown', onOutside)
     return () => document.removeEventListener('mousedown', onOutside)
   }, [])
+
+  async function handleDeleteSwap(id: string) {
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/voice-swaps/delete?id=${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setRecentSwaps((prev) => prev.filter((s) => s.id !== id))
+        setVoiceSwapsCount((prev) => (prev !== null ? Math.max(0, prev - 1) : null))
+      }
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -274,6 +288,14 @@ export function DashboardPage() {
                     </span>
                   )}
                   <Link href="/voice-swap" className="db-row-open">Open</Link>
+                  <button
+                    className="db-row-del"
+                    onClick={() => handleDeleteSwap(item.id)}
+                    disabled={deletingId === item.id}
+                    aria-label="Delete swap"
+                  >
+                    {deletingId === item.id ? '…' : '×'}
+                  </button>
                 </div>
               ))
             )}
@@ -466,6 +488,13 @@ export function DashboardPage() {
           transition: all 0.18s;
         }
         .db-row-open:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .db-row-del {
+          font-size: 14px; line-height: 1; font-weight: 400; color: #5A5A80;
+          background: none; border: none; cursor: pointer; flex-shrink: 0;
+          padding: 5px 7px; border-radius: 6px; transition: color 0.18s, background 0.18s;
+        }
+        .db-row-del:hover:not(:disabled) { color: #F87171; background: rgba(239,68,68,.08); }
+        .db-row-del:disabled { opacity: 0.4; cursor: default; }
 
         @media (max-width: 860px) {
           .db-topbar { padding: 0 20px; }
