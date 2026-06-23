@@ -475,10 +475,15 @@ export function VoiceSwapPage() {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
           const res = await fetch(`/api/voice-convert?id=${predictionId}`)
           const data = await res.json()
-          if (!res.ok) throw new Error(data.error ?? 'Voice conversion failed')
-          if (data.status === 'succeeded') return data.convertedVocalsUrl as string
-          if (data.status === 'failed' || data.status === 'canceled')
+          if (!res.ok) {
+            console.error('[voice-swap] poll HTTP error:', res.status, data)
             throw new Error(data.error ?? 'Voice conversion failed')
+          }
+          if (data.status === 'succeeded') return data.convertedVocalsUrl as string
+          if (data.status === 'failed' || data.status === 'canceled') {
+            console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
+            throw new Error(data.error ?? 'Voice conversion failed')
+          }
         }
         throw new Error('Voice conversion timed out')
       }
@@ -576,6 +581,14 @@ export function VoiceSwapPage() {
         if (singerUrl) vocalsToConvert = singerUrl
       }
 
+      console.log('[voice-swap] starting swap:', {
+        type,
+        voiceId: voice.id,
+        vocalsToConvert,
+        usedLeadVocals: !!stemResult.leadVocalsUrl,
+        storagePath: stemResult.storagePath,
+      })
+
       const startRes = await fetch('/api/voice-convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -594,6 +607,7 @@ export function VoiceSwapPage() {
       })
 
       const startData = await startRes.json()
+      console.log('[voice-swap] POST /api/voice-convert →', startRes.status, startData)
       if (!startRes.ok) throw new Error(startData.error ?? 'Voice conversion failed to start')
 
       // Server may have charged a paid (3rd+) preview — reflect the new balance.
@@ -628,6 +642,7 @@ export function VoiceSwapPage() {
       // /api/voice-convert handles the "first 2 free, then 50" pricing at job
       // start (see isPreview/trackKey above).
     } catch (err) {
+      console.error('[voice-swap] handleProcess threw:', err)
       setProcessing(false)
       showToast(err instanceof Error ? err.message : 'Voice conversion failed')
     }
