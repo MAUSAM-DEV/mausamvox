@@ -233,27 +233,38 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
     setPhase('uploading')
 
     try {
-      // Upload via the server-side route so the admin client handles storage
-      // access — avoids RLS issues with the browser Supabase client.
-      const form = new FormData()
-      form.append('file', file)
-      const uploadRes = await fetch('/api/upload-stem', { method: 'POST', body: form })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
+      const mime = file.type || guessMime(file.name)
+
+      // Step 1 — get a presigned upload URL (tiny JSON request, no file bytes through Vercel)
+      const presignRes = await fetch('/api/upload-stem/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: mime }),
+      })
+      const presign = await presignRes.json()
+      if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
+
+      // Step 2 — PUT file directly to Supabase Storage (bypasses Vercel 4.5 MB body limit)
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
+      })
+      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
 
       setPhase('splitting')
 
       const res = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: uploadData.path }),
+        body: JSON.stringify({ storagePath: presign.path }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Stem split failed')
 
       const stemResult: StemResult = {
-        storagePath: uploadData.path,
+        storagePath: presign.path,
         vocalsUrl:        data.vocals,
         leadVocalsUrl:    '',
         backingVocalsUrl: '',
