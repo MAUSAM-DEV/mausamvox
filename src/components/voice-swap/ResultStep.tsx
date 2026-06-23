@@ -20,6 +20,9 @@ interface ResultStepProps {
   // Duet Mode 1: the singer that was NOT converted. When present, the swapped
   // full-song mix blends this unchanged stem alongside convertedVocalsUrl.
   duetUntouchedVocalsUrl?: string | null
+  // Duet Mode 2/3: the second converted vocal (female singer). When present,
+  // the swapped mix blends both converted stems (each at 1/√2 gain).
+  convertedVocalsUrl2?: string | null
 }
 
 const SCORE_BARS = [
@@ -222,7 +225,7 @@ function ScoreRing({ score }: { score: number }) {
 // ---------------------------------------------------------------------------
 export function ResultStep({
   onNewSwap, onRegenerate, onToast,
-  convertedVocalsUrl, stemResult, duetUntouchedVocalsUrl,
+  convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
   const [regenCountdown, setRegenCountdown] = useState(600)
@@ -282,12 +285,15 @@ export function ResultStep({
       return
     }
 
-    // Swapped mix: converted singer + untouched duet partner (Mode 1 only).
-    // Extra URLs are filtered to non-empty strings so a missing stem doesn't
-    // create a dead fetch; vocalGain auto-scales via 1/√N in mixStems.
+    // Swapped mix vocal channels — varies by mode:
+    //  Mode 1: [converted singer, untouched partner]
+    //  Mode 2/3: [converted male, converted female]
+    //  Standard: [converted vocal]
+    // vocalGain auto-scales via 1/√N in mixStems; no extra work needed here.
     const swapVocalUrls = [
       convertedVocalsUrl,
       ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
+      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
     ]
 
     let cancelled = false

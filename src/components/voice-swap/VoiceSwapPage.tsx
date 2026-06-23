@@ -36,6 +36,8 @@ export function VoiceSwapPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
+  // Second converted vocal — set only for Mode 2/3 (both singers swapped).
+  const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
   // can show a disabled "Splitting duet…" state and block double-starts.
   const [genderSplitting, setGenderSplitting] = useState(false)
@@ -459,8 +461,112 @@ export function VoiceSwapPage() {
     setOvSteps(['done', 'active', 'pending', 'pending'])
 
     try {
-      // Mode 1 duet: convert only the chosen singer's isolated stem.
       const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
+
+      // Shared poll helper: resolves with the convertedVocalsUrl on success,
+      // throws on failure / timeout. Used by both single-job and dual-job paths.
+      const pollJob = async (predictionId: string): Promise<string> => {
+        const POLL_INTERVAL_MS = 2000
+        const MAX_ATTEMPTS = 90 // ~3 minutes
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+          const res = await fetch(`/api/voice-convert?id=${predictionId}`)
+          const data = await res.json()
+          if (!res.ok) throw new Error(data.error ?? 'Voice conversion failed')
+          if (data.status === 'succeeded') return data.convertedVocalsUrl as string
+          if (data.status === 'failed' || data.status === 'canceled')
+            throw new Error(data.error ?? 'Voice conversion failed')
+        }
+        throw new Error('Voice conversion timed out')
+      }
+
+      // ── Mode 2/3: both singers converted in parallel ──────────────────────
+      if (hasDuetStems && (duetMode === 'both-split' || duetMode === 'both-same')) {
+        // Preview not supported for dual-job mode — the server-side preview gate
+        // would run independently per POST and could double-count preview uses.
+        if (type === 'preview') {
+          setProcessing(false)
+          showToast('Preview not available in Both Voices mode — use Full Track.')
+          return
+        }
+
+        const voice2 = duetMode === 'both-split'
+          ? voices.find((v) => v.id === selectedVoiceId2)
+          : voice  // both-same: same voice for both singers
+        if (!voice2) {
+          setProcessing(false)
+          showToast('Select a second voice for the female singer first.')
+          return
+        }
+        if (!voice2.modelUrl) {
+          setProcessing(false)
+          showToast(`"${voice2.name}" is sample-only — full model training needed. Train it in Voice Lab.`)
+          return
+        }
+
+        // Fire both jobs in parallel, then poll both in parallel.
+        // deductCredits(400) is only reached if Promise.all resolves — if either
+        // job fails, the catch block runs and no credits are charged.
+        const [dataA, dataB] = await Promise.all([
+          fetch('/api/voice-convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vocalsUrl: stemResult.maleVocalsUrl,
+              voiceId: voice.id,
+              pitchShift,
+              styleIntensity,
+              isPreview: false,
+              trackKey: stemResult.storagePath || '',
+            }),
+          }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+          fetch('/api/voice-convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vocalsUrl: stemResult.femaleVocalsUrl,
+              voiceId: voice2.id,
+              pitchShift,
+              styleIntensity,
+              isPreview: false,
+              trackKey: stemResult.storagePath || '',
+            }),
+          }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        ])
+
+        if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
+        if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
+
+        const [urlA, urlB] = await Promise.all([
+          pollJob(dataA.data.predictionId as string),
+          pollJob(dataB.data.predictionId as string),
+        ])
+
+        setOvSteps(['done', 'done', 'active', 'pending'])
+        await new Promise((r) => setTimeout(r, 350))
+        setOvSteps(['done', 'done', 'done', 'active'])
+        await new Promise((r) => setTimeout(r, 350))
+        setOvSteps(['done', 'done', 'done', 'done'])
+
+        setConvertedVocalsUrl(urlA)
+        setConvertedVocalsUrl2(urlB)
+        setProcessing(false)
+        setStep(3)
+        showToast('Both voices swapped! Quality score: 82/100')
+
+        if (charge) deductCredits(400, 'voice_swap_duet_full')
+        recordSwap(
+          stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+          `${voice.name} + ${voice2.name}`,
+          urlA,
+        ).catch(() => { /* ignore — swap is still complete */ })
+        return
+      }
+
+      // ── Mode 1 / standard: single job ────────────────────────────────────
+      // Clear any stale second URL from a previous Mode 2/3 run.
+      setConvertedVocalsUrl2(null)
+
       let vocalsToConvert = stemResult.leadVocalsUrl || stemResult.vocalsUrl
       if (hasDuetStems && duetMode === 'one') {
         const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
@@ -492,29 +598,7 @@ export function VoiceSwapPage() {
         setCreditsRemaining(startData.creditsRemaining)
       }
 
-      const predictionId = startData.predictionId as string
-
-      // Poll the job until Replicate reports a terminal status.
-      const POLL_INTERVAL_MS = 2000
-      const MAX_ATTEMPTS = 90 // ~3 minutes
-      let final: { status: string; convertedVocalsUrl?: string; error?: string } | null = null
-
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-
-        const pollRes = await fetch(`/api/voice-convert?id=${predictionId}`)
-        const pollData = await pollRes.json()
-        if (!pollRes.ok) throw new Error(pollData.error ?? 'Voice conversion failed')
-
-        if (pollData.status === 'succeeded' || pollData.status === 'failed' || pollData.status === 'canceled') {
-          final = pollData
-          break
-        }
-        // still starting/processing — keep step 2 marked active and keep polling
-      }
-
-      if (!final) throw new Error('Voice conversion timed out')
-      if (final.status !== 'succeeded') throw new Error(final.error ?? 'Voice conversion failed')
+      const convertedUrl = await pollJob(startData.predictionId as string)
 
       setOvSteps(['done', 'done', 'active', 'pending'])
       await new Promise((r) => setTimeout(r, 350))
@@ -522,7 +606,7 @@ export function VoiceSwapPage() {
       await new Promise((r) => setTimeout(r, 350))
       setOvSteps(['done', 'done', 'done', 'done'])
 
-      setConvertedVocalsUrl(final.convertedVocalsUrl ?? null)
+      setConvertedVocalsUrl(convertedUrl)
       setProcessing(false)
       setStep(3)
       showToast(
@@ -538,7 +622,7 @@ export function VoiceSwapPage() {
         recordSwap(
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voice?.name ?? 'Unknown Voice',
-          final.convertedVocalsUrl ?? null,
+          convertedUrl,
         ).catch(() => { /* ignore — swap is still complete */ })
       }
       // Previews are no longer charged here — the server-side gate in
@@ -558,6 +642,7 @@ export function VoiceSwapPage() {
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
+    setConvertedVocalsUrl2(null)
     setDuetMode('one')
     setDuetSinger('male')
     setSelectedVoiceId2(null)
@@ -641,6 +726,7 @@ export function VoiceSwapPage() {
                 onRegenerate={handleRegenerate}
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
+                convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
                 duetUntouchedVocalsUrl={
                   stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl && duetMode === 'one'
@@ -652,10 +738,15 @@ export function VoiceSwapPage() {
           </div>
 
           {/* Action bar — steps 1 & 2 only */}
-          {step !== 3 && (
+          {step !== 3 && (() => {
+            const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
+              && (duetMode === 'both-split' || duetMode === 'both-same')
+            return (
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
-                Preview ~50 cr · Full swap ~200 cr
+                {isDualMode
+                  ? 'Full swap ~400 cr (2 voices)'
+                  : 'Preview ~50 cr · Full swap ~200 cr'}
               </span>
               <div className="vs-action-btns">
                 <button
@@ -666,6 +757,10 @@ export function VoiceSwapPage() {
                       return
                     }
                     if (step === 1) { setStep(2); return }
+                    if (isDualMode) {
+                      showToast('Preview not available in Both Voices mode — use Full Track.')
+                      return
+                    }
                     handleProcess('preview')
                   }}
                 >
@@ -681,7 +776,8 @@ export function VoiceSwapPage() {
                 )}
               </div>
             </div>
-          )}
+          )
+          })()}
         </div>
 
         <RightPanel onToast={showToast} swaps={swaps} swapsLoading={swapsLoading} />
