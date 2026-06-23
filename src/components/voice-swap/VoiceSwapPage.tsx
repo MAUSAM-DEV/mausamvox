@@ -469,8 +469,8 @@ export function VoiceSwapPage() {
       // Shared poll helper: resolves with the convertedVocalsUrl on success,
       // throws on failure / timeout. Used by both single-job and dual-job paths.
       const pollJob = async (predictionId: string): Promise<string> => {
-        const POLL_INTERVAL_MS = 2000
-        const MAX_ATTEMPTS = 240 // ~8 minutes — RVC on a full song can take 5–7 min on shared GPU
+        const POLL_INTERVAL_MS = 5000
+        const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
           const res = await fetch(`/api/voice-convert?id=${predictionId}`)
