@@ -3,5 +3,5 @@
 // for any email in this list. Add or remove entries here; takes effect on
 // the next deploy. Keep the list short and never commit real user emails.
 export const ADMIN_EMAILS: ReadonlyArray<string> = [
-  'mausam.theshadows@gmail.com',
+  'artfulgrid1@gmail.com',
 ]
