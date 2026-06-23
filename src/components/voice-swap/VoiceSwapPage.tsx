@@ -43,6 +43,7 @@ export function VoiceSwapPage() {
   // True while a premium gender (duet) split is in flight, so the trigger button
   // can show a disabled "Splitting duet…" state and block double-starts.
   const [genderSplitting, setGenderSplitting] = useState(false)
+  const [karaokeStatus, setKaraokeStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
 
   // Voice picker
   const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
@@ -256,22 +257,23 @@ export function VoiceSwapPage() {
     const POLL_INTERVAL_MS = 2000
     const MAX_ATTEMPTS = 120 // ~4 minutes
 
+    setKaraokeStatus('running')
     try {
       const startRes = await fetch('/api/karaoke-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vocalsUrl: result.vocalsUrl }),
       })
-      if (!startRes.ok) return
+      if (!startRes.ok) { if (karaokeJobRef.current === jobId) setKaraokeStatus('failed'); return }
       const predictionId = (await startRes.json()).predictionId as string | undefined
-      if (!predictionId) return
+      if (!predictionId) { if (karaokeJobRef.current === jobId) setKaraokeStatus('failed'); return }
 
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        if (karaokeJobRef.current !== jobId) return // superseded by a newer upload / reset
+        if (karaokeJobRef.current !== jobId) return // superseded — new job owns the status
 
         const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`)
-        if (!pollRes.ok) return
+        if (!pollRes.ok) { setKaraokeStatus('failed'); return }
         const pollData = await pollRes.json()
 
         if (pollData.status === 'succeeded') {
@@ -286,6 +288,7 @@ export function VoiceSwapPage() {
               ? { ...prev, leadVocalsUrl, backingVocalsUrl }
               : prev
           )
+          setKaraokeStatus('done')
           // Keep the cached session in sync so a later restore retains the split.
           try {
             const merged: StemResult = { ...result, leadVocalsUrl, backingVocalsUrl }
@@ -294,12 +297,17 @@ export function VoiceSwapPage() {
           console.log('[karaoke-split] lead/backing ready for', result.fileName)
           return
         }
-        if (pollData.status === 'failed' || pollData.status === 'canceled') return
+        if (pollData.status === 'failed' || pollData.status === 'canceled') {
+          setKaraokeStatus('failed')
+          return
+        }
         // otherwise keep polling
       }
       // timed out — leave fields empty (graceful fallback)
+      if (karaokeJobRef.current === jobId) setKaraokeStatus('failed')
     } catch {
       // network/other error — leave fields empty (graceful fallback)
+      if (karaokeJobRef.current === jobId) setKaraokeStatus('failed')
     }
   }
 
@@ -658,6 +666,7 @@ export function VoiceSwapPage() {
     // apply to the cleared/next stems.
     karaokeJobRef.current++
     genderSplitJobRef.current++
+    setKaraokeStatus('idle')
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
@@ -710,6 +719,7 @@ export function VoiceSwapPage() {
                 creditsRemaining={creditsRemaining}
                 genderSplitting={genderSplitting}
                 onSplitDuet={handleSplitDuet}
+                karaokeStatus={karaokeStatus}
               />
             )}
             {step === 2 && (

@@ -127,6 +127,7 @@ interface UploadStepProps {
   creditsRemaining: number | null
   genderSplitting: boolean
   onSplitDuet: () => void
+  karaokeStatus?: 'idle' | 'running' | 'done' | 'failed'
 }
 
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split).
@@ -194,7 +195,7 @@ function formatSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet }: UploadStepProps) {
+export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle' }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
 
   // Two-way sync between the result prop and local phase:
@@ -684,31 +685,53 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
             <UploadWaveCanvas />
 
-            {/* Stem download cards — only render entries that have a URL */}
+            {/* Stem download cards */}
             <div className="vs-stems">
-              {([
-                { url: displayResult.vocalsUrl,        icon: '🎤', name: 'Vocals',         hint: 'Full isolated vocal stem',   file: 'vocals.mp3' },
-                { url: displayResult.leadVocalsUrl,    icon: '🎙️', name: 'Lead Vocals',    hint: 'Lead vocal only',            file: 'lead-vocals.mp3' },
-                { url: displayResult.backingVocalsUrl, icon: '🎶', name: 'Backing Vocals', hint: 'Backing / harmony vocals',   file: 'backing-vocals.mp3' },
-                { url: displayResult.instrumentalUrl,  icon: '🎼', name: 'Instrumental',   hint: 'Full backing track',         file: 'instrumental.mp3' },
-                { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',           hint: 'Low-end bass line',          file: 'bass.mp3'   },
-                { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',          hint: 'Percussion only',            file: 'drums.mp3'  },
-                { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',          hint: 'Melody / instruments',       file: 'other.mp3'  },
-              ] as const).filter(({ url }) => url).map(({ url, icon, name, hint, file }) => (
-                <a
-                  key={name}
-                  className="vs-stem-card"
-                  href={url}
-                  download={file}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => onToast(`Downloading ${name.toLowerCase()}…`)}
-                >
-                  <span className="vs-stem-icon">{icon}</span>
+              {/* Vocals — always present */}
+              {displayResult.vocalsUrl && (
+                <a className="vs-stem-card" href={displayResult.vocalsUrl} download="vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading vocals…')}>
+                  <span className="vs-stem-icon">🎤</span>
+                  <div><div className="vs-stem-name">Vocals</div><div className="vs-stem-hint">Full isolated vocal stem</div></div>
+                  <span className="vs-stem-dl">↓</span>
+                </a>
+              )}
+
+              {/* Lead / Backing: spinner while karaoke runs, cards once ready */}
+              {displayResult.leadVocalsUrl ? (
+                <>
+                  <a className="vs-stem-card" href={displayResult.leadVocalsUrl} download="lead-vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading lead vocals…')}>
+                    <span className="vs-stem-icon">🎙️</span>
+                    <div><div className="vs-stem-name">Lead Vocals</div><div className="vs-stem-hint">Lead vocal only</div></div>
+                    <span className="vs-stem-dl">↓</span>
+                  </a>
+                  {displayResult.backingVocalsUrl && (
+                    <a className="vs-stem-card" href={displayResult.backingVocalsUrl} download="backing-vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading backing vocals…')}>
+                      <span className="vs-stem-icon">🎶</span>
+                      <div><div className="vs-stem-name">Backing Vocals</div><div className="vs-stem-hint">Backing / harmony vocals</div></div>
+                      <span className="vs-stem-dl">↓</span>
+                    </a>
+                  )}
+                </>
+              ) : karaokeStatus === 'running' ? (
+                <div className="vs-stem-pending">
+                  <span className="vs-stem-pending-spin" />
                   <div>
-                    <div className="vs-stem-name">{name}</div>
-                    <div className="vs-stem-hint">{hint}</div>
+                    <div className="vs-stem-pending-label">Separating lead vocals…</div>
+                    <div className="vs-stem-pending-sub">Lead &amp; Backing cards appear when ready (~2 min)</div>
                   </div>
+                </div>
+              ) : null}
+
+              {/* Remaining stems */}
+              {([
+                { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: 'Full backing track',      file: 'instrumental.mp3' },
+                { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',         hint: 'Low-end bass line',      file: 'bass.mp3'         },
+                { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',        hint: 'Percussion only',        file: 'drums.mp3'        },
+                { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',        hint: 'Melody / instruments',   file: 'other.mp3'        },
+              ] as const).filter(({ url }) => url).map(({ url, icon, name, hint, file }) => (
+                <a key={name} className="vs-stem-card" href={url} download={file} target="_blank" rel="noreferrer" onClick={() => onToast(`Downloading ${name.toLowerCase()}…`)}>
+                  <span className="vs-stem-icon">{icon}</span>
+                  <div><div className="vs-stem-name">{name}</div><div className="vs-stem-hint">{hint}</div></div>
                   <span className="vs-stem-dl">↓</span>
                 </a>
               ))}
@@ -945,6 +968,18 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           flex-shrink: 0; transition: background 0.2s;
         }
         .vs-stem-card:hover .vs-stem-dl { background: rgba(139,92,246,.2); }
+        .vs-stem-pending {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 14px; border-radius: 10px;
+          background: #0E0E20; border: 1px dashed rgba(139,92,246,.25);
+        }
+        .vs-stem-pending-spin {
+          width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;
+          border: 2px solid rgba(139,92,246,.2); border-top-color: #8B5CF6;
+          animation: vsSpin 0.8s linear infinite;
+        }
+        .vs-stem-pending-label { font-size: 12px; font-weight: 600; color: #8B5CF6; }
+        .vs-stem-pending-sub { font-size: 10px; color: #5A5A80; margin-top: 2px; }
 
         /* ── zip download button ── */
         .vs-zip-btn {

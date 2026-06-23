@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
 
     const token = getToken()
     if (!token) {
-      await refundCredits(chargedUserId)
+      if (chargedUserId) await refundCredits(chargedUserId)
       return NextResponse.json({ error: 'MVSEP API token not configured' }, { status: 500 })
     }
 
@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
       // Don't log the full body (can be large); surface a concise error.
       console.error(`[gender-split] create failed (http ${res.status})`)
       // Job never started — refund the charge.
-      await refundCredits(chargedUserId)
+      if (chargedUserId) await refundCredits(chargedUserId)
       return NextResponse.json(
         { error: `MVSEP create failed: ${safeStringify(data?.data ?? json)}` },
         { status: 502 }
