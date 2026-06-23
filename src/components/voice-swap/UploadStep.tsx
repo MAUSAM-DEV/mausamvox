@@ -197,13 +197,20 @@ function formatSize(bytes: number) {
 export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
 
-  // When VoiceSwapPage restores a result from localStorage after initial render,
-  // the result prop changes but phase is already 'idle' (useState only uses the
-  // initial value once). Sync phase here so the done state renders correctly.
+  // Two-way sync between the result prop and local phase:
+  // • null→value: localStorage restore sets result after mount — advance to done.
+  // • value→null: "+New" or handleNewSwap clears result while this component is
+  //   still mounted — reset everything back to idle so the upload UI renders.
   useEffect(() => {
     if (result && phase === 'idle') {
       console.log('[stem-cache] restored result detected — switching phase to done')
       setPhase('done')
+    } else if (!result && phase !== 'idle') {
+      setPhase('idle')
+      setCurrentFile(null)
+      setErrorMsg('')
+      setItems([])
+      setEditingId(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
@@ -680,12 +687,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
             {/* Stem download cards — only render entries that have a URL */}
             <div className="vs-stems">
               {([
-                { url: displayResult.vocalsUrl,       icon: '🎤', name: 'Vocals',       hint: 'Isolated voice track',   file: 'vocals.mp3' },
-                { url: displayResult.backingVocalsUrl, icon: '🎶', name: 'Backing Vocals', hint: 'Backing / harmony vocals', file: 'backing-vocals.mp3' },
-                { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: 'Full backing track',     file: 'instrumental.mp3' },
-                { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',         hint: 'Low-end bass line',      file: 'bass.mp3'   },
-                { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',        hint: 'Percussion only',        file: 'drums.mp3'  },
-                { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',        hint: 'Melody / instruments',   file: 'other.mp3'  },
+                { url: displayResult.vocalsUrl,        icon: '🎤', name: 'Vocals',         hint: 'Full isolated vocal stem',   file: 'vocals.mp3' },
+                { url: displayResult.leadVocalsUrl,    icon: '🎙️', name: 'Lead Vocals',    hint: 'Lead vocal only',            file: 'lead-vocals.mp3' },
+                { url: displayResult.backingVocalsUrl, icon: '🎶', name: 'Backing Vocals', hint: 'Backing / harmony vocals',   file: 'backing-vocals.mp3' },
+                { url: displayResult.instrumentalUrl,  icon: '🎼', name: 'Instrumental',   hint: 'Full backing track',         file: 'instrumental.mp3' },
+                { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',           hint: 'Low-end bass line',          file: 'bass.mp3'   },
+                { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',          hint: 'Percussion only',            file: 'drums.mp3'  },
+                { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',          hint: 'Melody / instruments',       file: 'other.mp3'  },
               ] as const).filter(({ url }) => url).map(({ url, icon, name, hint, file }) => (
                 <a
                   key={name}

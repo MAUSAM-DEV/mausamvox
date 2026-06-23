@@ -195,10 +195,10 @@ export function VoiceSwapPage() {
     }
   }, [])
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, duration = 3000) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast({ visible: true, message })
-    toastTimerRef.current = setTimeout(() => setToast({ visible: false, message: '' }), 3000)
+    toastTimerRef.current = setTimeout(() => setToast({ visible: false, message: '' }), duration)
   }, [])
 
   function goStep(n: Step) {
@@ -470,7 +470,7 @@ export function VoiceSwapPage() {
       // throws on failure / timeout. Used by both single-job and dual-job paths.
       const pollJob = async (predictionId: string): Promise<string> => {
         const POLL_INTERVAL_MS = 2000
-        const MAX_ATTEMPTS = 90 // ~3 minutes
+        const MAX_ATTEMPTS = 240 // ~8 minutes — RVC on a full song can take 5–7 min on shared GPU
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
           const res = await fetch(`/api/voice-convert?id=${predictionId}`)
@@ -644,7 +644,9 @@ export function VoiceSwapPage() {
     } catch (err) {
       console.error('[voice-swap] handleProcess threw:', err)
       setProcessing(false)
-      showToast(err instanceof Error ? err.message : 'Voice conversion failed')
+      // 8-second toast for errors — long enough to read even if the user's
+      // eyes were on the fading overlay when the message appeared.
+      showToast(err instanceof Error ? err.message : 'Voice conversion failed', 8000)
     }
   }
 
