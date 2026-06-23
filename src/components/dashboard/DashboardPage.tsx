@@ -56,12 +56,13 @@ const TOOLS = [
   },
 ]
 
-const RECENT = [
-  { emoji: '🎵', name: 'Kesariya — Remix', voice: 'My Voice · Female', score: 88, hi: true },
-  { emoji: '🎸', name: 'Tum Hi Ho — Cover', voice: 'My Voice · Neutral', score: 91, hi: true },
-  { emoji: '🎹', name: 'Blinding Lights', voice: 'Voice 2 · Male', score: 61, hi: false },
-  { emoji: '🎤', name: 'Channa Mereya', voice: 'My Voice · Female', score: 79, hi: true },
-]
+type RecentSwap = {
+  id: string
+  song_name: string
+  voice_used: string
+  quality_score: number | null
+  created_at: string
+}
 
 export function DashboardPage() {
   const [userName, setUserName] = useState('')
@@ -70,6 +71,8 @@ export function DashboardPage() {
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
   const [voiceSwapsCount, setVoiceSwapsCount] = useState<number | null>(null)
+  const [recentSwaps, setRecentSwaps] = useState<RecentSwap[]>([])
+  const [swapsLoading, setSwapsLoading] = useState(true)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
 
@@ -106,11 +109,14 @@ export function DashboardPage() {
 
       supabase
         .from('voice_swaps')
-        .select('*', { count: 'exact', head: true })
+        .select('id, song_name, voice_used, quality_score, created_at', { count: 'exact' })
         .eq('user_id', u.id)
-        .then(({ count, error }) => {
-          if (error) console.error('voice_swaps count failed', error)
-          else setVoiceSwapsCount(count ?? 0)
+        .order('created_at', { ascending: false })
+        .limit(4)
+        .then(({ data: s, count, error }) => {
+          if (error) console.error('voice_swaps fetch failed', error)
+          else { setVoiceSwapsCount(count ?? 0); setRecentSwaps(s ?? []) }
+          setSwapsLoading(false)
         })
     })
   }, [])
@@ -247,19 +253,30 @@ export function DashboardPage() {
             <Link href="/voice-swap" className="db-sec-more">New swap →</Link>
           </div>
           <div className="db-recent">
-            {RECENT.map((item, i) => (
-              <div key={i} className="db-row">
-                <span className="db-row-ico">{item.emoji}</span>
-                <div className="db-row-info">
-                  <div className="db-row-name">{item.name}</div>
-                  <div className="db-row-meta">{item.voice}</div>
-                </div>
-                <span className={`db-score ${item.hi ? 'db-score--hi' : 'db-score--mid'}`}>
-                  {item.score}
-                </span>
-                <Link href="/voice-swap" className="db-row-open">Open</Link>
+            {swapsLoading ? (
+              <div style={{ padding: '20px 0', color: '#5A5A80', fontSize: '13px' }}>Loading…</div>
+            ) : recentSwaps.length === 0 ? (
+              <div style={{ padding: '20px 0', color: '#5A5A80', fontSize: '13px' }}>
+                No swaps yet —{' '}
+                <Link href="/voice-swap" style={{ color: '#8B5CF6' }}>start your first</Link>
               </div>
-            ))}
+            ) : (
+              recentSwaps.map((item) => (
+                <div key={item.id} className="db-row">
+                  <span className="db-row-ico">🎵</span>
+                  <div className="db-row-info">
+                    <div className="db-row-name">{item.song_name}</div>
+                    <div className="db-row-meta">{item.voice_used}</div>
+                  </div>
+                  {item.quality_score !== null && (
+                    <span className={`db-score ${item.quality_score >= 80 ? 'db-score--hi' : 'db-score--mid'}`}>
+                      {item.quality_score}
+                    </span>
+                  )}
+                  <Link href="/voice-swap" className="db-row-open">Open</Link>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </main>
