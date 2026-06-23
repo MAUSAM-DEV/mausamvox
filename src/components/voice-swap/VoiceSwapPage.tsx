@@ -130,11 +130,14 @@ export function VoiceSwapPage() {
       .order('created_at', { ascending: false })
       .then(({ data: clones, error }) => {
         if (!error && clones) {
-          const mapped: VoiceOption[] = clones.map((c, i) => ({
+          const mapped: VoiceOption[] = clones.map((c) => ({
             id: c.id,
             name: c.name,
             sub: c.type === 'studio' ? 'Studio Clone' : 'Express Clone',
-            avatarBg: AVATAR_PALETTE[i % AVATAR_PALETTE.length],
+            icon: c.type === 'studio' ? '⭐' : '🎙️',
+            avatarBg: c.type === 'studio'
+              ? 'linear-gradient(135deg,#8B5CF6,#EC4899)'
+              : 'linear-gradient(135deg,#06B6D4,#3B82F6)',
             modelUrl: c.model_url ?? undefined,
           }))
           setVoices(mapped)

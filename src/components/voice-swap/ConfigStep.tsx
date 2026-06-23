@@ -15,6 +15,7 @@ export interface VoiceOption {
   name: string
   sub: string
   avatarBg: string
+  icon?: string
   modelUrl?: string
 }
 
@@ -101,7 +102,7 @@ function VoiceGrid({
           title={!v.modelUrl ? 'Sample-only voice — full voice conversion requires model training' : undefined}
         >
           {selectedVoiceId === v.id && <div className="vs-va-check">✓</div>}
-          <div className="vs-va-avatar" style={{ background: v.avatarBg }}>🎤</div>
+          <div className="vs-va-avatar" style={{ background: v.avatarBg }}>{v.icon ?? '🎤'}</div>
           <div className="vs-va-name">{v.name}</div>
           <div className="vs-va-sub">{v.sub}{!v.modelUrl ? ' · sample only' : ''}</div>
         </div>
