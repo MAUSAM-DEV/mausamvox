@@ -227,7 +227,7 @@ export function VoiceSwapPage() {
       user_id: userId,
       song_name: songName,
       voice_used: voiceUsed,
-      quality_score: 82,
+      quality_score: null,
       result_url: resultUrl,
     })
     if (!error) {
@@ -555,7 +555,7 @@ export function VoiceSwapPage() {
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
-        showToast('Both voices swapped! Quality score: 82/100')
+        showToast('Both voices swapped!')
 
         if (charge) deductCredits(400, 'voice_swap_duet_full')
         recordSwap(
@@ -612,11 +612,7 @@ export function VoiceSwapPage() {
       setConvertedVocalsUrl(convertedUrl)
       setProcessing(false)
       setStep(3)
-      showToast(
-        type === 'preview'
-          ? 'Preview ready! Quality score: 82/100'
-          : 'Swap complete! Quality score: 82/100'
-      )
+      showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
 
       // Deduct credits and record swap (non-blocking). A free regen passes
       // charge=false so no credits are taken, but the result is still recorded.
