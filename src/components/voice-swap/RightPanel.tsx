@@ -44,11 +44,12 @@ export interface VoiceSwap {
 
 interface RightPanelProps {
   onToast: (msg: string) => void
+  onNewSwap: () => void
   swaps: VoiceSwap[]
   swapsLoading: boolean
 }
 
-export function RightPanel({ onToast, swaps, swapsLoading }: RightPanelProps) {
+export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading }: RightPanelProps) {
   return (
     <>
       <aside className="vs-rpanel">
@@ -56,7 +57,7 @@ export function RightPanel({ onToast, swaps, swapsLoading }: RightPanelProps) {
           <span className="vs-rp-title">Recent Swaps</span>
           <button
             className="vs-rp-new"
-            onClick={() => onToast('Starting new swap…')}
+            onClick={onNewSwap}
           >
             + New
           </button>

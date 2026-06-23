@@ -781,7 +781,7 @@ export function VoiceSwapPage() {
           })()}
         </div>
 
-        <RightPanel onToast={showToast} swaps={swaps} swapsLoading={swapsLoading} />
+        <RightPanel onToast={showToast} onNewSwap={handleNewSwap} swaps={swaps} swapsLoading={swapsLoading} />
       </div>
 
       <ProcessingOverlay
