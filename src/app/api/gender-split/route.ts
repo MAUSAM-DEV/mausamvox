@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ADMIN_EMAILS } from '@/lib/admin'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -216,30 +217,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // 3. Plan gate — premium tiers are starter | pro | studio; only 'free' is blocked.
-    if (profile.plan === 'free') {
-      return NextResponse.json({ error: 'Premium feature' }, { status: 403 })
-    }
+    // Admin accounts skip all credit gates and the plan gate — treat as unlimited.
+    const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
 
-    // 4. Balance gate.
-    if (profile.credits_remaining < GENDER_SPLIT_COST) {
-      return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
-    }
+    if (!isAdmin) {
+      // 3. Plan gate — premium tiers are starter | pro | studio; only 'free' is blocked.
+      if (profile.plan === 'free') {
+        return NextResponse.json({ error: 'Premium feature' }, { status: 403 })
+      }
 
-    // 5. Deduct BEFORE starting MVSEP work.
-    // KNOWN LIMITATION: this read-then-write debit is not atomic, so concurrent
-    // requests can race and over/under-spend. Mirrors /api/credits/deduct.
-    // Future hardening: move to an atomic Postgres RPC (e.g. a `deduct_credits`
-    // SECURITY DEFINER function) so the check-and-decrement is a single statement.
-    const { error: debitError } = await supabaseAdmin
-      .from('users')
-      .update({ credits_remaining: profile.credits_remaining - GENDER_SPLIT_COST })
-      .eq('id', user.id)
-    if (debitError) {
-      console.error('[gender-split] debit failed:', debitError.message)
-      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+      // 4. Balance gate.
+      if (profile.credits_remaining < GENDER_SPLIT_COST) {
+        return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
+      }
+
+      // 5. Deduct BEFORE starting MVSEP work.
+      // KNOWN LIMITATION: this read-then-write debit is not atomic, so concurrent
+      // requests can race and over/under-spend. Mirrors /api/credits/deduct.
+      // Future hardening: move to an atomic Postgres RPC (e.g. a `deduct_credits`
+      // SECURITY DEFINER function) so the check-and-decrement is a single statement.
+      const { error: debitError } = await supabaseAdmin
+        .from('users')
+        .update({ credits_remaining: profile.credits_remaining - GENDER_SPLIT_COST })
+        .eq('id', user.id)
+      if (debitError) {
+        console.error('[gender-split] debit failed:', debitError.message)
+        return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+      }
+      chargedUserId = user.id
     }
-    chargedUserId = user.id
     // ──────────────────────────────────────────────────────────────────────────
 
     const token = getToken()

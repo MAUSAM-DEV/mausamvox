@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { ADMIN_EMAILS } from '@/lib/admin'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
@@ -34,6 +35,7 @@ export function VoiceSwapPage() {
 
   // Upload / stems
   const [userId, setUserId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
@@ -86,6 +88,7 @@ export function VoiceSwapPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       const uid = data.user?.id ?? null
       setUserId(uid)
+      setIsAdmin(ADMIN_EMAILS.includes(data.user?.email ?? ''))
       if (!uid) {
         setSwapsLoading(false)
         return
@@ -429,7 +432,7 @@ export function VoiceSwapPage() {
     // Server-driven stem splits (not manual extracted stems) cost credits and
     // get the automatic background lead/backing split.
     if (result.storagePath) {
-      deductCredits(50, 'stem_split')
+      if (!isAdmin) deductCredits(50, 'stem_split')
       void runKaraokeSplit(result)
     }
   }
@@ -562,7 +565,7 @@ export function VoiceSwapPage() {
         setStep(3)
         showToast('Both voices swapped!')
 
-        if (charge) deductCredits(400, 'voice_swap_duet_full')
+        if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
         recordSwap(
           stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           `${voice.name} + ${voice2.name}`,
@@ -631,7 +634,7 @@ export function VoiceSwapPage() {
       // Deduct credits and record swap (non-blocking). A free regen passes
       // charge=false so no credits are taken, but the result is still recorded.
       if (type === 'full') {
-        if (charge) deductCredits(200, 'voice_swap_full')
+        if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
         recordSwap(
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voice?.name ?? 'Unknown Voice',

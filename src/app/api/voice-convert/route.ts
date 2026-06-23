@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+import { ADMIN_EMAILS } from '@/lib/admin'
 
 export const maxDuration = 30
 
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
     // Run when voiceId is present (server-side model URL resolution) or when
     // isPreview is true (credit gate). Full swaps with only a client-supplied
     // voiceModelUrl and no voiceId skip auth — legacy path, no server lookup needed.
-    let user: { id: string } | null = null
+    let user: { id: string; email?: string | null } | null = null
     if (voiceId || isPreview) {
       if (!adminConfigured) {
         console.error('[voice-convert] SUPABASE_SERVICE_ROLE_KEY is not configured')
@@ -153,9 +154,11 @@ export async function POST(req: NextRequest) {
         // Defensive — can't happen: auth ran above when isPreview is true.
         return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
       }
+      // Admin accounts are exempt from all credit gates — skip the RPC entirely.
+      const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
       // Manual-extracted-stems tracks have no storagePath — always free, so skip
       // the RPC entirely and never touch preview_uses.
-      if (trackKey) {
+      if (!isAdmin && trackKey) {
         const { data, error } = await supabaseAdmin.rpc('consume_preview', {
           p_user: user.id,
           p_track: trackKey,
