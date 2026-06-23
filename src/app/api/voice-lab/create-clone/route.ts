@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
         user_id: user.id,
         name: name.trim(),
         type,
-        status: 'ready',
+        status: type === 'studio' ? 'pending' : 'ready',
         sample_path: path,
         created_at: new Date().toISOString(),
         ...(sampleUrl ? { sample_url: sampleUrl } : {}),
