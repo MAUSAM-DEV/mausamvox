@@ -4,28 +4,28 @@ import { useReveal } from './useReveal'
 
 const techs = [
   {
-    tag: 'Voice Clone',
-    title: 'Studio Engine',
-    desc: 'Train a custom voice from your own samples and reuse it across every swap.',
-    model: 'Studio Engine · MausamVox',
+    tag: "Voice Clone",
+    title: "VoxClone Engine",
+    desc: "Train a custom voice from your own samples in 30 seconds to 10 minutes. Supports 12+ languages. Reuse it across every swap.",
+    model: "VoxClone · Mausam Studio Engine",
   },
   {
-    tag: 'Vocal Isolation',
-    title: 'Studio Engine',
-    desc: '2026-grade vocal separation. 95%+ clean isolation, tuned for dense mixes and layered harmonies.',
-    model: 'Studio Engine · MausamVox',
+    tag: "Vocal Isolation",
+    title: "ClearVoice Engine",
+    desc: "Industry-leading vocal separation, tuned for dense mixes and layered harmonies. Fast, near-real-time processing.",
+    model: "ClearVoice · Mausam Studio Engine",
   },
   {
-    tag: 'Full Stem Split',
-    title: 'Studio Engine',
-    desc: 'Clean 6-stem separation built for production work — vocals, bass, drums, and more, isolated with studio-grade clarity.',
-    model: 'Studio Engine · MausamVox',
+    tag: "Full Stem Split",
+    title: "StemSplit Engine",
+    desc: "Clean 6-stem separation built for production work — vocals, bass, drums, and more, isolated with studio-grade clarity.",
+    model: "StemSplit · Mausam Studio Engine",
   },
   {
-    tag: 'Infrastructure',
-    title: 'Elastic Cloud Compute',
-    desc: 'Pay-per-second processing. No upfront infrastructure cost. Scales from zero to enterprise without changing the architecture.',
-    model: 'Auto-Scaling',
+    tag: "Infrastructure",
+    title: "Elastic Compute Grid",
+    desc: "Pay-per-second processing. No upfront infrastructure cost. Scales from zero to enterprise without changing the architecture.",
+    model: "Elastic Compute Grid",
   },
 ]
 
@@ -58,7 +58,7 @@ export function TechSection() {
             marginBottom: '16px',
           }}
         >
-          World-class models.<br />Not just the fastest ones.
+          Powered by<br />Mausam Studio Engine.
         </h2>
         <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
           Built and tuned specifically for vocals — not retrofitted speech models.

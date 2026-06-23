@@ -23,7 +23,7 @@ const features = [
     icon: '✂️',
     title: 'Smart Stem Studio',
     desc: '6-stem separation, tuned for clean isolation even on dense mixes. BPM and key detection. In-browser per-stem editing. Smart file naming.',
-    tag: '6 Stems · Studio Engine',
+    tag: "6 Stems · StemSplit Engine",
     tagType: 'c',
   },
   {
