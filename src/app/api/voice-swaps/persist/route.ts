@@ -104,14 +104,14 @@ export async function POST(req: NextRequest) {
       const mp3Buffer = Buffer.from(await res.arrayBuffer())
       console.log('[voice-swaps/persist] downloaded', mp3Buffer.length, 'bytes for swap', swapId)
 
-      const { error: uploadError } = await supabaseAdmin.storage
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from(VOICE_SWAPS_BUCKET)
         .upload(swapPath, mp3Buffer, { contentType: 'audio/mpeg', upsert: false })
       if (uploadError) {
         console.error('[voice-swaps/persist] upload failed:', uploadError.message)
       } else {
         resultPath = swapPath
-        console.log('[voice-swaps/persist] uploaded to', `${VOICE_SWAPS_BUCKET}/${swapPath}`)
+        console.log('[voice-swaps/persist] uploaded — local path:', swapPath, '| supabase fullPath:', uploadData?.fullPath ?? '(no fullPath returned)')
       }
     }
   } catch (err) {
