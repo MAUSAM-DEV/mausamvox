@@ -291,7 +291,7 @@ export function VoiceSwapPage() {
   // it to durable Supabase storage, and inserts the voice_swaps row — all within
   // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
   async function persistSwap(predictionId: string, songName: string, voiceUsed: string) {
-    if (!userId) return
+    if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return }
     try {
       const res = await fetch('/api/voice-swaps/persist', {
         method: 'POST',
@@ -302,6 +302,8 @@ export function VoiceSwapPage() {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
         return
       }
+      const persisted = await res.json()
+      console.log('[voice-swap] persisted swap', persisted.swapId, persisted.persisted ? `→ storage path saved` : '(result_url only, no durable copy)')
       // Refresh the Recent Swaps panel with the newly inserted row.
       const supabase = createClient()
       const { data: s } = await supabase
@@ -762,6 +764,7 @@ export function VoiceSwapPage() {
 
       // Deduct credits and record swap (non-blocking). A free regen passes
       // charge=false so no credits are taken, but the result is still recorded.
+      console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
       if (type === 'full') {
         if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
         persistSwap(
