@@ -68,6 +68,39 @@ function encodeWav(buffer: AudioBuffer): Blob {
 }
 
 // ---------------------------------------------------------------------------
+// MP3 encoder — uses lamejs (pure-JS LAME port), 192 kbps stereo
+// ---------------------------------------------------------------------------
+function encodeMp3(buffer: AudioBuffer): Blob {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Mp3Encoder } = require('lamejs') as {
+    Mp3Encoder: new (ch: number, sr: number, kbps: number) => {
+      encodeBuffer(l: Int16Array, r?: Int16Array): Int8Array
+      flush(): Int8Array
+    }
+  }
+  const numCh = Math.min(buffer.numberOfChannels, 2)
+  const encoder = new Mp3Encoder(numCh, buffer.sampleRate, 192)
+  const toInt16 = (ch: Float32Array): Int16Array => {
+    const out = new Int16Array(ch.length)
+    for (let i = 0; i < ch.length; i++) out[i] = Math.max(-32768, Math.min(32767, Math.round(ch[i] * 32768)))
+    return out
+  }
+  const left = toInt16(buffer.getChannelData(0))
+  const right = numCh > 1 ? toInt16(buffer.getChannelData(1)) : undefined
+  const CHUNK = 1152
+  const chunks: Uint8Array<ArrayBuffer>[] = []
+  const push = (raw: Int8Array) => {
+    if (raw.length > 0) chunks.push(new Uint8Array(raw.buffer as ArrayBuffer, raw.byteOffset, raw.byteLength))
+  }
+  for (let i = 0; i < left.length; i += CHUNK) {
+    const l = left.subarray(i, i + CHUNK)
+    push(right ? encoder.encodeBuffer(l, right.subarray(i, i + CHUNK)) : encoder.encodeBuffer(l))
+  }
+  push(encoder.flush())
+  return new Blob(chunks, { type: 'audio/mpeg' })
+}
+
+// ---------------------------------------------------------------------------
 // Browser mixing via OfflineAudioContext
 // Returns a WAV Blob or null if mixing fails.
 // Vocal gain uses equal-power law (1/√N) so two vocal channels at N=2 have
@@ -244,6 +277,8 @@ export function ResultStep({
   // srcFor falls back to convertedVocalsUrl when null.
   const [mixedSwappedVocalsUrl, setMixedSwappedVocalsUrl] = useState<string | null>(null)
   const mixedSwappedVocalsRef = useRef<string | null>(null)
+
+  const [mp3Encoding, setMp3Encoding] = useState(false)
 
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
@@ -451,6 +486,35 @@ export function ResultStep({
     onToast(isMixed ? `Downloading ${ab} mix (WAV)…` : `Downloading ${ab} vocals…`)
   }
 
+  async function handleDownloadMp3() {
+    const srcUrl = mode === 'full' ? mixedSwappedUrl : (mixedSwappedVocalsUrl ?? convertedVocalsUrl)
+    if (!srcUrl) { onToast('Nothing to download yet'); return }
+    setMp3Encoding(true)
+    onToast('Encoding MP3…')
+    try {
+      const res = await fetch(srcUrl)
+      if (!res.ok) throw new Error('fetch failed')
+      const arrBuf = await res.arrayBuffer()
+      const ctx = new AudioContext()
+      const decoded = await ctx.decodeAudioData(arrBuf)
+      await ctx.close()
+      const blob = encodeMp3(decoded)
+      const mp3Url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = mp3Url
+      anchor.download = mode === 'full'
+        ? `voice-swap-${ab.toLowerCase()}-mix.mp3`
+        : `voice-swap-${ab.toLowerCase()}-vocals.mp3`
+      anchor.click()
+      URL.revokeObjectURL(mp3Url)
+      onToast('MP3 downloaded!')
+    } catch {
+      onToast('MP3 encoding failed — download the WAV instead')
+    } finally {
+      setMp3Encoding(false)
+    }
+  }
+
   function fmt(t: number) {
     const s = Math.max(0, Math.round(t))
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -634,8 +698,16 @@ export function ResultStep({
             {fullMixing
               ? '⏳ Mixing…'
               : mode === 'full'
-                ? `↓ Download ${ab} Mix (WAV)`
-                : `↓ Download ${ab} Vocals`}
+                ? `↓ ${ab} Mix (WAV)`
+                : `↓ ${ab} Vocals`}
+          </button>
+          <button
+            className="vs-dl-btn vs-dl-btn--outline"
+            onClick={handleDownloadMp3}
+            disabled={fullMixing || !activeUrl || mp3Encoding}
+            title="Encode and download as 192 kbps MP3"
+          >
+            {mp3Encoding ? '⏳ Encoding…' : `↓ MP3`}
           </button>
           <button
             className="vs-dl-btn vs-dl-btn--outline vs-dl-btn--soon"

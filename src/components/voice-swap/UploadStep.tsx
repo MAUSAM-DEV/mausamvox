@@ -8,7 +8,7 @@ type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'un
 type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
-const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
+const MAX_BYTES = 75 * 1024 * 1024 // 75 MB
 
 function guessMime(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase()
@@ -187,7 +187,7 @@ function validateFile(file: File): string | null {
     return `Only MP3, WAV, and M4A files are supported (got .${ext || 'unknown'}).`
   }
   if (file.size > MAX_BYTES) {
-    return `File must be 50 MB or smaller (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`
+    return `File must be 75 MB or smaller (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`
   }
   return null
 }
@@ -523,8 +523,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         <div className="vs-panel-title">Upload Your Track</div>
         <div className="vs-panel-sub">
           {uploadMode === 'full'
-            ? 'MP3, WAV, M4A — up to 50 MB · Stems separated automatically'
-            : 'MP3, WAV, M4A — up to 50 MB per stem · Vocals and instrumental required'}
+            ? 'MP3, WAV, M4A — up to 75 MB · Stems separated automatically'
+            : 'MP3, WAV, M4A — up to 75 MB per stem · Vocals and instrumental required'}
         </div>
 
         {/* ── idle ─────────────────────────────────────────────── */}
@@ -557,7 +557,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                   <div className="vs-uz-icon">🎵</div>
                   <div className="vs-uz-title">Drop your track here</div>
                   <div className="vs-uz-sub">or click to browse files</div>
-                  <div className="vs-uz-formats">MP3 · WAV · M4A · max 50 MB</div>
+                  <div className="vs-uz-formats">MP3 · WAV · M4A · max 75 MB</div>
                 </div>
 
                 {/* Duet declaration — pre-upload toggle that routes to gender-split
@@ -601,7 +601,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                       select a folder
                     </span>
                   </div>
-                  <div className="vs-uz-formats">Vocals + Instrumental required · MP3 · WAV · M4A · max 50 MB each</div>
+                  <div className="vs-uz-formats">Vocals + Instrumental required · MP3 · WAV · M4A · max 75 MB each</div>
                 </div>
 
                 {items.length > 0 && (
@@ -836,7 +836,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           {['MP3', 'WAV', 'M4A'].map((fmt) => (
             <span key={fmt} className="vs-fmt-chip">{fmt}</span>
           ))}
-          <span className="vs-fmt-chip">MAX 50 MB</span>
+          <span className="vs-fmt-chip">MAX 75 MB</span>
         </div>
       </div>
 
