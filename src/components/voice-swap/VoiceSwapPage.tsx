@@ -44,6 +44,9 @@ export function VoiceSwapPage() {
   // can show a disabled "Splitting duet…" state and block double-starts.
   const [genderSplitting, setGenderSplitting] = useState(false)
   const [karaokeStatus, setKaraokeStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
+  // User-declared duet flag: checked pre-upload to route to MVSEP gender-split
+  // instead of KARA_2. Lifted here (not in UploadStep) because routing lives here.
+  const [isDuet, setIsDuet] = useState(false)
 
   // Voice picker
   const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
@@ -401,27 +404,24 @@ export function VoiceSwapPage() {
     if (u) { setPlan(u.plan); setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
   }
 
-  // Trigger for the premium duet split. Free users are routed to an upsell (not a
-  // dead click); the server still re-checks plan + balance and deducts, so the
-  // runner's 402/403 toasts catch any client/server disagreement. We don't deduct
-  // here (the route does) — only refresh the balance once a split lands.
+  // Trigger for the post-upload duet split (fallback when the user didn't declare
+  // a duet pre-upload). Admin bypasses all client-side plan/credit gates — the
+  // server is still the real gate and already has its own admin bypass.
   async function handleSplitDuet() {
     if (!stemResult) return
-    if (plan === 'free') {
+    if (!isAdmin && plan === 'free') {
       showToast('Duet split is a Premium feature — upgrade to split male/female vocals.')
       return
     }
-    if (creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST) {
+    if (!isAdmin && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST) {
       showToast(`Not enough credits for duet split (${GENDER_SPLIT_COST} needed).`)
       return
     }
     if (genderSplitting) return // already running — block double-starts
+    setIsDuet(true)
     setGenderSplitting(true)
     try {
       await runGenderSplit(stemResult)
-      // Always refetch the true balance afterwards: success charged 250, a 402/403
-      // race charged nothing, a mid-job failure was refunded — a read is correct
-      // in every case and keeps the displayed credits honest.
       await refreshCredits()
     } finally {
       setGenderSplitting(false)
@@ -438,10 +438,16 @@ export function VoiceSwapPage() {
       console.warn('[stem-cache] save failed:', e)
     }
     // Server-driven stem splits (not manual extracted stems) cost credits and
-    // get the automatic background lead/backing split.
+    // get the automatic background vocal split. Duet tracks skip KARA_2 (which
+    // can't separate alternating leads) and go straight to MVSEP gender-split.
     if (result.storagePath) {
       if (!isAdmin) deductCredits(50, 'stem_split')
-      void runKaraokeSplit(result)
+      if (isDuet) {
+        setGenderSplitting(true)
+        runGenderSplit(result).then(() => refreshCredits()).finally(() => setGenderSplitting(false))
+      } else {
+        void runKaraokeSplit(result)
+      }
     }
   }
 
@@ -674,6 +680,7 @@ export function VoiceSwapPage() {
     setDuetMode('one')
     setDuetSinger('male')
     setSelectedVoiceId2(null)
+    setIsDuet(false)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
@@ -720,6 +727,9 @@ export function VoiceSwapPage() {
                 genderSplitting={genderSplitting}
                 onSplitDuet={handleSplitDuet}
                 karaokeStatus={karaokeStatus}
+                isDuet={isDuet}
+                onSetIsDuet={setIsDuet}
+                isAdmin={isAdmin}
               />
             )}
             {step === 2 && (

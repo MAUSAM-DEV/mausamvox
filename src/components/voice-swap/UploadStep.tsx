@@ -121,13 +121,16 @@ interface UploadStepProps {
   onDone: (result: StemResult) => void
   onContinue: () => void
   onToast: (msg: string) => void
-  // Premium duet (gender) split — gated on plan + credits client-side for UX;
-  // the server is the real gate. onSplitDuet triggers the page-level runner.
   plan: string | null
   creditsRemaining: number | null
   genderSplitting: boolean
   onSplitDuet: () => void
   karaokeStatus?: 'idle' | 'running' | 'done' | 'failed'
+  // Duet declaration — checked pre-upload to auto-route to gender-split instead
+  // of karaoke-split. Lifted to VoiceSwapPage so the routing decision lives there.
+  isDuet: boolean
+  onSetIsDuet: (v: boolean) => void
+  isAdmin?: boolean
 }
 
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split).
@@ -195,7 +198,7 @@ function formatSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle' }: UploadStepProps) {
+export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle', isDuet, onSetIsDuet, isAdmin = false }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
 
   // Two-way sync between the result prop and local phase:
@@ -249,8 +252,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, contentType: mime }),
       })
+      // Check ok before .json() — a cold-start timeout returns HTML, not JSON.
+      if (!presignRes.ok) {
+        let msg = `Failed to get upload URL (${presignRes.status})`
+        try { const e = await presignRes.json(); msg = e.error ?? msg } catch { /* HTML body — use status */ }
+        throw new Error(msg)
+      }
       const presign = await presignRes.json()
-      if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
 
       // Step 2 — PUT file directly to Supabase Storage (bypasses Vercel 4.5 MB body limit)
       const putRes = await fetch(presign.uploadUrl, {
@@ -268,8 +276,12 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         body: JSON.stringify({ storagePath: presign.path }),
       })
 
+      if (!res.ok) {
+        let msg = `Stem split failed (${res.status})`
+        try { const e = await res.json(); msg = e.error ?? msg } catch { /* HTML body — use status */ }
+        throw new Error(msg)
+      }
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Stem split failed')
 
       const stemResult: StemResult = {
         storagePath: presign.path,
@@ -534,18 +546,39 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
             </div>
 
             {uploadMode === 'full' && (
-              <div
-                className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
-                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="vs-uz-icon">🎵</div>
-                <div className="vs-uz-title">Drop your track here</div>
-                <div className="vs-uz-sub">or click to browse files</div>
-                <div className="vs-uz-formats">MP3 · WAV · M4A · max 50 MB</div>
-              </div>
+              <>
+                <div
+                  className={`vs-upload-zone ${dragging ? 'vs-upload-zone--drag' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="vs-uz-icon">🎵</div>
+                  <div className="vs-uz-title">Drop your track here</div>
+                  <div className="vs-uz-sub">or click to browse files</div>
+                  <div className="vs-uz-formats">MP3 · WAV · M4A · max 50 MB</div>
+                </div>
+
+                {/* Duet declaration — pre-upload toggle that routes to gender-split
+                    (MVSEP male/female) instead of karaoke-split (KARA_2). KARA_2
+                    can't cleanly separate alternating leads; MVSEP handles it. */}
+                <label className="vs-duet-toggle" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="vs-duet-toggle-check"
+                    checked={isDuet}
+                    onChange={(e) => onSetIsDuet(e.target.checked)}
+                  />
+                  <span className="vs-duet-toggle-text">This is a duet (alternating male/female leads)</span>
+                  {!isAdmin && plan === 'free' && (
+                    <span className="vs-duet-toggle-gate">Requires Premium</span>
+                  )}
+                  {!isAdmin && plan !== 'free' && (
+                    <span className="vs-duet-toggle-cost">250 cr</span>
+                  )}
+                </label>
+              </>
             )}
 
             {uploadMode === 'extracted-stems' && (
@@ -745,15 +778,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
               {downloadingZip ? 'Preparing ZIP…' : '↓ Download All Stems (ZIP)'}
             </button>
 
-            {/* Premium duet split — separates the vocal stem into male/female
-                singers. State is derived from plan + credits; the server is the
-                real gate (the runner surfaces 402/403 if it disagrees). */}
+            {/* Duet split fallback — shown when the user didn't declare a duet
+                pre-upload. Admins bypass all plan/credit gates (server enforces
+                the real gate via isAdmin check in /api/gender-split). */}
             {(() => {
               const done = !!(displayResult.maleVocalsUrl || displayResult.femaleVocalsUrl)
-              const isFree = plan === 'free'
-              const tooPoor = !isFree && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST
-              // Free → upsell (clickable, not dead). Disabled only while running,
-              // already done, or premium-but-too-poor.
+              const isFree = !isAdmin && plan === 'free'
+              const tooPoor = !isAdmin && !isFree && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST
               const disabled = genderSplitting || done || tooPoor
               const label = done
                 ? '✓ Duet split'
@@ -761,7 +792,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                   ? 'Splitting duet…'
                   : isFree
                     ? `🔒 Split duet · ${GENDER_SPLIT_COST} cr · Premium`
-                    : `Split duet · ${GENDER_SPLIT_COST} cr · Premium`
+                    : isAdmin
+                      ? 'Split duet'
+                      : `Split duet · ${GENDER_SPLIT_COST} cr · Premium`
               return (
                 <>
                   <button
@@ -996,7 +1029,27 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         }
         .vs-zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* ── premium duet split button ── */
+        /* ── duet toggle (pre-upload declaration) ── */
+        .vs-duet-toggle {
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 14px; margin-top: 10px;
+          border-radius: 10px; border: 1px solid #1E1E3A;
+          background: rgba(236,72,153,.03); cursor: pointer;
+          user-select: none; transition: border-color 0.2s, background 0.2s;
+        }
+        .vs-duet-toggle:hover {
+          border-color: rgba(236,72,153,.3);
+          background: rgba(236,72,153,.06);
+        }
+        .vs-duet-toggle-check { accent-color: #EC4899; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
+        .vs-duet-toggle-text { font-size: 13px; color: #C4C4E0; flex: 1; }
+        .vs-duet-toggle-gate {
+          font-size: 10px; font-weight: 600; color: #8B5CF6;
+          background: rgba(139,92,246,.12); padding: 2px 7px; border-radius: 99px; flex-shrink: 0;
+        }
+        .vs-duet-toggle-cost { font-size: 11px; color: #EC4899; flex-shrink: 0; }
+
+        /* ── duet split button (post-upload fallback) ── */
         .vs-duet-btn {
           width: 100%; margin-top: 8px; padding: 10px; border-radius: 10px;
           border: 1px solid rgba(236,72,153,.4);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-export const maxDuration = 15
+export const maxDuration = 30
 
 // Returns a presigned upload URL so the browser can PUT the file DIRECTLY
 // to Supabase Storage without proxying bytes through this server.
