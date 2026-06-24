@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "jszip": "^3.10.1",
-    "lamejs": "^1.2.1",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",

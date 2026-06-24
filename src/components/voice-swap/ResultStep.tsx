@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Mp3Encoder } from '@breezystack/lamejs'
 import type { StemResult } from './UploadStep'
 
 type AbSide = 'Original' | 'Swapped'
@@ -68,16 +69,9 @@ function encodeWav(buffer: AudioBuffer): Blob {
 }
 
 // ---------------------------------------------------------------------------
-// MP3 encoder — uses lamejs (pure-JS LAME port), 192 kbps stereo
+// MP3 encoder — uses @breezystack/lamejs (maintained lamejs fork), 192 kbps
 // ---------------------------------------------------------------------------
 function encodeMp3(buffer: AudioBuffer): Blob {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Mp3Encoder } = require('lamejs') as {
-    Mp3Encoder: new (ch: number, sr: number, kbps: number) => {
-      encodeBuffer(l: Int16Array, r?: Int16Array): Int8Array
-      flush(): Int8Array
-    }
-  }
   const numCh = Math.min(buffer.numberOfChannels, 2)
   const encoder = new Mp3Encoder(numCh, buffer.sampleRate, 192)
   const toInt16 = (ch: Float32Array): Int16Array => {
@@ -89,8 +83,8 @@ function encodeMp3(buffer: AudioBuffer): Blob {
   const right = numCh > 1 ? toInt16(buffer.getChannelData(1)) : undefined
   const CHUNK = 1152
   const chunks: Uint8Array<ArrayBuffer>[] = []
-  const push = (raw: Int8Array) => {
-    if (raw.length > 0) chunks.push(new Uint8Array(raw.buffer as ArrayBuffer, raw.byteOffset, raw.byteLength).slice())
+  const push = (raw: Uint8Array) => {
+    if (raw.length > 0) chunks.push(raw.slice() as Uint8Array<ArrayBuffer>)
   }
   for (let i = 0; i < left.length; i += CHUNK) {
     const l = left.subarray(i, i + CHUNK)
