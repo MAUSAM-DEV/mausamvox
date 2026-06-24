@@ -287,6 +287,15 @@ export function VoiceSwapPage() {
     } catch { /* non-critical — don't block the user flow */ }
   }
 
+  async function handleDeleteSwap(id: string) {
+    const res = await fetch(`/api/voice-swaps/delete?id=${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error ?? `Delete failed (${res.status})`)
+    }
+    setSwaps((prev) => prev.filter((s) => s.id !== id))
+  }
+
   // Persists the swap result server-side: downloads the Replicate MP3, uploads
   // it to durable Supabase storage, and inserts the voice_swaps row — all within
   // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
@@ -943,7 +952,7 @@ export function VoiceSwapPage() {
           })()}
         </div>
 
-        <RightPanel onToast={showToast} onNewSwap={handleNewSwap} swaps={swaps} swapsLoading={swapsLoading} />
+        <RightPanel onToast={showToast} onNewSwap={handleNewSwap} swaps={swaps} swapsLoading={swapsLoading} onDeleteSwap={handleDeleteSwap} />
       </div>
 
       <ProcessingOverlay
