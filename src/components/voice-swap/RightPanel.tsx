@@ -39,6 +39,7 @@ export interface VoiceSwap {
   voice_used: string
   quality_score: number | null
   result_url: string | null
+  result_path: string | null
   created_at: string
 }
 

@@ -172,7 +172,7 @@ export function VoiceSwapPage() {
       // Recent swaps
       supabase
         .from('voice_swaps')
-        .select('id, song_name, voice_used, quality_score, result_url, created_at')
+        .select('id, song_name, voice_used, quality_score, result_url, result_path, created_at')
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
         .limit(4)
@@ -287,24 +287,32 @@ export function VoiceSwapPage() {
     } catch { /* non-critical — don't block the user flow */ }
   }
 
-  async function recordSwap(songName: string, voiceUsed: string, resultUrl: string | null) {
+  // Persists the swap result server-side: downloads the Replicate MP3, uploads
+  // it to durable Supabase storage, and inserts the voice_swaps row — all within
+  // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
+  async function persistSwap(predictionId: string, songName: string, voiceUsed: string) {
     if (!userId) return
-    const supabase = createClient()
-    const { error } = await supabase.from('voice_swaps').insert({
-      user_id: userId,
-      song_name: songName,
-      voice_used: voiceUsed,
-      quality_score: null,
-      result_url: resultUrl,
-    })
-    if (!error) {
+    try {
+      const res = await fetch('/api/voice-swaps/persist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ predictionId, songName, voiceUsed }),
+      })
+      if (!res.ok) {
+        console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
+        return
+      }
+      // Refresh the Recent Swaps panel with the newly inserted row.
+      const supabase = createClient()
       const { data: s } = await supabase
         .from('voice_swaps')
-        .select('id, song_name, voice_used, quality_score, result_url, created_at')
+        .select('id, song_name, voice_used, quality_score, result_url, result_path, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(4)
       setSwaps(s ?? [])
+    } catch (err) {
+      console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -687,10 +695,10 @@ export function VoiceSwapPage() {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
-        recordSwap(
+        persistSwap(
+          dataA.data.predictionId as string,
           stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           `${voice.name} + ${voice2.name}`,
-          urlA,
         ).catch(() => { /* ignore — swap is still complete */ })
         return
       }
@@ -756,10 +764,10 @@ export function VoiceSwapPage() {
       // charge=false so no credits are taken, but the result is still recorded.
       if (type === 'full') {
         if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
-        recordSwap(
+        persistSwap(
+          startData.predictionId as string,
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voice?.name ?? 'Unknown Voice',
-          convertedUrl,
         ).catch(() => { /* ignore — swap is still complete */ })
       }
       // Previews are no longer charged here — the server-side gate in
