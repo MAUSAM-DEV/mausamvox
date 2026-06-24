@@ -90,7 +90,7 @@ function encodeMp3(buffer: AudioBuffer): Blob {
   const CHUNK = 1152
   const chunks: Uint8Array<ArrayBuffer>[] = []
   const push = (raw: Int8Array) => {
-    if (raw.length > 0) chunks.push(new Uint8Array(raw.buffer as ArrayBuffer, raw.byteOffset, raw.byteLength))
+    if (raw.length > 0) chunks.push(new Uint8Array(raw.buffer as ArrayBuffer, raw.byteOffset, raw.byteLength).slice())
   }
   for (let i = 0; i < left.length; i += CHUNK) {
     const l = left.subarray(i, i + CHUNK)
@@ -508,7 +508,8 @@ export function ResultStep({
       anchor.click()
       URL.revokeObjectURL(mp3Url)
       onToast('MP3 downloaded!')
-    } catch {
+    } catch (err) {
+      console.error('[mp3-encode] failed:', err)
       onToast('MP3 encoding failed — download the WAV instead')
     } finally {
       setMp3Encoding(false)
