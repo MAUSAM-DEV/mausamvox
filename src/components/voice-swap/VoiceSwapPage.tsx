@@ -29,6 +29,66 @@ const AVATAR_PALETTE = [
   'linear-gradient(135deg,#06B6D4,#8B5CF6)',
 ]
 
+// ── Lead vocal quality assessment ─────────────────────────────────────────────
+// After KARA_2 finishes, we compare the lead stem against the full vocal stem to
+// detect dropout artifacts: sustained silence gaps (≥ 2 s) in the lead where the
+// full vocal is still active. Backing harmonies being correctly removed don't
+// produce 2-second silent blocks — only a bad KARA_2 split does. Returns true if
+// the lead stem looks healthy; false if handleProcess should fall back to vocalsUrl.
+const _ASSESS_MAX_S   = 90     // analyse at most the first 90 s (bounds memory)
+const _ASSESS_FRAME_S = 0.1    // 100 ms RMS windows
+const _VOCAL_FLOOR    = 10 ** (-45 / 20) // full-vocal must exceed this to count as active
+const _LEAD_SILENCE   = 10 ** (-50 / 20) // lead below this = silent frame
+const _MIN_GAP_S      = 2.0    // ignore gaps shorter than this (short harmonic dips)
+
+async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise<boolean> {
+  try {
+    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AudioCtx()
+
+    const decode = async (url: string): Promise<AudioBuffer | null> => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) return null
+        return await ctx.decodeAudioData(await res.arrayBuffer())
+      } catch { return null }
+    }
+
+    const [leadBuf, fullBuf] = await Promise.all([decode(leadUrl), decode(fullUrl)])
+    try { await ctx.close() } catch { /* ignore */ }
+    if (!leadBuf || !fullBuf) return true // can't assess — assume healthy
+
+    const sr        = leadBuf.sampleRate
+    const frameSize = Math.round(_ASSESS_FRAME_S * sr)
+    const limit     = Math.min(leadBuf.length, fullBuf.length, Math.round(_ASSESS_MAX_S * sr))
+    const leadCh    = leadBuf.getChannelData(0)
+    const fullCh    = fullBuf.getChannelData(0)
+    const minGapFrames = Math.ceil(_MIN_GAP_S / _ASSESS_FRAME_S)
+
+    let gapFrames = 0
+    for (let off = 0; off + frameSize <= limit; off += frameSize) {
+      let sumL = 0, sumF = 0
+      for (let i = off; i < off + frameSize; i++) {
+        sumL += leadCh[i] * leadCh[i]
+        sumF += fullCh[i] * fullCh[i]
+      }
+      const rmsL = Math.sqrt(sumL / frameSize)
+      const rmsF = Math.sqrt(sumF / frameSize)
+
+      if (rmsF > _VOCAL_FLOOR && rmsL < _LEAD_SILENCE) {
+        if (++gapFrames >= minGapFrames) return false // dropout confirmed
+      } else {
+        gapFrames = 0
+      }
+    }
+
+    return true
+  } catch {
+    return true // analysis threw — don't break the normal flow
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function VoiceSwapPage() {
   // Navigation
   const [step, setStep] = useState<Step>(1)
@@ -284,20 +344,24 @@ export function VoiceSwapPage() {
           const backingVocalsUrl = (pollData.backingVocalsUrl as string) ?? ''
           if (!leadVocalsUrl || karaokeJobRef.current !== jobId) return
 
-          // Merge the two new fields into the live result, only if it's still
-          // the same upload — preserving everything else in StemResult.
+          // Assess lead quality before committing: if KARA_2 dropped vocal
+          // sections, discard the lead so handleProcess falls back to vocalsUrl.
+          const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl)
+          // A new upload may have superseded us while the assessment was running.
+          if (karaokeJobRef.current !== jobId) return
+          const effectiveLead = leadHealthy ? leadVocalsUrl : ''
+
           setStemResult((prev) =>
             prev && prev.storagePath === result.storagePath
-              ? { ...prev, leadVocalsUrl, backingVocalsUrl }
+              ? { ...prev, leadVocalsUrl: effectiveLead, backingVocalsUrl }
               : prev
           )
           setKaraokeStatus('done')
-          // Keep the cached session in sync so a later restore retains the split.
           try {
-            const merged: StemResult = { ...result, leadVocalsUrl, backingVocalsUrl }
+            const merged: StemResult = { ...result, leadVocalsUrl: effectiveLead, backingVocalsUrl }
             localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
           } catch { /* ignore */ }
-          console.log('[karaoke-split] lead/backing ready for', result.fileName)
+          console.log(`[karaoke-split] ${leadHealthy ? 'lead/backing ready' : 'dropout detected — full vocals fallback'} for ${result.fileName}`)
           return
         }
         if (pollData.status === 'failed' || pollData.status === 'canceled') {
