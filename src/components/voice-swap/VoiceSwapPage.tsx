@@ -380,9 +380,11 @@ export function VoiceSwapPage() {
 
   // Premium counterpart to runKaraokeSplit: splits the FULL vocal stem into
   // separate male/female vocals via /api/gender-split (MVSEP). Lives at page
-  // level so it survives step changes. Additive + optional: on any failure we
-  // leave male/femaleVocalsUrl empty and nothing downstream breaks (nothing
-  // reads them yet — UI lands in a later step).
+  // level so it survives step changes.
+  //
+  // On any failure: shows a descriptive toast so the user knows what broke.
+  // If the user declared isDuet pre-upload (karaoke was skipped), also falls
+  // back to runKaraokeSplit so the swap always has *some* vocal isolation.
   //
   // Two deliberate differences from runKaraokeSplit:
   //  1. Input is result.vocalsUrl — the FULL both-singers stem. NOT leadVocalsUrl
@@ -397,6 +399,16 @@ export function VoiceSwapPage() {
     const POLL_INTERVAL_MS = 2000
     const MAX_ATTEMPTS = 150 // ~5 min — the GET does 2 MVSEP hops + 2 Supabase copies, so it's heavier than karaoke's status check
 
+    // isDuet=true pre-upload skips karaoke-split in handleStemDone. If this
+    // gender split fails and the user therefore has no vocal isolation at all
+    // (leadVocalsUrl empty), kick off karaoke-split as a fallback so the swap
+    // doesn't receive a raw dual-vocalist stem.
+    function triggerKaraokeFallback() {
+      if (!result.leadVocalsUrl && genderSplitJobRef.current === jobId) {
+        void runKaraokeSplit(result)
+      }
+    }
+
     try {
       const startRes = await fetch('/api/gender-split', {
         method: 'POST',
@@ -405,23 +417,43 @@ export function VoiceSwapPage() {
       })
       // Gated responses are NOT processing failures — surface them distinctly.
       if (startRes.status === 403) {
-        showToast('Gender split is a premium feature — upgrade to use it.')
+        showToast(result.leadVocalsUrl
+          ? 'Gender split is a premium feature — upgrade to use it.'
+          : 'Duet split needs Premium — using standard vocal split instead.')
+        triggerKaraokeFallback()
         return
       }
       if (startRes.status === 402) {
-        showToast('Not enough credits for gender split (250 needed).')
+        showToast(result.leadVocalsUrl
+          ? `Not enough credits for duet split (${GENDER_SPLIT_COST} needed).`
+          : `Not enough credits for duet split — using standard vocal split instead.`)
+        triggerKaraokeFallback()
         return
       }
-      if (!startRes.ok) return // real start failure — silent, graceful fallback
+      if (!startRes.ok) {
+        let reason = `server error ${startRes.status}`
+        try { const b = await startRes.json(); if (b?.error) reason = String(b.error) } catch { /* HTML body */ }
+        showToast(`Duet split failed: ${reason}`, 5000)
+        triggerKaraokeFallback()
+        return
+      }
       const hash = (await startRes.json()).hash as string | undefined
-      if (!hash) return
+      if (!hash) {
+        showToast('Duet split failed: no job ID returned', 5000)
+        triggerKaraokeFallback()
+        return
+      }
 
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         if (genderSplitJobRef.current !== jobId) return // superseded by a newer upload / reset
 
         const pollRes = await fetch(`/api/gender-split?hash=${hash}`)
-        if (!pollRes.ok) return
+        if (!pollRes.ok) {
+          showToast(`Duet split failed: poll error (${pollRes.status})`, 5000)
+          triggerKaraokeFallback()
+          return
+        }
         const pollData = await pollRes.json()
 
         if (pollData.status === 'succeeded') {
@@ -445,12 +477,23 @@ export function VoiceSwapPage() {
           console.log('[gender-split] male/female ready for', result.fileName)
           return
         }
-        if (pollData.status === 'failed') return
+        if (pollData.status === 'failed') {
+          const why = typeof pollData.error === 'string' ? `: ${pollData.error}` : ''
+          showToast(`Duet split failed${why}`, 5000)
+          triggerKaraokeFallback()
+          return
+        }
         // otherwise keep polling
       }
-      // timed out — leave fields empty (graceful fallback)
-    } catch {
-      // network/other error — leave fields empty (graceful fallback)
+      // timed out
+      if (genderSplitJobRef.current === jobId) {
+        showToast('Duet split timed out — try again later', 5000)
+        triggerKaraokeFallback()
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'network error'
+      showToast(`Duet split failed: ${msg}`, 5000)
+      triggerKaraokeFallback()
     }
   }
 
