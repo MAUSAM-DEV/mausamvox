@@ -899,6 +899,8 @@ export function VoiceSwapPage() {
               <div className="vs-action-btns">
                 <button
                   className="vs-btn-ghost"
+                  disabled={genderSplitting}
+                  title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
                   onClick={() => {
                     if (step === 1 && !stemResult) {
                       showToast('Upload a track first')
@@ -917,6 +919,8 @@ export function VoiceSwapPage() {
                 {step === 2 && (
                   <button
                     className="vs-btn-solid"
+                    disabled={genderSplitting}
+                    title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
                     onClick={() => handleProcess('full')}
                   >
                     ⚡ Process Full Track
@@ -996,6 +1000,7 @@ export function VoiceSwapPage() {
           white-space: nowrap;
         }
         .vs-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vs-btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
         .vs-btn-solid {
           padding: 9px 18px;
           border-radius: 8px;
@@ -1013,6 +1018,7 @@ export function VoiceSwapPage() {
           box-shadow: 0 8px 24px rgba(139,92,246,.4);
           transform: translateY(-1px);
         }
+        .vs-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
         @media (max-width: 900px) {
           .vs-shell {

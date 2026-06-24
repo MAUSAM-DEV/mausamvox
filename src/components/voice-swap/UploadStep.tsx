@@ -729,8 +729,33 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                 </a>
               )}
 
-              {/* Lead / Backing: spinner while karaoke runs, cards once ready */}
-              {displayResult.leadVocalsUrl ? (
+              {/* Vocal sub-stems: gender-split (male/female) or karaoke (lead/backing) */}
+              {displayResult.maleVocalsUrl || displayResult.femaleVocalsUrl ? (
+                <>
+                  {displayResult.maleVocalsUrl && (
+                    <a className="vs-stem-card" href={displayResult.maleVocalsUrl} download="male-vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading male vocals…')}>
+                      <span className="vs-stem-icon">🎤</span>
+                      <div><div className="vs-stem-name">Male Vocals</div><div className="vs-stem-hint">Male singer isolated</div></div>
+                      <span className="vs-stem-dl">↓</span>
+                    </a>
+                  )}
+                  {displayResult.femaleVocalsUrl && (
+                    <a className="vs-stem-card" href={displayResult.femaleVocalsUrl} download="female-vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading female vocals…')}>
+                      <span className="vs-stem-icon">🎤</span>
+                      <div><div className="vs-stem-name">Female Vocals</div><div className="vs-stem-hint">Female singer isolated</div></div>
+                      <span className="vs-stem-dl">↓</span>
+                    </a>
+                  )}
+                </>
+              ) : genderSplitting ? (
+                <div className="vs-stem-pending">
+                  <span className="vs-stem-pending-spin" />
+                  <div>
+                    <div className="vs-stem-pending-label">Separating male/female vocals…</div>
+                    <div className="vs-stem-pending-sub">Male &amp; Female cards appear when ready (3–10 min)</div>
+                  </div>
+                </div>
+              ) : displayResult.leadVocalsUrl ? (
                 <>
                   <a className="vs-stem-card" href={displayResult.leadVocalsUrl} download="lead-vocals.mp3" target="_blank" rel="noreferrer" onClick={() => onToast('Downloading lead vocals…')}>
                     <span className="vs-stem-icon">🎙️</span>
@@ -813,8 +838,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
               )
             })()}
 
-            <button className="vs-continue-btn" onClick={onContinue}>
-              Continue to Voice Swap →
+            <button className="vs-continue-btn" onClick={onContinue} disabled={genderSplitting}>
+              {genderSplitting ? 'Waiting for vocal split…' : 'Continue to Voice Swap →'}
             </button>
           </div>
         )}
