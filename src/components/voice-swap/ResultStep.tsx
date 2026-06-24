@@ -546,9 +546,9 @@ export function ResultStep({
         <div className="vs-result-top">
           <ScoreRing score={82} />
           <div>
-            <div className="vs-result-score-lbl">Quality Score</div>
+            <div className="vs-result-score-lbl">Quality Score <span className="vs-est-tag">Est.</span></div>
             <div className="grad-text" style={{ fontFamily: 'var(--font-grotesk),"Space Grotesk",sans-serif', fontSize: '36px', fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
-              82<span style={{ fontSize: '14px', fontWeight: 400, color: '#5A5A80', letterSpacing: 0, marginLeft: '6px', background: 'none', WebkitTextFillColor: '#5A5A80' }}> / 100</span>
+              ~82<span style={{ fontSize: '14px', fontWeight: 400, color: '#5A5A80', letterSpacing: 0, marginLeft: '6px', background: 'none', WebkitTextFillColor: '#5A5A80' }}> / 100</span>
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
               {['✓ Ready to download', fullReady ? '✓ Full mix included' : '✓ High fidelity'].map((c) => (
@@ -563,7 +563,7 @@ export function ResultStep({
           {SCORE_BARS.map((bar, i) => (
             <div key={bar.label}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7878A0', marginBottom: '5px' }}>
-                <span>{bar.label}</span><span>{bar.pct}%</span>
+                <span>{bar.label}</span><span>~{bar.pct}%</span>
               </div>
               <div style={{ height: '5px', background: '#1E1E3A', borderRadius: '3px', overflow: 'hidden' }}>
                 <div style={{ height: '100%', borderRadius: '3px', background: 'linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4)', width: barsAnimated ? `${bar.pct}%` : '0%', transition: `width 1.4s ease ${i * 150}ms` }} />
@@ -720,6 +720,13 @@ export function ResultStep({
         .vs-result-score-lbl {
           font-size: 10px; font-weight: 700; letter-spacing: 2px;
           text-transform: uppercase; color: #5A5A80; margin-bottom: 4px;
+        }
+        .vs-est-tag {
+          display: inline-block; font-size: 8px; font-weight: 700;
+          letter-spacing: 1px; text-transform: uppercase;
+          padding: 1px 5px; border-radius: 4px; vertical-align: middle;
+          background: rgba(90,90,128,.15); color: #5A5A80;
+          border: 1px solid rgba(90,90,128,.25); margin-left: 4px;
         }
         .vs-result-chip {
           padding: 3px 10px; border-radius: 999px;
