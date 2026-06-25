@@ -1,34 +1,27 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
+import { AudioPlayer } from './AudioPlayer'
 
 const HEIGHTS = [8, 13, 20, 15, 24, 17, 28, 21, 14, 22, 18, 24, 12, 20, 26, 18, 22, 16, 28, 20, 14, 18, 24, 16]
 
-function MiniWave({ seed, playing }: { seed: number; playing?: boolean }) {
+function MiniWave({ seed }: { seed: number }) {
   return (
     <div style={{ height: '22px', background: '#0E0E20', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '1.5px', padding: '3px 6px', overflow: 'hidden', flexShrink: 0 }}>
       {HEIGHTS.map((h, i) => (
         <div
           key={i}
-          className={playing ? 'vs-rp-bar--anim' : undefined}
           style={{
             width: '2px',
             height: `${Math.min(16, (h + (seed + i * 3) % 7) * 0.75)}px`,
             borderRadius: '1px',
             background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
             flexShrink: 0,
-            animationDelay: playing ? `${(i % 6) * 55}ms` : undefined,
-            transformOrigin: 'center bottom',
           }}
         />
       ))}
     </div>
   )
-}
-
-function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`
 }
 
 function formatDate(iso: string) {
@@ -57,42 +50,17 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [audioError, setAudioError] = useState(false)
-  const audioRef = useRef<HTMLAudioElement>(null)
-
-  function resetPlayer() {
-    setPlaying(false)
-    setProgress(0)
-    setCurrentTime(0)
-    setDuration(0)
-    setAudioError(false)
-  }
 
   function handleToggleExpand(item: VoiceSwap) {
-    const src = item.result_path
-      ? `/api/voice-swaps/${item.id}/result.mp3`
-      : item.result_url
-    if (!src) { onToast('No audio stored for this swap'); return }
-
-    if (expandedId === item.id) {
-      audioRef.current?.pause()
-      setExpandedId(null)
-      resetPlayer()
-    } else {
-      audioRef.current?.pause()
-      resetPlayer()
-      setExpandedId(item.id)
-    }
+    const hasSrc = !!(item.result_path || item.result_url)
+    if (!hasSrc) { onToast('No audio stored for this swap'); return }
+    setExpandedId((prev) => (prev === item.id ? null : item.id))
   }
 
   async function handleConfirmDelete(id: string) {
     if (!onDeleteSwap) return
     setConfirmingId(null)
-    if (expandedId === id) { audioRef.current?.pause(); setExpandedId(null); resetPlayer() }
+    if (expandedId === id) setExpandedId(null)
     setDeletingIds((prev) => { const s = new Set(prev); s.add(id); return s })
     try {
       await onDeleteSwap(id)
@@ -103,11 +71,6 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
     }
   }
 
-  const expandedItem = expandedId ? swaps.find((s) => s.id === expandedId) : null
-  const expandedSrc = expandedItem?.result_path
-    ? `/api/voice-swaps/${expandedItem.id}/result.mp3`
-    : (expandedItem?.result_url ?? null)
-
   return (
     <>
       <aside className="vs-rpanel">
@@ -115,31 +78,6 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
           <span className="vs-rp-title">Recent Swaps</span>
           <button className="vs-rp-new" onClick={onNewSwap}>+ New</button>
         </div>
-
-        {/* Single audio element shared across all expanded cards. key=expandedId
-            forces a clean mount (fresh buffering) each time a different swap opens. */}
-        {expandedSrc && (
-          <audio
-            key={expandedId ?? ''}
-            ref={audioRef}
-            src={expandedSrc}
-            preload="metadata"
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => { setPlaying(false); setProgress(1) }}
-            onTimeUpdate={() => {
-              const a = audioRef.current
-              if (!a?.duration) return
-              setCurrentTime(a.currentTime)
-              setProgress(a.currentTime / a.duration)
-            }}
-            onLoadedMetadata={() => {
-              const a = audioRef.current
-              if (a && isFinite(a.duration)) setDuration(a.duration)
-            }}
-            onError={() => setAudioError(true)}
-          />
-        )}
 
         <div className="vs-rp-list">
           {swapsLoading && <div className="vs-rp-empty">Loading…</div>}
@@ -155,6 +93,17 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
             const score = item.quality_score ?? null
             const hi = score !== null && score >= 80
             const seed = i * 3 + 2
+
+            // Source for the inline player
+            const playerSrc = item.result_path
+              ? `/api/voice-swaps/${item.id}/result.mp3`
+              : (item.result_url ?? null)
+
+            // Replicate ephemeral URLs expire in ~1 hour. If result_path is null
+            // (durable copy was never stored) and the swap is over an hour old, the
+            // link is definitively gone — skip mounting AudioPlayer entirely.
+            const isDefinitelyExpired = !item.result_path &&
+              (Date.now() - new Date(item.created_at).getTime()) > 60 * 60 * 1000
 
             if (isConfirming) {
               return (
@@ -203,53 +152,23 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
                   )}
                 </div>
 
+                {/* Collapsed: static mini waveform. Expanded: player or expired notice. */}
                 {!isExpanded ? (
                   <MiniWave seed={seed} />
                 ) : (
-                  /* Expanded inline player — stopPropagation so clicks inside
-                     don't collapse the card. */
                   <div className="vs-rp-player" onClick={(e) => e.stopPropagation()}>
-                    {audioError ? (
-                      <div className="vs-rp-player-msg vs-rp-player-msg--err">
-                        {item.result_path
-                          ? 'Playback error — try again'
-                          : 'Link expired — only durable swaps can be replayed'}
+                    {isDefinitelyExpired ? (
+                      <div className="vs-rp-expired">
+                        Audio unavailable — Replicate link expired
                       </div>
                     ) : (
                       <>
-                        {!item.result_path && (
-                          <div className="vs-rp-player-msg vs-rp-player-msg--warn">
+                        {!item.result_path && item.result_url && (
+                          <div className="vs-rp-ephem-warn">
                             ⚠ Ephemeral link — may expire after 1 hr
                           </div>
                         )}
-                        <MiniWave seed={seed} playing={playing} />
-                        <div
-                          className="vs-rp-progress"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const rect = e.currentTarget.getBoundingClientRect()
-                            const a = audioRef.current
-                            if (a?.duration) a.currentTime = ((e.clientX - rect.left) / rect.width) * a.duration
-                          }}
-                        >
-                          <div className="vs-rp-progress-fill" style={{ width: `${progress * 100}%` }} />
-                        </div>
-                        <div className="vs-rp-controls">
-                          <span className="vs-rp-time">{fmt(currentTime)}</span>
-                          <button
-                            className="vs-rp-play-btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const a = audioRef.current
-                              if (!a) return
-                              if (a.paused) a.play().catch(() => setAudioError(true))
-                              else a.pause()
-                            }}
-                          >
-                            {playing ? '⏸' : '▶'}
-                          </button>
-                          <span className="vs-rp-time">{duration ? fmt(duration) : '—:—'}</span>
-                        </div>
+                        <AudioPlayer src={playerSrc} />
                       </>
                     )}
                   </div>
@@ -327,7 +246,7 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         .vs-rp-score--hi { background: rgba(16,185,129,.1); color: #10B981; }
         .vs-rp-score--mid { background: rgba(234,179,8,.1); color: #EAB308; }
 
-        /* ── Delete button (hidden until card hover) ── */
+        /* ── Delete button (visible on card hover) ── */
         .vs-rp-del-btn {
           width: 24px; height: 24px; flex-shrink: 0;
           border-radius: 5px; border: none;
@@ -345,13 +264,9 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
           border-radius: 10px; padding: 12px; margin-bottom: 6px;
           display: flex; flex-direction: column; gap: 10px; cursor: default;
         }
-        .vs-rp-confirm-msg {
-          font-size: 12px; color: #C4C4E0; line-height: 1.5;
-        }
+        .vs-rp-confirm-msg { font-size: 12px; color: #C4C4E0; line-height: 1.5; }
         .vs-rp-confirm-msg b { color: #F0F0FF; }
-        .vs-rp-confirm-sub {
-          display: block; margin-top: 4px; font-size: 10px; color: #5A5A80;
-        }
+        .vs-rp-confirm-sub { display: block; margin-top: 4px; font-size: 10px; color: #5A5A80; }
         .vs-rp-confirm-btns { display: flex; gap: 6px; }
         .vs-rp-confirm-del {
           flex: 1; padding: 5px 0; border-radius: 6px; border: none;
@@ -366,45 +281,27 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         }
         .vs-rp-confirm-cancel:hover { color: #C4C4E0; }
 
-        /* ── Inline player ── */
-        .vs-rp-player { display: flex; flex-direction: column; gap: 6px; }
-        .vs-rp-player-msg {
-          font-size: 10px; border-radius: 4px; padding: 4px 6px; line-height: 1.4;
+        /* ── Expanded inline player wrapper ── */
+        .vs-rp-player { display: flex; flex-direction: column; gap: 0; }
+        .vs-rp-expired {
+          font-size: 11px; color: #5A5A80;
+          background: #0E0E20;
+          border: 1px solid #1E1E3A;
+          border-radius: 10px;
+          padding: 14px;
+          text-align: center;
+          line-height: 1.5;
         }
-        .vs-rp-player-msg--warn { color: #F59E0B; background: rgba(245,158,11,.07); }
-        .vs-rp-player-msg--err  { color: #F87171; background: rgba(248,113,113,.07); }
-
-        .vs-rp-progress {
-          height: 3px; background: #1E1E3A; border-radius: 2px; overflow: hidden;
-          cursor: pointer; flex-shrink: 0;
-        }
-        .vs-rp-progress:hover { height: 5px; margin-top: -1px; }
-        .vs-rp-progress-fill {
-          height: 100%; border-radius: 2px;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
-          transition: width 0.1s linear;
-        }
-        .vs-rp-controls {
-          display: flex; align-items: center; justify-content: space-between;
-        }
-        .vs-rp-time { font-size: 10px; color: #5A5A80; font-variant-numeric: tabular-nums; }
-        .vs-rp-play-btn {
-          width: 28px; height: 28px; border-radius: 50%; border: none;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899);
-          color: #fff; font-size: 10px; cursor: pointer;
-          display: flex; align-items: center; justify-content: center;
-          transition: transform 0.15s, box-shadow 0.15s;
-          box-shadow: 0 2px 8px rgba(139,92,246,.4); flex-shrink: 0;
-        }
-        .vs-rp-play-btn:hover { transform: scale(1.1); box-shadow: 0 4px 14px rgba(139,92,246,.5); }
-
-        /* Waveform bar animation when playing */
-        @keyframes vs-rp-bounce {
-          0%, 100% { transform: scaleY(1); }
-          50%       { transform: scaleY(1.7); }
-        }
-        .vs-rp-bar--anim {
-          animation: vs-rp-bounce 0.55s ease-in-out infinite;
+        .vs-rp-ephem-warn {
+          font-size: 10px; color: #F59E0B;
+          background: rgba(245,158,11,.07);
+          padding: 5px 10px;
+          border-radius: 6px 6px 0 0;
+          border: 1px solid rgba(245,158,11,.15);
+          border-bottom: none;
+          margin-bottom: -1px;
+          position: relative;
+          z-index: 1;
         }
 
         .vs-rp-storage {
