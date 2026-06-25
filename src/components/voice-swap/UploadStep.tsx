@@ -238,6 +238,12 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
   const [activeStemUrl, setActiveStemUrl] = useState<string | null>(null)
   const [activeStemLabel, setActiveStemLabel] = useState('')
 
+  // Gate: user declared a duet but gender split hasn't completed yet.
+  // Blocks the continue button so the user splits first; avoids glitches
+  // and the "duet options disappeared" confusion in step 2.
+  const hasDuetStems = !!(result?.maleVocalsUrl && result?.femaleVocalsUrl)
+  const isDuetGated = isDuet && !hasDuetStems && !genderSplitting
+
   function selectStem(url: string, label: string) {
     setActiveStemUrl(url)
     setActiveStemLabel(label)
@@ -867,8 +873,28 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
               )
             })()}
 
-            <button className="vs-continue-btn" onClick={onContinue} disabled={genderSplitting}>
-              {genderSplitting ? 'Waiting for vocal split…' : 'Continue to Voice Swap →'}
+            {isDuetGated && (
+              <div className="vs-duet-gate">
+                <span className="vs-duet-gate-icon">⚠</span>
+                <div>
+                  <div className="vs-duet-gate-title">Run Duet Split before continuing</div>
+                  <div className="vs-duet-gate-body">
+                    Without it, both singers are mixed into the swap — causing glitches and hiding the duet voice options in step 2. Click the Split Duet button above first.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              className={`vs-continue-btn${isDuetGated ? ' vs-continue-btn--warn' : ''}`}
+              onClick={onContinue}
+              disabled={genderSplitting}
+            >
+              {genderSplitting
+                ? 'Waiting for vocal split…'
+                : isDuetGated
+                  ? 'Skip and continue without Duet Split →'
+                  : 'Continue to Voice Swap →'}
             </button>
           </div>
         )}
@@ -1147,6 +1173,17 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           font-size: 11px; color: #8A8AA8;
         }
 
+        /* ── duet gate warning ── */
+        .vs-duet-gate {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 12px 14px; border-radius: 10px;
+          border: 1px solid rgba(245,158,11,.35);
+          background: rgba(245,158,11,.06);
+        }
+        .vs-duet-gate-icon { font-size: 16px; flex-shrink: 0; line-height: 1.5; }
+        .vs-duet-gate-title { font-size: 12px; font-weight: 700; color: #F59E0B; margin-bottom: 3px; }
+        .vs-duet-gate-body { font-size: 11px; color: #9A9AB8; line-height: 1.5; }
+
         /* ── continue button ── */
         .vs-continue-btn {
           width: 100%; padding: 12px; border-radius: 10px; border: none;
@@ -1161,6 +1198,17 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           box-shadow: 0 10px 30px rgba(139,92,246,.4);
         }
         .vs-continue-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .vs-continue-btn--warn {
+          background: transparent;
+          border: 1px solid rgba(245,158,11,.3);
+          color: #9A7535;
+          font-size: 12px;
+        }
+        .vs-continue-btn--warn:hover:not(:disabled) {
+          background: rgba(245,158,11,.06);
+          box-shadow: none;
+          transform: none;
+        }
 
         /* ── error zone ── */
         .vs-error-zone {

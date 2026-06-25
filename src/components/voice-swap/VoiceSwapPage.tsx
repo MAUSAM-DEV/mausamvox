@@ -925,8 +925,9 @@ export function VoiceSwapPage() {
 
           {/* Action bar — steps 1 & 2 only */}
           {step !== 3 && (() => {
-            const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
-              && (duetMode === 'both-split' || duetMode === 'both-same')
+            const hasDuetStems = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
+            const isDualMode = hasDuetStems && (duetMode === 'both-split' || duetMode === 'both-same')
+            const isDuetGated = isDuet && !hasDuetStems && !genderSplitting
             return (
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
@@ -944,7 +945,14 @@ export function VoiceSwapPage() {
                       showToast('Upload a track first')
                       return
                     }
-                    if (step === 1) { setStep(2); return }
+                    if (step === 1) {
+                      if (isDuetGated) {
+                        showToast('Run Duet Split first — scroll down to find the split button.')
+                        return
+                      }
+                      setStep(2)
+                      return
+                    }
                     if (isDualMode) {
                       showToast('Preview not available in Both Voices mode — use Full Track.')
                       return
