@@ -218,15 +218,12 @@ function StemCard({
         <div className="vs-stem-hint">{hint}</div>
       </div>
       <div className="vs-stem-actions">
-        <span className="vs-stem-play-ico" title="Preview in player">
-          {isActive ? '▶' : '▶'}
-        </span>
+        <span className="vs-stem-play-ico" title="Preview in player">▶</span>
         <a
           className="vs-stem-dl"
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          title={`Open ${file}`}
+          href={`/api/stems/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(file)}`}
+          download={file}
+          title={`Download ${file}`}
           onClick={(e) => e.stopPropagation()}
         >
           ↓
