@@ -320,30 +320,57 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
       setPhase('splitting')
 
-      const res = await fetch('/api/stem-split', {
+      // Step 3 — start Demucs (returns immediately with a prediction ID)
+      const startRes = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storagePath: presign.path }),
       })
-
-      if (!res.ok) {
-        let msg = `Stem split failed (${res.status})`
-        try { const e = await res.json(); msg = e.error ?? msg } catch { /* HTML body — use status */ }
+      if (!startRes.ok) {
+        let msg = `Stem split failed to start (${startRes.status})`
+        try { const e = await startRes.json(); msg = e.error ?? msg } catch { /* HTML body — use status */ }
         throw new Error(msg)
       }
-      const data = await res.json()
+      const startData = await startRes.json()
+      const predictionId = startData.predictionId as string | undefined
+      if (!predictionId) throw new Error('Stem split failed: no prediction ID returned')
+
+      // Step 4 — poll until Demucs finishes (htdemucs can take several minutes
+      // for long files; polling avoids the old 180-second Vercel hard wall).
+      const POLL_INTERVAL_MS = 3000
+      const MAX_ATTEMPTS = 150 // ~7.5 minutes
+      let stems: { vocals: string; bass: string; drums: string; other: string } | null = null
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        const pollRes = await fetch(`/api/stem-split?id=${predictionId}`)
+        if (!pollRes.ok) {
+          let msg = `Stem split poll failed (${pollRes.status})`
+          try { const e = await pollRes.json(); msg = e.error ?? msg } catch { /* ignore */ }
+          throw new Error(msg)
+        }
+        const pollData = await pollRes.json()
+        if (pollData.status === 'succeeded') {
+          stems = { vocals: pollData.vocals, bass: pollData.bass, drums: pollData.drums, other: pollData.other }
+          break
+        }
+        if (pollData.status === 'failed' || pollData.status === 'canceled') {
+          throw new Error(pollData.error ?? 'Stem split failed')
+        }
+        // starting / processing — keep polling
+      }
+      if (!stems) throw new Error('Stem split timed out — please try again')
 
       const stemResult: StemResult = {
-        storagePath: presign.path,
-        vocalsUrl:        data.vocals,
-        leadVocalsUrl:    '',
-        backingVocalsUrl: '',
-        maleVocalsUrl:    '',
-        femaleVocalsUrl:  '',
+        storagePath:     presign.path,
+        vocalsUrl:       stems.vocals,
+        leadVocalsUrl:   '',
+        backingVocalsUrl:'',
+        maleVocalsUrl:   '',
+        femaleVocalsUrl: '',
         instrumentalUrl: '',
-        bassUrl:         data.bass,
-        drumsUrl:        data.drums,
-        otherUrl:        data.other,
+        bassUrl:         stems.bass,
+        drumsUrl:        stems.drums,
+        otherUrl:        stems.other,
         fileName:        file.name,
       }
 

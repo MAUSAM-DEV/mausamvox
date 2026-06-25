@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-export const maxDuration = 180
+// POST just creates the prediction and returns immediately — no blocking wait.
+// GET is a lightweight status check. Both fit comfortably inside 30 s.
+export const maxDuration = 30
+
+const DEMUCS_VERSION = '25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953'
 
 // Replicate SDK v1 wraps file outputs in a FileOutput class whose .url()
 // method returns a URL object. JSON.stringify() shows {} because the URL
@@ -44,17 +48,19 @@ function extractStems(output: unknown): { bass: string; drums: string; other: st
   return null
 }
 
-// Safe stringify: FileOutput objects have circular refs / unserializable fields
 function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }
 }
 
+// Starts a Demucs stem-split job. Returns immediately with a prediction ID —
+// the client polls GET below until the job completes. This replaces the old
+// replicate.run() (synchronous) approach which blocked a Vercel function for
+// up to several minutes and reliably 504'd on long or large files.
 export async function POST(req: NextRequest) {
-  // Top-level catch ensures we always return JSON, never an HTML error page
   try {
     console.log('[stem-split] handler entered')
 
-    let body: { storagePath?: string; userId?: string }
+    let body: { storagePath?: string }
     try {
       body = await req.json()
     } catch {
@@ -79,60 +85,82 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('[stem-split] signed URL created, calling Replicate...')
+    console.log('[stem-split] signed URL created, starting Replicate prediction...')
 
     if (!process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
-    // ── 2. Run Demucs ────────────────────────────────────────────────
+    // ── 2. Start Demucs (fire and return — client polls GET) ─────────
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const prediction = await replicate.predictions.create({
+      version: DEMUCS_VERSION,
+      input: {
+        audio: signed.signedUrl,
+        model: 'htdemucs',
+        mp3: true,
+        mp3_bitrate: 320,
+      },
+    })
 
-    const output = await replicate.run(
-      'cjwbw/demucs:25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953',
-      {
-        input: {
-          audio: signed.signedUrl,
-          model: 'htdemucs',
-          mp3: true,
-          mp3_bitrate: 320,
-        },
-      }
-    )
-
-    // Log raw output so we can see the exact shape in Vercel logs
-    console.log('[stem-split] raw output type:', typeof output, Array.isArray(output) ? 'array' : '')
-    console.log('[stem-split] raw output keys:', output && typeof output === 'object' ? Object.keys(output as object) : 'n/a')
-    console.log('[stem-split] raw output JSON:', safeStringify(output))
-
-    // Log each stem individually to catch FileOutput .url() values
-    if (output && typeof output === 'object' && !Array.isArray(output)) {
-      const o = output as Record<string, unknown>
-      for (const key of ['vocals', 'bass', 'drums', 'other', 'no_vocals']) {
-        const v = o[key]
-        console.log(`[stem-split] ${key}: type=${typeof v}, urlMethod=${typeof (v as Record<string,unknown>)?.url}, resolved=${toUrlString(v)}`)
-      }
-    }
-
-    const stems = extractStems(output)
-    if (!stems) {
-      return NextResponse.json(
-        { error: `Could not parse Replicate output. Shape: ${safeStringify(output)}` },
-        { status: 502 }
-      )
-    }
-
-    if (!stems.vocals) {
-      return NextResponse.json(
-        { error: `Vocals URL missing. Full stems: ${safeStringify(stems)}` },
-        { status: 502 }
-      )
-    }
-
-    return NextResponse.json(stems)
+    console.log(`[stem-split] started prediction ${prediction.id} (status=${prediction.status})`)
+    return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[stem-split] unhandled error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+// Polled by the client to check on a job started via POST above.
+// On success maps Demucs output (object or array) to { vocals, bass, drums, other }.
+export async function GET(req: NextRequest) {
+  try {
+    const id = req.nextUrl.searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
+    }
+
+    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const prediction = await replicate.predictions.get(id)
+
+    if (prediction.status === 'succeeded') {
+      // Log raw output shape so Vercel logs can diagnose any future parse issues.
+      console.log('[stem-split] raw output type:', typeof prediction.output, Array.isArray(prediction.output) ? 'array' : '')
+      console.log('[stem-split] raw output keys:', prediction.output && typeof prediction.output === 'object' ? Object.keys(prediction.output as object) : 'n/a')
+
+      const stems = extractStems(prediction.output)
+      if (!stems) {
+        return NextResponse.json(
+          { status: 'failed', error: `Could not parse Replicate output. Shape: ${safeStringify(prediction.output)}` },
+          { status: 502 }
+        )
+      }
+      if (!stems.vocals) {
+        return NextResponse.json(
+          { status: 'failed', error: `Vocals URL missing. Full stems: ${safeStringify(stems)}` },
+          { status: 502 }
+        )
+      }
+      console.log(`[stem-split] prediction ${id} succeeded`)
+      return NextResponse.json({ status: 'succeeded', ...stems })
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      const errMsg = safeStringify(prediction.error)
+      console.error(`[stem-split] prediction ${id} ${prediction.status}:`, errMsg)
+      return NextResponse.json({ status: prediction.status, error: errMsg })
+    }
+
+    // starting / processing / etc — client keeps polling
+    return NextResponse.json({ status: prediction.status })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[stem-split] poll error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
