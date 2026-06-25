@@ -227,6 +227,15 @@ export function VoiceSwapPage() {
   const [styleIntensity, setStyleIntensity] = useState(6)
   const [pitchShift, setPitchShift] = useState(0)
 
+  // Keeps duetSinger in sync when Gender Lock changes so the two controls
+  // never drift out of alignment (Male lock → male singer, Female lock → female).
+  function handleSetGender(g: Gender) {
+    setGender(g)
+    if (g === 'Male') setDuetSinger('male')
+    else if (g === 'Female') setDuetSinger('female')
+    // Neutral: leave duetSinger unchanged — still meaningful if duet mode is active
+  }
+
   // Processing overlay
   const [processing, setProcessing] = useState(false)
   const [processingType, setProcessingType] = useState<'preview' | 'full'>('full')
@@ -718,8 +727,14 @@ export function VoiceSwapPage() {
       // Clear any stale second URL from a previous Mode 2/3 run.
       setConvertedVocalsUrl2(null)
 
+      // Gender Lock drives stem routing when matching stems are available.
+      // Neutral falls through to the duetSinger picker (existing behaviour).
       let vocalsToConvert = stemResult.leadVocalsUrl || stemResult.vocalsUrl
-      if (hasDuetStems && duetMode === 'one') {
+      if (gender === 'Male' && stemResult.maleVocalsUrl) {
+        vocalsToConvert = stemResult.maleVocalsUrl
+      } else if (gender === 'Female' && stemResult.femaleVocalsUrl) {
+        vocalsToConvert = stemResult.femaleVocalsUrl
+      } else if (hasDuetStems && duetMode === 'one') {
         const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
         if (singerUrl) vocalsToConvert = singerUrl
       }
@@ -868,7 +883,7 @@ export function VoiceSwapPage() {
                 selectedVoiceId={selectedVoiceId}
                 setSelectedVoiceId={setSelectedVoiceId}
                 gender={gender}
-                setGender={setGender}
+                setGender={handleSetGender}
                 ageRange={ageRange}
                 setAgeRange={setAgeRange}
                 accent={accent}
@@ -896,11 +911,14 @@ export function VoiceSwapPage() {
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
-                duetUntouchedVocalsUrl={
-                  stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl && duetMode === 'one'
-                    ? (duetSinger === 'male' ? stemResult.femaleVocalsUrl : stemResult.maleVocalsUrl)
-                    : null
-                }
+                duetUntouchedVocalsUrl={(() => {
+                  const hasBoth = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
+                  if (!hasBoth || duetMode === 'both-split' || duetMode === 'both-same') return null
+                  if (gender === 'Male') return stemResult!.femaleVocalsUrl ?? null
+                  if (gender === 'Female') return stemResult!.maleVocalsUrl ?? null
+                  if (duetMode === 'one') return duetSinger === 'male' ? stemResult!.femaleVocalsUrl ?? null : stemResult!.maleVocalsUrl ?? null
+                  return null
+                })()}
               />
             )}
           </div>

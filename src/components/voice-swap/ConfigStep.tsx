@@ -228,6 +228,11 @@ export function ConfigStep({
               value={gender}
               onChange={setGender}
             />
+            {gender !== 'Neutral' && (
+              hasDuet
+                ? <div className="vs-gl-status vs-gl-status--active">✓ Stems isolated — hard guarantee</div>
+                : <div className="vs-gl-status vs-gl-status--soft">Run Duet Split for strongest enforcement</div>
+            )}
           </div>
 
           <div className="vs-ctrl-group">
@@ -657,6 +662,17 @@ export function ConfigStep({
           padding: 10px 12px;
           margin-bottom: 16px;
           line-height: 1.5;
+        }
+
+        /* ── Gender Lock status indicator ── */
+        .vs-gl-status {
+          font-size: 10px; padding: 4px 8px; border-radius: 5px; line-height: 1.4;
+        }
+        .vs-gl-status--active {
+          color: #10B981; background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.15);
+        }
+        .vs-gl-status--soft {
+          color: #F59E0B; background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.14);
         }
 
         @media (max-width: 600px) {
