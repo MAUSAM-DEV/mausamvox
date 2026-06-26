@@ -318,6 +318,7 @@ export function VoiceSwapPage() {
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
+        showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
         return
       }
       const persisted = await res.json()
@@ -333,6 +334,7 @@ export function VoiceSwapPage() {
       setSwaps(s ?? [])
     } catch (err) {
       console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
+      showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
     }
   }
 
