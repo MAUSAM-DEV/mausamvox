@@ -58,7 +58,9 @@ interface MvsepFile { type?: string; url?: string }
 interface MvsepPayload {
   success?: boolean | string
   status?: string
-  data?: { hash?: string; files?: MvsepFile[] }
+  // message: MVSEP's human-readable reason on a rejection (e.g. "File or File
+  // Hash not found"). Present on failure payloads; read for error surfacing.
+  data?: { hash?: string; files?: MvsepFile[]; message?: string }
 }
 
 // GET a MVSEP endpoint and parse JSON. Never logs the body (can contain a large
@@ -315,7 +317,11 @@ export async function GET(req: NextRequest) {
     const remote = await fetchMvsep(remoteUrl)
 
     if (!remote.ok || !isSuccess(remote.json?.success)) {
-      return NextResponse.json({ status: 'failed', error: 'MVSEP get-remote failed' })
+      // Surface the REAL MVSEP reason instead of a generic string: MVSEP returns
+      // a status ('not_found' / 'error' / …) and a data.message we were discarding.
+      const why = remote.json?.data?.message ?? String(remote.json?.status ?? `http ${remote.ok ? 200 : 'error'}`)
+      console.error(`[gender-split] get-remote rejected: status=${String(remote.json?.status)} message=${why}`)
+      return NextResponse.json({ status: 'failed', error: `MVSEP get-remote: ${why}` })
     }
     if (IN_PROGRESS.has(remote.json?.status ?? '')) {
       return NextResponse.json({ status: 'processing' })
@@ -333,7 +339,10 @@ export async function GET(req: NextRequest) {
     const result = await fetchMvsep(resultUrl)
 
     if (!result.ok || !isSuccess(result.json?.success)) {
-      return NextResponse.json({ status: 'failed', error: 'MVSEP get failed' })
+      // Surface the REAL MVSEP reason instead of a generic string (see get-remote).
+      const why = result.json?.data?.message ?? String(result.json?.status ?? `http ${result.ok ? 200 : 'error'}`)
+      console.error(`[gender-split] get rejected: status=${String(result.json?.status)} message=${why}`)
+      return NextResponse.json({ status: 'failed', error: `MVSEP get: ${why}` })
     }
     if (IN_PROGRESS.has(result.json?.status ?? '')) {
       return NextResponse.json({ status: 'processing' })
