@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
           pitch_change_all: pitchShift,
           index_rate: indexRate,
           filter_radius: 4,
-          rms_mix_rate: 0,
+          rms_mix_rate: 0.25,
           pitch_detection_algorithm: 'rmvpe',
           crepe_hop_length: 128,
           protect: 0.2,
