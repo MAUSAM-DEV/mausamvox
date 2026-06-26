@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 6, isPreview = false, trackKey } = body
+    const { vocalsUrl, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
