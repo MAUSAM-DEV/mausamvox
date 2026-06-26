@@ -98,6 +98,10 @@ export function VoiceSwapPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
+  // Number of regenerates done on the current track (0–2). Each regenerate
+  // steps index_rate up (0.80 → 0.85 → 0.90) for a progressively stronger
+  // voice match. Reset to 0 on a new track (handleNewSwap). Capped at 2.
+  const [regenCount, setRegenCount] = useState(0)
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
   const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
@@ -224,7 +228,7 @@ export function VoiceSwapPage() {
   const [ageRange, setAgeRange] = useState<AgeRange>('Young')
   const [accent, setAccent] = useState('Neutral')
   const [language, setLanguage] = useState('Same as Source')
-  const [styleIntensity, setStyleIntensity] = useState(6)
+  const [styleIntensity, setStyleIntensity] = useState(8)
   const [pitchShift, setPitchShift] = useState(0)
 
   // Keeps duetSinger in sync when Gender Lock changes so the two controls
@@ -592,11 +596,15 @@ export function VoiceSwapPage() {
     setStep(2)
   }
 
-  // `charge` lets a free regeneration re-run the exact same swap without
-  // deducting credits. Defaults to true so the normal Preview/Full buttons
-  // bill as before.
-  async function handleProcess(type: 'preview' | 'full', opts: { charge?: boolean } = {}) {
-    const { charge = true } = opts
+  // `charge` controls whether credits are deducted (defaults to true so the
+  // normal Preview/Full buttons bill as before). `indexRateOverride`, when set,
+  // forces a specific RVC index_rate (0–1) instead of deriving it from the
+  // styleIntensity slider — used by Regenerate to step voice strength up.
+  async function handleProcess(
+    type: 'preview' | 'full',
+    opts: { charge?: boolean; indexRateOverride?: number } = {},
+  ) {
+    const { charge = true, indexRateOverride } = opts
     if (!stemResult) {
       showToast('Upload a track first')
       return
@@ -678,6 +686,9 @@ export function VoiceSwapPage() {
               voiceId: voice.id,
               pitchShift,
               styleIntensity,
+              // Regenerate forces a stepped-up index_rate; omitted (undefined)
+              // on normal swaps so the server derives it from styleIntensity.
+              indexRate: indexRateOverride,
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -690,6 +701,7 @@ export function VoiceSwapPage() {
               voiceId: voice2.id,
               pitchShift,
               styleIntensity,
+              indexRate: indexRateOverride,
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -717,6 +729,9 @@ export function VoiceSwapPage() {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
+        // A regenerate (indexRateOverride set) succeeded — count it toward the
+        // per-track cap. Only on success, so a failed regen doesn't burn a take.
+        if (indexRateOverride !== undefined) setRegenCount((c) => c + 1)
         persistSwap(
           dataA.data.predictionId as string,
           stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
@@ -758,6 +773,9 @@ export function VoiceSwapPage() {
           voiceId: voice.id,
           pitchShift,
           styleIntensity,
+          // Regenerate forces a stepped-up index_rate; omitted (undefined) on
+          // normal swaps so the server derives it from styleIntensity.
+          indexRate: indexRateOverride,
           // Previews are gated + charged server-side (first 2 per track free,
           // 3rd+ costs 50). trackKey is the upload storagePath; empty for
           // manual-extracted stems, which are always free.
@@ -788,11 +806,13 @@ export function VoiceSwapPage() {
       setStep(3)
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
 
-      // Deduct credits and record swap (non-blocking). A free regen passes
-      // charge=false so no credits are taken, but the result is still recorded.
+      // Deduct credits and record swap (non-blocking).
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
       if (type === 'full') {
         if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
+        // A regenerate (indexRateOverride set) succeeded — count it toward the
+        // per-track cap. Only on success, so a failed regen doesn't burn a take.
+        if (indexRateOverride !== undefined) setRegenCount((c) => c + 1)
         persistSwap(
           startData.predictionId as string,
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
@@ -825,20 +845,30 @@ export function VoiceSwapPage() {
     setDuetSinger('male')
     setSelectedVoiceId2(null)
     setIsDuet(false)
+    setRegenCount(0) // new track → reset the voice-strength ladder
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
-  // Re-runs the current swap with the same inputs. Free while the result's
-  // regen window is open; once it closes, it bills like a full swap (200 cr)
-  // and is blocked up-front if the user can't afford it.
-  async function handleRegenerate(isFree: boolean) {
-    const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl) && (duetMode === "both-split" || duetMode === "both-same")
-    const regenCost = isDualMode ? 400 : 200
-    if (!isFree && creditsRemaining !== null && creditsRemaining < regenCost) {
-      showToast(`Free regen window ended — regenerating costs ${regenCost} credits, and you don't have enough. Top up to continue.`)
+  // Max regenerates allowed per track (3 total takes: 1 initial + 2 regens).
+  const MAX_REGENS = 2
+
+  // Re-runs the current swap with a stepped-up index_rate for a progressively
+  // stronger voice match: regen 1 → 0.85, regen 2 → 0.90 (initial swap is 0.80).
+  // Capped at MAX_REGENS per track; each regenerate charges credits normally.
+  async function handleRegenerate() {
+    if (regenCount >= MAX_REGENS) {
+      showToast('Maximum voice strength reached for this track.')
       return
     }
-    await handleProcess('full', { charge: isFree ? false : true })
+    const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl) && (duetMode === "both-split" || duetMode === "both-same")
+    const regenCost = isDualMode ? 400 : 200
+    if (creditsRemaining !== null && creditsRemaining < regenCost) {
+      showToast(`Regenerating costs ${regenCost} credits, and you don't have enough. Top up to continue.`)
+      return
+    }
+    // Initial swap = 0.80 (styleIntensity 8). Each regen steps +0.05.
+    const indexRate = 0.8 + 0.05 * (regenCount + 1)
+    await handleProcess('full', { charge: true, indexRateOverride: indexRate })
   }
 
   // Cleanup on unmount
@@ -909,6 +939,7 @@ export function VoiceSwapPage() {
               <ResultStep
                 onNewSwap={handleNewSwap}
                 onRegenerate={handleRegenerate}
+                regenCapReached={regenCount >= MAX_REGENS}
                 onToast={showToast}
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}

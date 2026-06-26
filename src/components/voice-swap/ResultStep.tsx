@@ -11,10 +11,13 @@ type FullMixState = 'mixing' | 'ready' | 'error' | 'no-stems'
 
 interface ResultStepProps {
   onNewSwap: () => void
-  // isFree reflects whether the regen window is still open. The page bills
-  // (or blocks) accordingly; this component just reports which side of the
-  // window the click landed on.
-  onRegenerate: (isFree: boolean) => void
+  // Each regenerate steps index_rate up for a progressively stronger voice
+  // match and always charges credits. The page owns the per-track cap (max 2
+  // regenerates / 3 total takes); this component just disables the button and
+  // shows the cap message when regenCapReached is set.
+  onRegenerate: () => void
+  // True once the per-track regenerate cap is hit — disables the button.
+  regenCapReached: boolean
   onToast: (msg: string) => void
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
@@ -251,11 +254,10 @@ function ScoreRing({ score }: { score: number }) {
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
-  onNewSwap, onRegenerate, onToast,
+  onNewSwap, onRegenerate, regenCapReached, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
-  const [regenCountdown, setRegenCountdown] = useState(600)
 
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -291,12 +293,6 @@ export function ResultStep({
   useEffect(() => {
     const t = setTimeout(() => setBarsAnimated(true), 300)
     return () => clearTimeout(t)
-  }, [])
-
-  // Regen countdown
-  useEffect(() => {
-    const id = setInterval(() => setRegenCountdown((n) => Math.max(0, n - 1)), 1000)
-    return () => clearInterval(id)
   }, [])
 
   // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
@@ -405,9 +401,6 @@ export function ResultStep({
     return side === 'Original' ? mixedOriginalUrl : mixedSwappedUrl
   }
   const activeUrl = srcFor(mode, ab)
-
-  const mins = Math.floor(regenCountdown / 60)
-  const secs = String(regenCountdown % 60).padStart(2, '0')
 
   // Capture position + play state right before a source swap so we can restore.
   function captureForSwap() {
@@ -671,16 +664,17 @@ export function ResultStep({
               <path d="M4 4v5h5M20 20v-5h-5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
               <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            {regenCountdown > 0 ? (
-              <>
-                <strong style={{ color: '#8B5CF6' }}>Free regen</strong> available for
-                <span className="grad-text" style={{ fontWeight: 700 }}>{mins}:{secs}</span>
-              </>
+            {regenCapReached ? (
+              <>Maximum voice strength reached for this track.</>
             ) : (
-              <>Free window ended · regen now costs <strong style={{ color: '#8B5CF6' }}>200 cr</strong></>
+              <>Regenerate for a <strong style={{ color: '#8B5CF6' }}>stronger voice match</strong> · costs <strong style={{ color: '#8B5CF6' }}>200 cr</strong></>
             )}
           </div>
-          <button className="vs-regen-btn" onClick={() => onRegenerate(regenCountdown > 0)}>↺ Regenerate</button>
+          <button
+            className="vs-regen-btn"
+            onClick={() => onRegenerate()}
+            disabled={regenCapReached}
+          >↺ Regenerate</button>
         </div>
 
         {/* Download / Share */}

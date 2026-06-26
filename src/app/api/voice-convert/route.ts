@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       voiceId?: string
       pitchShift?: number
       styleIntensity?: number
+      indexRate?: number
       isPreview?: boolean
       trackKey?: string
     }
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, isPreview = false, trackKey } = body
+    const { vocalsUrl, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -189,7 +190,13 @@ export async function POST(req: NextRequest) {
     // Style Intensity (1–10, "Subtle" → "Full replacement") maps onto RVC's
     // index_rate, which controls how much of the target voice's character
     // replaces the source vs. how much of the original accent/tone leaks through.
-    const indexRate = Math.min(1, Math.max(0, styleIntensity / 10))
+    // Regenerate sends an explicit indexRate to step voice strength up; when
+    // present (and a finite number) it overrides the styleIntensity formula.
+    // Either way the result is clamped to [0, 1].
+    const rawIndexRate = typeof indexRateOverride === 'number' && Number.isFinite(indexRateOverride)
+      ? indexRateOverride
+      : styleIntensity / 10
+    const indexRate = Math.min(1, Math.max(0, rawIndexRate))
 
     let prediction
     try {
