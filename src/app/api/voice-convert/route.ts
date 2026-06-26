@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
           rms_mix_rate: 0,
           pitch_detection_algorithm: 'rmvpe',
           crepe_hop_length: 128,
-          protect: 0.33,
+          protect: 0.2,
           output_format: 'mp3',
           // Random seed on every call so Replicate can't return a cached
           // prediction when the same vocalsUrl + model are resubmitted (Regenerate).
