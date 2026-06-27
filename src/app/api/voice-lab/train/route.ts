@@ -46,11 +46,17 @@ function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }
 }
 
-// Buffer the trained model zip from its ephemeral replicate.delivery URL into the
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Copy the trained model zip from its ephemeral replicate.delivery URL into the
 // durable, private voice-models bucket and persist its path on the clone row.
 // Best-effort: returns the stored path on success, or null on any failure (which
 // is logged, never thrown). Callers MUST treat a null return as "no durable copy
 // yet" and fall back to model_url — never let this break the training result.
+//
+// Hardened for the 60 s Hobby cap: the ~116 MB zip is STREAMED straight from the
+// download into the upload (no full in-memory buffer) so the two transfers
+// overlap, and the stored object is size-verified before model_path is recorded.
 async function persistModelDurably(
   userId: string,
   voiceCloneId: string,
@@ -58,40 +64,62 @@ async function persistModelDurably(
 ): Promise<string | null> {
   const modelPath = `${userId}/${voiceCloneId}.zip`
   try {
-    // 1. Download the model zip from replicate.delivery.
+    // 1. Open the download stream. We need a real body and a known size to verify
+    //    against — a missing/zero content-length means we can't trust the result.
     const res = await fetch(modelUrl)
-    if (!res.ok) {
+    if (!res.ok || !res.body) {
       console.error(`[voice-lab/train] durable copy: download failed HTTP ${res.status} for ${voiceCloneId}`)
       return null
     }
-    const zipBuffer = Buffer.from(await res.arrayBuffer())
-    console.log('[voice-lab/train] durable copy: downloaded', zipBuffer.length, 'bytes for', voiceCloneId)
+    const expectedSize = Number(res.headers.get('content-length')) || 0
+    if (expectedSize === 0) {
+      console.error('[voice-lab/train] durable copy: source has no/zero content-length, skipping for', voiceCloneId)
+      return null
+    }
 
-    // 2. Upload into the private voice-models bucket (upsert: a re-run overwrites
-    //    rather than erroring on a stale partial object).
+    // 2. Stream-upload into the private voice-models bucket. duplex:'half' is
+    //    required to send a stream body; upsert overwrites a stale partial object.
     const { error: uploadError } = await supabaseAdmin.storage
       .from(VOICE_MODELS_BUCKET)
-      .upload(modelPath, zipBuffer, { contentType: 'application/zip', upsert: true })
+      .upload(modelPath, res.body, { contentType: 'application/zip', upsert: true, duplex: 'half' })
     if (uploadError) {
       console.error('[voice-lab/train] durable copy: upload failed:', uploadError.message)
       return null
     }
-    console.log('[voice-lab/train] durable copy: uploaded to', `${VOICE_MODELS_BUCKET}/${modelPath}`)
 
-    // 3. Record the durable path — a SEPARATE update so a rejected write here
-    //    (e.g. the column not yet live in the REST schema) can't touch the
-    //    already-committed status/model_url row.
-    const { error: pathError } = await supabaseAdmin
-      .from('voice_clones')
-      .update({ model_path: modelPath })
-      .eq('id', voiceCloneId)
-    if (pathError) {
-      console.error('[voice-lab/train] durable copy: model_path update failed:', pathError.message)
+    // 3. Verify the stored object actually landed at full size before trusting it.
+    //    A truncated stream (e.g. killed near the 60 s cap) must NOT be recorded as
+    //    a durable copy — leaving model_path null lets a later poll self-heal.
+    const { data: listed, error: listErr } = await supabaseAdmin.storage
+      .from(VOICE_MODELS_BUCKET)
+      .list(userId, { limit: 1000, search: `${voiceCloneId}.zip` })
+    const obj = listed?.find(f => f.name === `${voiceCloneId}.zip`)
+    const storedSize = obj?.metadata?.size as number | undefined
+    if (listErr || !obj || storedSize !== expectedSize) {
+      console.error(
+        `[voice-lab/train] durable copy: verify failed for ${voiceCloneId} ` +
+        `(expected ${expectedSize}, got ${storedSize ?? 'missing'}${listErr ? `, listErr: ${listErr.message}` : ''})`
+      )
       return null
     }
+    console.log('[voice-lab/train] durable copy: verified', storedSize, 'bytes at', `${VOICE_MODELS_BUCKET}/${modelPath}`)
 
-    console.log('[voice-lab/train] durable copy: model_path persisted for', voiceCloneId)
-    return modelPath
+    // 4. Record the durable path — a SEPARATE update so a rejected write here
+    //    (e.g. the column not yet live in the REST schema) can't touch the
+    //    already-committed status/model_url row. One retry covers a transient miss.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const { error: pathError } = await supabaseAdmin
+        .from('voice_clones')
+        .update({ model_path: modelPath })
+        .eq('id', voiceCloneId)
+      if (!pathError) {
+        console.log('[voice-lab/train] durable copy: model_path persisted for', voiceCloneId)
+        return modelPath
+      }
+      console.error(`[voice-lab/train] durable copy: model_path update failed (attempt ${attempt}):`, pathError.message)
+      if (attempt < 2) await sleep(500)
+    }
+    return null
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-lab/train] durable copy: unexpected error:', msg)
@@ -241,7 +269,7 @@ export async function GET(req: NextRequest) {
 
     const { data: clone, error: cloneError } = await supabaseAdmin
       .from('voice_clones')
-      .select('id, user_id, status, model_url, training_prediction_id')
+      .select('id, user_id, status, model_url, model_path, training_prediction_id')
       .eq('id', voiceCloneId)
       .eq('user_id', user.id)
       .single()
@@ -250,10 +278,35 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Voice clone not found' }, { status: 404 })
     }
 
-    // Already finished in a prior poll — return the stored result, no API call.
-    if (clone.status === 'ready' && clone.model_url) {
-      return NextResponse.json({ status: 'ready', modelUrl: clone.model_url })
+    // Fully done: ready AND durably persisted — return the stored result, no API call.
+    if (clone.status === 'ready' && clone.model_path) {
+      return NextResponse.json({ status: 'ready', modelUrl: clone.model_url, modelPath: clone.model_path })
     }
+
+    // Ready but NOT yet durable — a prior persist attempt failed or timed out under
+    // the 60 s cap. Self-heal: re-attempt the durable copy now, with a FRESH model
+    // URL (the stored model_url is likely past replicate.delivery's ~1 h TTL, so
+    // prefer the prediction's current output). Bounded: once model_path lands, the
+    // branch above short-circuits. Recovery is only possible while Replicate still
+    // retains the output (~1 h) — beyond that the model is gone and retrain is the
+    // only recourse, which no code can change.
+    if (clone.status === 'ready' && clone.model_url) {
+      let freshUrl = clone.model_url
+      if (clone.training_prediction_id) {
+        try {
+          const healReplicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+          const p = await healReplicate.predictions.get(clone.training_prediction_id)
+          const u = toUrlString(p.output)
+          if (u) freshUrl = u
+        } catch (e) {
+          console.warn('[voice-lab/train] self-heal: could not refresh model URL:', e instanceof Error ? e.message : String(e))
+        }
+      }
+      console.log('[voice-lab/train] self-heal: re-attempting durable copy for', voiceCloneId)
+      const modelPath = await persistModelDurably(clone.user_id, voiceCloneId, freshUrl)
+      return NextResponse.json({ status: 'ready', modelUrl: clone.model_url, modelPath })
+    }
+
     if (!clone.training_prediction_id) {
       return NextResponse.json({ status: clone.status ?? 'pending', modelUrl: clone.model_url ?? null })
     }

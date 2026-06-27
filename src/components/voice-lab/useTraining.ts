@@ -24,6 +24,12 @@ export type TrainPhase =
 const POLL_MS = 8000
 // Brief "Almost ready" beat once the real model_url is confirmed, before Test.
 const FINALIZE_MS = 1000
+// Once training is 'ready' but the durable model_path hasn't landed yet, keep
+// polling (each GET drives the server-side self-heal) for a few rounds before
+// giving up and proceeding — the voice is already usable via model_url, so we
+// never block the user on durability indefinitely. ~6 × POLL_MS ≈ 48 s worst case,
+// and only in the rare event the first persist attempt missed.
+const MAX_DURABILITY_POLLS = 6
 
 interface UseTrainingOpts {
   onReady: (voiceId: string, modelUrl: string) => void
@@ -39,6 +45,9 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
   // Guards against stale responses if the user switches to a different voice
   // mid-flight — only the currently active voice's responses mutate state.
   const activeIdRef = useRef<string | null>(null)
+  // Counts consecutive 'ready'-but-not-yet-durable polls, so we can stop waiting
+  // on the durable copy after MAX_DURABILITY_POLLS rather than poll forever.
+  const durabilityPollsRef = useRef(0)
   const onReadyRef = useRef(onReady)
   useEffect(() => { onReadyRef.current = onReady }, [onReady])
 
@@ -66,6 +75,17 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
       if (!res.ok) return
 
       if (data.status === 'ready' && data.modelUrl) {
+        // Hold in "Almost ready" until the durable copy (model_path) is confirmed —
+        // each extra poll re-fires the server-side self-heal. The voice is already
+        // usable via model_url, so after the cap we proceed regardless of durability.
+        if (!data.modelPath && durabilityPollsRef.current < MAX_DURABILITY_POLLS) {
+          durabilityPollsRef.current++
+          setPhase('finalizing')
+          return // leave the interval running; next tick drives another heal attempt
+        }
+        if (!data.modelPath) {
+          console.warn(`[useTraining] proceeding to ready without a durable model_path after ${MAX_DURABILITY_POLLS} attempts`)
+        }
         stopPolling()
         setPhase('finalizing')
         finalizeRef.current = setTimeout(() => {
@@ -90,6 +110,7 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
 
   const startPolling = useCallback((voiceId: string) => {
     stopPolling()
+    durabilityPollsRef.current = 0 // fresh durability budget for this tracking run
     poll(voiceId) // immediate, so returning users see true status without waiting
     pollRef.current = setInterval(() => poll(voiceId), POLL_MS)
   }, [poll, stopPolling])
