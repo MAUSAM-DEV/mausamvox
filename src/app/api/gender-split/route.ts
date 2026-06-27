@@ -37,10 +37,32 @@ const OUTPUT_FORMAT = '0'
 // MVSEP statuses that mean "still working" — keep polling.
 const IN_PROGRESS = new Set(['waiting', 'processing', 'distributing', 'merging'])
 
+// MVSEP "not ready yet" signals that must NOT be treated as fatal. Right after
+// create, get-remote frequently returns success:false with a message like
+// "Your audio file is being downloaded, please wait a while..." (MVSEP is still
+// fetching the remote input we handed it), or a not_found/queued status before
+// the job is registered. These resolve to a real status on a later poll, so we
+// keep polling within a grace window rather than failing the whole duet split.
+const TRANSIENT_STATUSES = new Set(['not_found', 'not-found', 'queued', 'pending'])
+const TRANSIENT_MSG_FRAGMENTS = ['being downloaded', 'please wait', 'not ready', 'try again']
+// How long to tolerate a transient "not ready" response before giving up. MVSEP
+// input downloads are quick (a few MB), so this only bounds a genuinely stuck
+// job; real separation work reports IN_PROGRESS and is unaffected by this cap.
+const TRANSIENT_GRACE_MS = 180_000 // 3 min (client polls ~5 min overall)
+
 // MVSEP reports success as boolean true on get/get-remote but as the STRING
 // "true" on create. Accept both; reject anything else.
 function isSuccess(v: unknown): boolean {
   return v === true || v === 'true'
+}
+
+// True when a (parsed) MVSEP payload is a transient "still getting ready"
+// response rather than a real failure. Matched case-insensitively.
+function isTransient(payload: MvsepPayload | null): boolean {
+  const status = String(payload?.status ?? '').toLowerCase()
+  if (TRANSIENT_STATUSES.has(status)) return true
+  const message = String(payload?.data?.message ?? '').toLowerCase()
+  return TRANSIENT_MSG_FRAGMENTS.some((f) => message.includes(f))
 }
 
 // Safe stringify: error/response objects may have circular refs.
@@ -329,6 +351,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'MVSEP API token not configured' }, { status: 500 })
     }
 
+    // Elapsed-since-job-start (ms), sent by the client poll loop. Lets this
+    // stateless route bound how long it tolerates MVSEP's transient "not ready"
+    // responses before giving up, so a genuinely stuck job still fails.
+    const elapsedMs = Number(req.nextUrl.searchParams.get('elapsedMs') ?? '0') || 0
+
+    // Keep polling while within the grace window; fail with a clear reason once
+    // the transient state has persisted past it.
+    const transientOrFail = (hop: 'get-remote' | 'get', why: string) => {
+      if (elapsedMs <= TRANSIENT_GRACE_MS) {
+        console.log(`[gender-split] ${hop} not ready yet (${why}) — still processing, ${Math.round(elapsedMs / 1000)}s elapsed`)
+        return NextResponse.json({ status: 'processing' })
+      }
+      console.error(`[gender-split] ${hop} still not ready after ${Math.round(TRANSIENT_GRACE_MS / 1000)}s grace (${why})`)
+      return NextResponse.json({ status: 'failed', error: `MVSEP ${hop}: still not ready after ${Math.round(TRANSIENT_GRACE_MS / 1000)}s (${why})` })
+    }
+
     // ── Hop 1: resolve the remote job → the long result hash ──────────────
     const remoteUrl = `${MVSEP_GET_REMOTE_URL}?${new URLSearchParams({ hash: createHash, api_token: token })}`
     const remote = await fetchMvsep(remoteUrl)
@@ -337,6 +375,9 @@ export async function GET(req: NextRequest) {
       // Surface the REAL MVSEP reason instead of a generic string: MVSEP returns
       // a status ('not_found' / 'error' / …) and a data.message we were discarding.
       const why = remote.json?.data?.message ?? String(remote.json?.status ?? `http ${remote.ok ? 200 : 'error'}`)
+      // A transient "still downloading the input / job not registered yet" reply
+      // isn't a failure — keep polling within the grace window.
+      if (remote.ok && isTransient(remote.json)) return transientOrFail('get-remote', why)
       console.error(`[gender-split] get-remote rejected: status=${String(remote.json?.status)} message=${why}`)
       return NextResponse.json({ status: 'failed', error: `MVSEP get-remote: ${why}` })
     }
@@ -344,6 +385,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ status: 'processing' })
     }
     if (remote.json?.status !== 'done') {
+      // success:true but a non-terminal status (e.g. not_found/queued before the
+      // job registers) — also transient within the grace window.
+      if (isTransient(remote.json)) return transientOrFail('get-remote', `status ${String(remote.json?.status)}`)
       return NextResponse.json({ status: 'failed', error: `MVSEP get-remote status: ${String(remote.json?.status)}` })
     }
     const longHash = remote.json?.data?.hash
@@ -358,6 +402,9 @@ export async function GET(req: NextRequest) {
     if (!result.ok || !isSuccess(result.json?.success)) {
       // Surface the REAL MVSEP reason instead of a generic string (see get-remote).
       const why = result.json?.data?.message ?? String(result.json?.status ?? `http ${result.ok ? 200 : 'error'}`)
+      // Same transient handling as hop 1 — the result hash can briefly report
+      // "not ready" before the separation output is available.
+      if (result.ok && isTransient(result.json)) return transientOrFail('get', why)
       console.error(`[gender-split] get rejected: status=${String(result.json?.status)} message=${why}`)
       return NextResponse.json({ status: 'failed', error: `MVSEP get: ${why}` })
     }

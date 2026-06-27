@@ -482,11 +482,15 @@ export function VoiceSwapPage() {
         return
       }
 
+      // Sent on each poll so the (stateless) route can bound how long it tolerates
+      // MVSEP's transient "still downloading the input" responses before failing.
+      const startedAt = Date.now()
+
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         if (genderSplitJobRef.current !== jobId) return // superseded by a newer upload / reset
 
-        const pollRes = await fetch(`/api/gender-split?hash=${hash}`)
+        const pollRes = await fetch(`/api/gender-split?hash=${hash}&elapsedMs=${Date.now() - startedAt}`)
         if (!pollRes.ok) {
           showToast(`Duet split failed: poll error (${pollRes.status})`, 5000)
           triggerKaraokeFallback()
