@@ -50,6 +50,9 @@ function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }
 }
 
+// Clamp a number into [lo, hi].
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
 // Starts a voice-conversion job. Returns immediately with a prediction id —
 // RVC runs can take longer than a serverless function is allowed to stay
 // open, so the client polls GET below instead of us blocking here.
@@ -63,6 +66,12 @@ export async function POST(req: NextRequest) {
       pitchShift?: number
       styleIntensity?: number
       indexRate?: number
+      // Fine-tune panel overrides for the remaining RVC quality params. Each is
+      // optional; when omitted the prior hardcoded default is used (so normal
+      // swaps are unchanged). All clamped server-side to their valid ranges.
+      protect?: number
+      filterRadius?: number
+      rmsMixRate?: number
       isPreview?: boolean
       trackKey?: string
     }
@@ -72,7 +81,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, protect, filterRadius, rmsMixRate, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -217,6 +226,16 @@ export async function POST(req: NextRequest) {
       : styleIntensity / 10
     const indexRate = Math.min(1, Math.max(0, rawIndexRate))
 
+    // Remaining RVC quality params: use the client override when supplied (clamped
+    // to RVC's valid range), else the prior hardcoded default. filter_radius must
+    // be an integer. Defaults match the values these were pinned at before tuning.
+    const protectVal = typeof protect === 'number' && Number.isFinite(protect)
+      ? clamp(protect, 0, 0.5) : 0.2
+    const filterRadiusVal = typeof filterRadius === 'number' && Number.isFinite(filterRadius)
+      ? Math.round(clamp(filterRadius, 0, 7)) : 4
+    const rmsMixRateVal = typeof rmsMixRate === 'number' && Number.isFinite(rmsMixRate)
+      ? clamp(rmsMixRate, 0, 1) : 0.25
+
     let prediction
     try {
       prediction = await replicate.predictions.create({
@@ -228,11 +247,11 @@ export async function POST(req: NextRequest) {
           pitch_change: 'no-change',
           pitch_change_all: pitchShift,
           index_rate: indexRate,
-          filter_radius: 4,
-          rms_mix_rate: 0.25,
+          filter_radius: filterRadiusVal,
+          rms_mix_rate: rmsMixRateVal,
           pitch_detection_algorithm: 'rmvpe',
           crepe_hop_length: 128,
-          protect: 0.2,
+          protect: protectVal,
           output_format: 'mp3',
           // Random seed on every call so Replicate can't return a cached
           // prediction when the same vocalsUrl + model are resubmitted (Regenerate).
