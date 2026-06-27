@@ -54,19 +54,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid storage path' }, { status: 400 })
     }
 
-    // ── 4. Generate a signed download URL for the sample (admin client) ───────
-    console.log('[voice-lab/create-clone] creating signed URL for path:', path)
-    const { data: signed, error: signError } = await supabaseAdmin.storage
-      .from('voice-samples')
-      .createSignedUrl(path, 86400) // 24-hour TTL for playback
-    if (signError) {
-      console.warn('[voice-lab/create-clone] signed URL warning (non-fatal):', signError.message)
-    }
-    const sampleUrl = signed?.signedUrl ?? null
-
-    // ── 5. Insert into voice_clones using the SERVICE ROLE client ─────────────
+    // ── 4. Insert into voice_clones using the SERVICE ROLE client ─────────────
     // supabaseAdmin bypasses all RLS policies. user_id is set explicitly from
     // the verified session so the row is always owned by the correct user.
+    // No stored sample_url: sample_path is the durable reference and a fresh
+    // signed URL is minted on read via /api/voice-lab/sample-url. The old 24h
+    // stored URL expired and caused "voice expired" on Voice Lab playback.
     const type = cloneType === 'studio' ? 'studio' : 'express'
     console.log('[voice-lab/create-clone] inserting voice_clone for user', user.id)
 
@@ -79,7 +72,6 @@ export async function POST(req: NextRequest) {
         status: type === 'studio' ? 'pending' : 'ready',
         sample_path: path,
         created_at: new Date().toISOString(),
-        ...(sampleUrl ? { sample_url: sampleUrl } : {}),
       })
       .select('id, name, type, status, model_url, sample_url, created_at')
       .single()

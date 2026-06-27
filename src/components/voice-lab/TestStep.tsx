@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import type { SavedVoice } from './RecordStep'
 
 interface TestStepProps {
@@ -59,22 +59,33 @@ function TestBarsCanvas({ playing }: { playing: boolean }) {
 export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother, savedVoice }: TestStepProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [freshSampleUrl, setFreshSampleUrl] = useState<string | null>(null)
+  const [sampleStatus, setSampleStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
+  // Bumped on each load so a slow response for a previous voice (or before a
+  // manual retry) can't overwrite the current one.
+  const loadSeqRef = useRef(0)
 
-  // Fetch a fresh signed URL on mount (and whenever the voice changes). The
-  // stored sample_url is a 24-hour signed URL that expires and breaks playback;
-  // this replaces it with a 1-hour URL signed server-side on demand.
-  useEffect(() => {
-    if (!savedVoice?.id) return
+  // Always mint a FRESH signed URL from the durable sample_path via
+  // /api/voice-lab/sample-url. There is no stored-sample_url fallback anymore —
+  // that column held a 24h URL that expired and caused "voice expired" on
+  // playback. The sign-on-read endpoint is the single source of truth.
+  const loadSampleUrl = useCallback(() => {
+    if (!savedVoice?.id) { setSampleStatus('failed'); return }
+    const seq = ++loadSeqRef.current
+    setSampleStatus('loading')
     setFreshSampleUrl(null)
     fetch(`/api/voice-lab/sample-url?id=${encodeURIComponent(savedVoice.id)}`)
-      .then((r) => r.ok ? r.json() : Promise.reject())
-      .then((d) => { if (d.signedUrl) setFreshSampleUrl(d.signedUrl) })
-      .catch(() => { /* fall back to stored sample_url */ })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (loadSeqRef.current !== seq) return
+        if (d.signedUrl) { setFreshSampleUrl(d.signedUrl); setSampleStatus('ready') }
+        else setSampleStatus('failed')
+      })
+      .catch(() => { if (loadSeqRef.current === seq) setSampleStatus('failed') })
   }, [savedVoice?.id])
 
-  // Effective URL: fresh signed URL preferred, stored sample_url as fallback for
-  // voices where the server fetch failed or hasn't resolved yet.
-  const activeSampleUrl = freshSampleUrl ?? savedVoice?.sample_url ?? null
+  useEffect(() => { loadSampleUrl() }, [loadSampleUrl])
+
+  const activeSampleUrl = freshSampleUrl
 
   function handlePlay() {
     const audio = audioRef.current
@@ -105,8 +116,8 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
 
   return (
     <>
-      {/* Hidden audio element — src is the fresh signed URL (sign-on-read);
-          falls back to the stored sample_url while the fetch resolves. */}
+      {/* Hidden audio element — src is the fresh signed URL (sign-on-read).
+          Renders only once the sign-on-read fetch has resolved successfully. */}
       {activeSampleUrl && (
         <audio
           ref={audioRef}
@@ -145,8 +156,13 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           </button>
           <TestBarsCanvas playing={testPlaying} />
           <span className="vlte-test-lbl">
-            {activeSampleUrl ? 'Your recorded sample' : 'No sample available'}
+            {sampleStatus === 'loading' ? 'Loading sample…'
+              : sampleStatus === 'failed' ? 'Sample unavailable'
+              : 'Your recorded sample'}
           </span>
+          {sampleStatus === 'failed' && (
+            <button className="vlte-retry" onClick={loadSampleUrl}>Retry</button>
+          )}
         </div>
 
         <div className="vlte-actions">
@@ -222,6 +238,12 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
         }
         .vlte-play-btn:hover { transform: scale(1.08); box-shadow: 0 6px 18px rgba(139,92,246,.4); }
         .vlte-test-lbl { font-size: 11px; color: #5A5A80; flex-shrink: 0; }
+        .vlte-retry {
+          background: transparent; border: 1px solid #272745; border-radius: 6px;
+          color: #8B5CF6; font-size: 11px; font-weight: 600; padding: 3px 10px;
+          cursor: pointer; flex-shrink: 0; transition: all 0.2s;
+        }
+        .vlte-retry:hover { border-color: #8B5CF6; }
         .vlte-actions {
           display: flex; gap: 10px; justify-content: center;
           flex-wrap: wrap; position: relative;

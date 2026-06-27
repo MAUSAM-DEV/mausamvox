@@ -65,14 +65,11 @@ export async function POST(req: NextRequest) {
       console.error('[voice-lab/upload-sample] storage upload failed:', uploadError.message)
       return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
     }
-    console.log('[voice-lab/upload-sample] upload ok, creating signed URL')
+    console.log('[voice-lab/upload-sample] upload ok, inserting row')
 
-    // Generate a 24-hour signed URL for the sample (used for playback reference)
-    const { data: signed } = await supabaseAdmin.storage
-      .from('voice-samples')
-      .createSignedUrl(path, 86400)
-    const sampleUrl = signed?.signedUrl ?? null
-
+    // No stored sample_url: sample_path is the durable reference and a fresh
+    // signed URL is minted on read via /api/voice-lab/sample-url. The old 24h
+    // stored URL expired and caused "voice expired" on Voice Lab playback.
     const { data: row, error: insertError } = await supabaseAdmin
       .from('voice_clones')
       .insert({
@@ -81,7 +78,6 @@ export async function POST(req: NextRequest) {
         type,
         status: 'ready',
         sample_path: path,
-        ...(sampleUrl ? { sample_url: sampleUrl } : {}),
       })
       .select('id, name, type, status, model_url, created_at')
       .single()

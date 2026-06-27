@@ -73,9 +73,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { audioUrl, voiceCloneId } = body
-    if (!audioUrl) {
-      return NextResponse.json({ error: 'audioUrl is required' }, { status: 400 })
-    }
     if (!voiceCloneId) {
       return NextResponse.json({ error: 'voiceCloneId is required' }, { status: 400 })
     }
@@ -95,15 +92,18 @@ export async function POST(req: NextRequest) {
     console.log('[prepare-dataset] clone verified:', voiceCloneId)
 
     // ── 4. Download the audio ────────────────────────────────────────────────
-    // audioUrl is expected to be a Supabase signed URL for the voice-samples bucket.
-    // If the caller passes a fresh signed URL it will be valid; if it's stale we
-    // regenerate one from the stored sample_path as a fallback.
-    let fetchUrl = audioUrl
+    // Sign a FRESH URL from the durable sample_path (the source of truth). The
+    // stored sample_url was removed because it expired; audioUrl, if still sent by
+    // an older client, is only a last-resort fallback when sample_path is missing.
+    let fetchUrl: string | undefined = audioUrl
     if (clone.sample_path) {
       const { data: fresh } = await supabaseAdmin.storage
         .from('voice-samples')
         .createSignedUrl(clone.sample_path, 300) // 5-min TTL, only needed for this download
       if (fresh?.signedUrl) fetchUrl = fresh.signedUrl
+    }
+    if (!fetchUrl) {
+      return NextResponse.json({ error: 'No sample available to prepare (missing sample_path)' }, { status: 400 })
     }
 
     console.log('[prepare-dataset] downloading audio')

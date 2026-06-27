@@ -105,7 +105,9 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
       const prep = await fetch('/api/prepare-dataset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl: voice.sample_url, voiceCloneId: voice.id }),
+        // No audioUrl: the route signs a fresh URL from the clone's sample_path,
+        // so training no longer depends on the (now-removed) stored sample_url.
+        body: JSON.stringify({ voiceCloneId: voice.id }),
       })
       const prepData = await prep.json().catch(() => ({}))
       if (!mountedRef.current || activeIdRef.current !== voice.id) return
