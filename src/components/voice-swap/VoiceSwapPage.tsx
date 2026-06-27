@@ -11,12 +11,17 @@ import { ResultStep } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
+import { trimAudioToClip } from './audioClip'
+import type { TuneParams } from './ResultStep'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 
 const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
+// Length of the short clip the Fine-tune panel renders for previews — keeps a
+// tuning render to ~30 s of vocal instead of the whole song (faster + cheaper).
+const PREVIEW_CLIP_SECONDS = 30
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
 // premium-split button's affordability state; the server remains the real gate.
 const GENDER_SPLIT_COST = 250
@@ -102,6 +107,9 @@ export function VoiceSwapPage() {
   // steps index_rate up (0.80 → 0.85 → 0.90) for a progressively stronger
   // voice match. Reset to 0 on a new track (handleNewSwap). Capped at 2.
   const [regenCount, setRegenCount] = useState(0)
+  // Caches the trimmed+uploaded 30 s preview clip for the current source vocal so
+  // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
+  const tunedClipRef = useRef<{ sourceUrl: string; clipUrl: string; clipPath: string } | null>(null)
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
   const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
@@ -610,9 +618,27 @@ export function VoiceSwapPage() {
   // styleIntensity slider — used by Regenerate to step voice strength up.
   async function handleProcess(
     type: 'preview' | 'full',
-    opts: { charge?: boolean; indexRateOverride?: number } = {},
+    opts: {
+      charge?: boolean
+      indexRateOverride?: number
+      // Fine-tune overrides for the remaining RVC quality params; omitted on
+      // normal swaps so the server applies its defaults.
+      protectOverride?: number
+      filterRadiusOverride?: number
+      rmsMixRateOverride?: number
+      // Only Regenerate counts toward the per-track voice-strength cap. Apply-to-full
+      // from the tuning panel also sets indexRateOverride but must NOT burn a regen.
+      isRegen?: boolean
+    } = {},
   ) {
-    const { charge = true, indexRateOverride } = opts
+    const {
+      charge = true,
+      indexRateOverride,
+      protectOverride,
+      filterRadiusOverride,
+      rmsMixRateOverride,
+      isRegen = false,
+    } = opts
     if (!stemResult) {
       showToast('Upload a track first')
       return
@@ -697,6 +723,9 @@ export function VoiceSwapPage() {
               // Regenerate forces a stepped-up index_rate; omitted (undefined)
               // on normal swaps so the server derives it from styleIntensity.
               indexRate: indexRateOverride,
+              protect: protectOverride,
+              filterRadius: filterRadiusOverride,
+              rmsMixRate: rmsMixRateOverride,
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -737,9 +766,10 @@ export function VoiceSwapPage() {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
-        // A regenerate (indexRateOverride set) succeeded — count it toward the
-        // per-track cap. Only on success, so a failed regen doesn't burn a take.
-        if (indexRateOverride !== undefined) setRegenCount((c) => c + 1)
+        // A regenerate succeeded — count it toward the per-track cap. Only on
+        // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
+        // also sets indexRateOverride but passes isRegen:false, so it's exempt.
+        if (isRegen) setRegenCount((c) => c + 1)
         persistSwap(
           dataA.data.predictionId as string,
           stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
@@ -791,6 +821,9 @@ export function VoiceSwapPage() {
           // Regenerate forces a stepped-up index_rate; omitted (undefined) on
           // normal swaps so the server derives it from styleIntensity.
           indexRate: indexRateOverride,
+          protect: protectOverride,
+          filterRadius: filterRadiusOverride,
+          rmsMixRate: rmsMixRateOverride,
           // Previews are gated + charged server-side (first 2 per track free,
           // 3rd+ costs 50). trackKey is the upload storagePath; empty for
           // manual-extracted stems, which are always free.
@@ -825,9 +858,10 @@ export function VoiceSwapPage() {
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
       if (type === 'full') {
         if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
-        // A regenerate (indexRateOverride set) succeeded — count it toward the
-        // per-track cap. Only on success, so a failed regen doesn't burn a take.
-        if (indexRateOverride !== undefined) setRegenCount((c) => c + 1)
+        // A regenerate succeeded — count it toward the per-track cap. Only on
+        // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
+        // also sets indexRateOverride but passes isRegen:false, so it's exempt.
+        if (isRegen) setRegenCount((c) => c + 1)
         persistSwap(
           startData.predictionId as string,
           stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
@@ -861,6 +895,7 @@ export function VoiceSwapPage() {
     setSelectedVoiceId2(null)
     setIsDuet(false)
     setRegenCount(0) // new track → reset the voice-strength ladder
+    tunedClipRef.current = null // new track → drop the cached preview clip
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
@@ -883,7 +918,126 @@ export function VoiceSwapPage() {
     }
     // Initial swap = 0.80 (styleIntensity 8). Each regen steps +0.05.
     const indexRate = 0.8 + 0.05 * (regenCount + 1)
-    await handleProcess('full', { charge: true, indexRateOverride: indexRate })
+    await handleProcess('full', { charge: true, indexRateOverride: indexRate, isRegen: true })
+  }
+
+  // Resolve the single-voice vocal stem to convert — mirrors the standard
+  // (non-duet) selection in handleProcess. Returns null when no source/voice.
+  function pickTuningVocalUrl(): string | null {
+    if (!stemResult) return null
+    const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
+    let url = stemResult.leadVocalsUrl || stemResult.vocalsUrl
+    if (gender === 'Male' && stemResult.maleVocalsUrl) url = stemResult.maleVocalsUrl
+    else if (gender === 'Female' && stemResult.femaleVocalsUrl) url = stemResult.femaleVocalsUrl
+    else if (hasDuetStems && duetMode === 'one') {
+      const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
+      if (singerUrl) url = singerUrl
+    }
+    return url ?? null
+  }
+
+  // Fine-tune panel: render a SHORT (30 s) preview of the swap with the given RVC
+  // params, without disturbing the committed full result. Trims+uploads the clip
+  // once per source vocal (cached), then runs voice-convert as a preview and
+  // returns the converted 30 s vocal URL. Returns null on any failure (toasted).
+  async function runTunedPreview(params: TuneParams): Promise<string | null> {
+    if (!stemResult) { showToast('Upload a track first'); return null }
+    const voice = voices.find((v) => v.id === selectedVoiceId)
+    if (!voice) { showToast('Select a voice first'); return null }
+    if (!voice.modelUrl) {
+      showToast(`"${voice.name}" is sample-only — train it in Voice Lab to tune.`)
+      return null
+    }
+    const sourceUrl = pickTuningVocalUrl()
+    if (!sourceUrl) { showToast('No vocal available to preview'); return null }
+
+    try {
+      // 1. Reuse the cached clip for this source, else trim → upload → sign once.
+      let clip = tunedClipRef.current
+      if (!clip || clip.sourceUrl !== sourceUrl) {
+        const blob = await trimAudioToClip(sourceUrl, PREVIEW_CLIP_SECONDS)
+
+        const presignRes = await fetch('/api/upload-stem/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: 'tuning-preview-30s.mp3', contentType: 'audio/mpeg' }),
+        })
+        const presign = await presignRes.json()
+        if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
+
+        const putRes = await fetch(presign.uploadUrl, {
+          method: 'PUT',
+          body: blob,
+          headers: { 'Content-Type': 'audio/mpeg', 'x-upsert': 'false' },
+        })
+        if (!putRes.ok) throw new Error(`Clip upload failed (${putRes.status})`)
+
+        const signRes = await fetch('/api/upload-stem/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: presign.path }),
+        })
+        const sign = await signRes.json()
+        if (!signRes.ok) throw new Error(sign.error ?? 'Failed to sign clip URL')
+
+        clip = { sourceUrl, clipUrl: sign.url, clipPath: presign.path }
+        tunedClipRef.current = clip
+      }
+
+      // 2. Run voice-convert on the clip as a preview with the tuned params.
+      const startRes = await fetch('/api/voice-convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vocalsUrl: clip.clipUrl,
+          vocalsPath: clip.clipPath, // server re-signs from audio-uploads
+          voiceModelUrl: voice.modelUrl,
+          voiceId: voice.id,
+          pitchShift,
+          indexRate: params.indexRate,
+          protect: params.protect,
+          filterRadius: params.filterRadius,
+          rmsMixRate: params.rmsMixRate,
+          isPreview: true,
+          trackKey: stemResult.storagePath || '',
+        }),
+      })
+      const startData = await startRes.json()
+      if (!startRes.ok) throw new Error(startData.error ?? 'Preview failed to start')
+      if (typeof startData.creditsRemaining === 'number') setCreditsRemaining(startData.creditsRemaining)
+
+      // 3. Poll to completion (clip is short, so this resolves fast).
+      const POLL_INTERVAL_MS = 4000
+      const MAX_ATTEMPTS = 150
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        const res = await fetch(`/api/voice-convert?id=${startData.predictionId}`)
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Preview failed')
+        if (data.status === 'succeeded') return data.convertedVocalsUrl as string
+        if (data.status === 'failed' || data.status === 'canceled') {
+          throw new Error(data.error ?? 'Preview failed')
+        }
+      }
+      throw new Error('Preview timed out')
+    } catch (err) {
+      console.error('[voice-swap] runTunedPreview threw:', err)
+      showToast(err instanceof Error ? err.message : 'Preview failed', 8000)
+      return null
+    }
+  }
+
+  // Fine-tune panel: commit the chosen params to a real full-song render. Routes
+  // through handleProcess('full') with the param overrides (isRegen:false, so it
+  // doesn't consume the regenerate cap).
+  async function handleApplyToFull(params: TuneParams) {
+    await handleProcess('full', {
+      charge: true,
+      indexRateOverride: params.indexRate,
+      protectOverride: params.protect,
+      filterRadiusOverride: params.filterRadius,
+      rmsMixRateOverride: params.rmsMixRate,
+    })
   }
 
   // Cleanup on unmount
@@ -956,6 +1110,8 @@ export function VoiceSwapPage() {
                 onRegenerate={handleRegenerate}
                 regenCapReached={regenCount >= MAX_REGENS}
                 onToast={showToast}
+                onTunedPreview={runTunedPreview}
+                onApplyToFull={handleApplyToFull}
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
@@ -1008,7 +1164,7 @@ export function VoiceSwapPage() {
                     handleProcess('preview')
                   }}
                 >
-                  {step === 1 ? 'Next: Configure →' : '▶ Preview 30 sec'}
+                  {step === 1 ? 'Next: Configure →' : '▶ Preview'}
                 </button>
                 {step === 2 && (
                   <button

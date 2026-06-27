@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Mp3Encoder } from '@breezystack/lamejs'
 import type { StemResult } from './UploadStep'
+import { encodeWav, encodeMp3 } from './audioClip'
 
 type AbSide = 'Original' | 'Swapped'
 type PlayMode = 'full' | 'vocals'
@@ -19,6 +19,11 @@ interface ResultStepProps {
   // True once the per-track regenerate cap is hit — disables the button.
   regenCapReached: boolean
   onToast: (msg: string) => void
+  // Fine-tune panel: render a short 30 s preview with the given RVC params
+  // (resolves to the converted vocal URL, or null on failure), and commit a
+  // chosen take to a full-song render.
+  onTunedPreview: (p: TuneParams) => Promise<string | null>
+  onApplyToFull: (p: TuneParams) => void
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
   // Duet Mode 1: the singer that was NOT converted. When present, the swapped
@@ -41,61 +46,6 @@ const PLAY_MODES: { id: PlayMode; label: string }[] = [
   { id: 'full', label: 'Full song' },
   { id: 'vocals', label: 'Vocals only' },
 ]
-
-// ---------------------------------------------------------------------------
-// WAV encoder — pure 16-bit PCM, no external dependencies
-// ---------------------------------------------------------------------------
-function encodeWav(buffer: AudioBuffer): Blob {
-  const numCh = Math.min(buffer.numberOfChannels, 2)
-  const numFrames = buffer.length
-  const sampleRate = buffer.sampleRate
-  const dataLen = numFrames * numCh * 2
-  const ab = new ArrayBuffer(44 + dataLen)
-  const v = new DataView(ab)
-  const s = (off: number, str: string) => { for (let i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)) }
-
-  s(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true); s(8, 'WAVE')
-  s(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
-  v.setUint16(22, numCh, true); v.setUint32(24, sampleRate, true)
-  v.setUint32(28, sampleRate * numCh * 2, true); v.setUint16(32, numCh * 2, true)
-  v.setUint16(34, 16, true); s(36, 'data'); v.setUint32(40, dataLen, true)
-
-  let pos = 44
-  for (let i = 0; i < numFrames; i++) {
-    for (let c = 0; c < numCh; c++) {
-      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(c)[i]))
-      v.setInt16(pos, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
-      pos += 2
-    }
-  }
-  return new Blob([ab], { type: 'audio/wav' })
-}
-
-// ---------------------------------------------------------------------------
-// MP3 encoder — uses @breezystack/lamejs (maintained lamejs fork), 192 kbps
-// ---------------------------------------------------------------------------
-function encodeMp3(buffer: AudioBuffer): Blob {
-  const numCh = Math.min(buffer.numberOfChannels, 2)
-  const encoder = new Mp3Encoder(numCh, buffer.sampleRate, 192)
-  const toInt16 = (ch: Float32Array): Int16Array => {
-    const out = new Int16Array(ch.length)
-    for (let i = 0; i < ch.length; i++) out[i] = Math.max(-32768, Math.min(32767, Math.round(ch[i] * 32768)))
-    return out
-  }
-  const left = toInt16(buffer.getChannelData(0))
-  const right = numCh > 1 ? toInt16(buffer.getChannelData(1)) : undefined
-  const CHUNK = 1152
-  const chunks: Uint8Array<ArrayBuffer>[] = []
-  const push = (raw: Uint8Array) => {
-    if (raw.length > 0) chunks.push(raw.slice() as Uint8Array<ArrayBuffer>)
-  }
-  for (let i = 0; i < left.length; i += CHUNK) {
-    const l = left.subarray(i, i + CHUNK)
-    push(right ? encoder.encodeBuffer(l, right.subarray(i, i + CHUNK)) : encoder.encodeBuffer(l))
-  }
-  push(encoder.flush())
-  return new Blob(chunks, { type: 'audio/mpeg' })
-}
 
 // ---------------------------------------------------------------------------
 // Browser mixing via OfflineAudioContext
@@ -251,10 +201,175 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Fine-tune panel — adjust RVC params, render a short 30 s preview, A/B compare
+// ---------------------------------------------------------------------------
+export interface TuneParams {
+  indexRate: number
+  protect: number
+  filterRadius: number
+  rmsMixRate: number
+}
+
+// Seeded from the same defaults voice-convert applies, so the first preview
+// reproduces the committed take before the user moves anything.
+const TUNE_DEFAULTS: TuneParams = { indexRate: 0.8, protect: 0.2, filterRadius: 4, rmsMixRate: 0.25 }
+
+const TUNE_SLIDERS: {
+  key: keyof TuneParams; label: string; hint: string
+  min: number; max: number; step: number; fmt: (n: number) => string
+}[] = [
+  { key: 'indexRate',    label: 'Voice strength',          hint: 'index_rate',    min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
+  { key: 'protect',      label: 'Breath / consonant guard', hint: 'protect',       min: 0, max: 0.5, step: 0.05, fmt: (n) => n.toFixed(2) },
+  { key: 'filterRadius', label: 'Smoothing',               hint: 'filter_radius', min: 0, max: 7,   step: 1,    fmt: (n) => String(n) },
+  { key: 'rmsMixRate',   label: 'Volume envelope',         hint: 'rms_mix_rate',  min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
+]
+
+interface Take { id: number; params: TuneParams; url: string }
+
+function FineTunePanel({
+  onTunedPreview, onApplyToFull, onToast,
+}: {
+  onTunedPreview: (p: TuneParams) => Promise<string | null>
+  onApplyToFull: (p: TuneParams) => void
+  onToast: (msg: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [params, setParams] = useState<TuneParams>(TUNE_DEFAULTS)
+  const [prevTake, setPrevTake] = useState<Take | null>(null)
+  const [curTake, setCurTake] = useState<Take | null>(null)
+  const [ab, setAb] = useState<'A' | 'B'>('B')
+  const [busy, setBusy] = useState(false)
+  const takeIdRef = useRef(0)
+
+  // Mini player — vocals-only, 30 s, independent of the main full-song player.
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const selected = ab === 'A' ? prevTake : curTake
+  const selectedUrl = selected?.url ?? null
+
+  async function handlePreview() {
+    if (busy) return
+    setBusy(true)
+    onToast('Rendering 30-sec preview…')
+    const url = await onTunedPreview(params)
+    setBusy(false)
+    if (!url) return // failure already toasted upstream
+    const take: Take = { id: ++takeIdRef.current, params: { ...params }, url }
+    setPrevTake(curTake) // current take slides into the A slot
+    setCurTake(take)
+    setAb('B')
+    onToast('Preview ready — compare A / B')
+  }
+
+  function handleTogglePlay() {
+    const a = audioRef.current
+    if (!a || !selectedUrl) return
+    if (a.paused) a.play().catch(() => {})
+    else a.pause()
+  }
+
+  const setParam = (key: keyof TuneParams, value: number) =>
+    setParams((p) => ({ ...p, [key]: value }))
+
+  return (
+    <div className="vs-tune">
+      <button className="vs-tune-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="vs-tune-head-title">⚙ Fine-tune voice <span className="vs-tune-adv">Advanced</span></span>
+        <span className="vs-tune-chev">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="vs-tune-body">
+          {TUNE_SLIDERS.map((s) => (
+            <div key={s.key} className="vs-tune-row">
+              <div className="vs-tune-rowtop">
+                <span className="vs-tune-label">{s.label} <span className="vs-tune-hint">{s.hint}</span></span>
+                <span className="vs-tune-val">{s.fmt(params[s.key])}</span>
+              </div>
+              <input
+                type="range"
+                className="vs-tune-slider"
+                min={s.min} max={s.max} step={s.step}
+                value={params[s.key]}
+                disabled={busy}
+                onChange={(e) => setParam(s.key, Number(e.target.value))}
+              />
+            </div>
+          ))}
+
+          <div className="vs-tune-actions">
+            <button className="vs-tune-preview-btn" onClick={handlePreview} disabled={busy}>
+              {busy ? '⏳ Rendering…' : '▶ Preview 30 sec'}
+            </button>
+            <span className="vs-tune-cost">First 2/track free · 50 cr after</span>
+          </div>
+
+          {(prevTake || curTake) && (
+            <div className="vs-tune-compare">
+              {/* A/B take toggle */}
+              <div className="vs-toggle-group vs-tune-ab">
+                <button
+                  className={`vs-ptab ${ab === 'A' ? 'vs-ptab--active' : ''}`}
+                  onClick={() => setAb('A')}
+                  disabled={!prevTake}
+                  title={prevTake ? undefined : 'No previous take yet'}
+                >A · Previous</button>
+                <button
+                  className={`vs-ptab ${ab === 'B' ? 'vs-ptab--active' : ''}`}
+                  onClick={() => setAb('B')}
+                  disabled={!curTake}
+                >B · New</button>
+              </div>
+
+              {/* Mini vocals-only player for the selected take */}
+              {selectedUrl && (
+                <>
+                  <audio
+                    ref={audioRef}
+                    src={selectedUrl}
+                    preload="metadata"
+                    onPlay={() => setPlaying(true)}
+                    onPause={() => setPlaying(false)}
+                    onEnded={() => { setPlaying(false); setProgress(0) }}
+                    onTimeUpdate={() => {
+                      const a = audioRef.current
+                      if (a && a.duration) setProgress(a.currentTime / a.duration)
+                    }}
+                  />
+                  <div className="vs-tune-mini">
+                    <button className="vs-play-btn" onClick={handleTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+                      {playing ? '⏸' : '▶'}
+                    </button>
+                    <div className="vs-tune-bar"><div className="vs-tune-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
+                    <span className="vs-tune-side">{ab === 'A' ? 'Previous' : 'New'} take</span>
+                  </div>
+                </>
+              )}
+
+              <button
+                className="vs-tune-apply"
+                onClick={() => selected && onApplyToFull(selected.params)}
+                disabled={!selected}
+                title="Re-render the full song with the selected take's settings (200 cr)"
+              >
+                ✓ Apply {ab === 'A' ? 'Previous' : 'New'} to Full Track · 200 cr
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
+  onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
@@ -657,6 +772,16 @@ export function ResultStep({
           )}
         </div>
 
+        {/* Fine-tune panel — single-voice swaps only for v1 (duet tuning is a
+            follow-up). Hidden when a second converted vocal is present. */}
+        {!convertedVocalsUrl2 && (
+          <FineTunePanel
+            onTunedPreview={onTunedPreview}
+            onApplyToFull={onApplyToFull}
+            onToast={onToast}
+          />
+        )}
+
         {/* Regen row */}
         <div className="vs-regen-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#5A5A80' }}>
@@ -832,6 +957,61 @@ export function ResultStep({
           padding: 2px 6px; border-radius: 999px;
           background: rgba(139,92,246,.15); color: #A78BFA; border: 1px solid rgba(139,92,246,.3);
         }
+
+        /* Fine-tune panel */
+        .vs-tune {
+          background: #0E0E20; border: 1px solid #1E1E3A;
+          border-radius: 10px; margin-bottom: 14px; overflow: hidden;
+        }
+        .vs-tune-head {
+          width: 100%; display: flex; align-items: center; justify-content: space-between;
+          padding: 10px 14px; background: transparent; border: none; cursor: pointer;
+          color: #C4C4E0; font-size: 13px; font-weight: 600;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+        }
+        .vs-tune-head:hover { color: #F0F0FF; }
+        .vs-tune-adv {
+          font-size: 9px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+          padding: 2px 6px; border-radius: 999px; margin-left: 6px;
+          background: rgba(139,92,246,.15); color: #A78BFA; border: 1px solid rgba(139,92,246,.3);
+        }
+        .vs-tune-chev { color: #5A5A80; font-size: 10px; }
+        .vs-tune-body { padding: 4px 14px 14px; border-top: 1px solid #1E1E3A; }
+        .vs-tune-row { margin-top: 12px; }
+        .vs-tune-rowtop { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+        .vs-tune-label { font-size: 12px; color: #C4C4E0; }
+        .vs-tune-hint { font-size: 10px; color: #5A5A80; font-variant-numeric: tabular-nums; }
+        .vs-tune-val {
+          font-size: 12px; color: #A78BFA; font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .vs-tune-slider { width: 100%; accent-color: #8B5CF6; cursor: pointer; }
+        .vs-tune-slider:disabled { opacity: 0.5; cursor: not-allowed; }
+        .vs-tune-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+        .vs-tune-preview-btn {
+          padding: 8px 16px; border-radius: 8px; border: none;
+          background: linear-gradient(135deg,#8B5CF6,#EC4899); color: #fff;
+          font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .vs-tune-preview-btn:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+        .vs-tune-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .vs-tune-cost { font-size: 11px; color: #5A5A80; }
+        .vs-tune-compare {
+          margin-top: 16px; padding-top: 14px; border-top: 1px solid #1E1E3A;
+          display: flex; flex-direction: column; gap: 12px;
+        }
+        .vs-tune-ab { align-self: flex-start; border: 1px solid #1E1E3A; border-radius: 8px; }
+        .vs-tune-mini { display: flex; align-items: center; gap: 12px; }
+        .vs-tune-bar { flex: 1; height: 5px; background: #1E1E3A; border-radius: 3px; overflow: hidden; }
+        .vs-tune-bar-fill { height: 100%; background: linear-gradient(135deg,#8B5CF6,#EC4899); border-radius: 3px; }
+        .vs-tune-side { font-size: 11px; color: #5A5A80; min-width: 80px; text-align: right; }
+        .vs-tune-apply {
+          align-self: flex-start; padding: 8px 16px; border-radius: 8px;
+          border: 1px solid rgba(16,185,129,.4); background: rgba(16,185,129,.1);
+          color: #10B981; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .vs-tune-apply:hover:not(:disabled) { background: rgba(16,185,129,.18); }
+        .vs-tune-apply:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </>
   )

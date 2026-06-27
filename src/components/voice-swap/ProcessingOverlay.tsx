@@ -59,7 +59,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
           color: '#F0F0FF',
         }}
       >
-        {type === 'preview' ? 'Generating 30-sec Preview' : 'Processing Your Swap'}
+        {type === 'preview' ? 'Generating Preview' : 'Processing Your Swap'}
       </div>
 
       <div style={{ fontSize: '12px', color: '#5A5A80', marginBottom: '28px' }}>
