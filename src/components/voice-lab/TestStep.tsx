@@ -142,8 +142,23 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
         </p>
 
         <div className="vlte-test-row">
-          <button className="vlte-play-btn" onClick={handlePlay}>
-            {testPlaying ? (
+          {/* Disabled until the signed URL has resolved — clicking Play before
+              then is the race that produced "No sample audio available" on first
+              load (the audio element isn't mounted yet). A spinner shows the wait. */}
+          <button
+            className="vlte-play-btn"
+            onClick={handlePlay}
+            disabled={sampleStatus !== 'ready'}
+            aria-busy={sampleStatus === 'loading'}
+            title={
+              sampleStatus === 'loading' ? 'Loading sample…'
+                : sampleStatus === 'failed' ? 'Sample unavailable'
+                : undefined
+            }
+          >
+            {sampleStatus === 'loading' ? (
+              <span className="vlte-play-spinner" aria-hidden="true" />
+            ) : testPlaying ? (
               <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
                 <rect x="6" y="4" width="4" height="16"/>
                 <rect x="14" y="4" width="4" height="16"/>
@@ -236,7 +251,14 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           cursor: pointer; transition: all 0.25s;
           display: flex; align-items: center; justify-content: center;
         }
-        .vlte-play-btn:hover { transform: scale(1.08); box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+        .vlte-play-btn:hover:not(:disabled) { transform: scale(1.08); box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+        .vlte-play-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .vlte-play-spinner {
+          width: 16px; height: 16px; border-radius: 50%; display: block;
+          border: 2px solid rgba(255,255,255,.35); border-top-color: #fff;
+          animation: vlteSpin 0.7s linear infinite;
+        }
+        @keyframes vlteSpin { to { transform: rotate(360deg); } }
         .vlte-test-lbl { font-size: 11px; color: #5A5A80; flex-shrink: 0; }
         .vlte-retry {
           background: transparent; border: 1px solid #272745; border-radius: 6px;
