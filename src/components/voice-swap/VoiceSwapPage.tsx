@@ -359,7 +359,9 @@ export function VoiceSwapPage() {
       const startRes = await fetch('/api/karaoke-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vocalsUrl: result.vocalsUrl }),
+        // vocalsPath lets the route re-sign a fresh URL server-side, so a stale
+        // cached vocalsUrl (Demucs output expires ~1h) can't break the split.
+        body: JSON.stringify({ vocalsUrl: result.vocalsUrl, vocalsPath: result.vocalsPath }),
       })
       if (!startRes.ok) { if (karaokeJobRef.current === jobId) setKaraokeStatus('failed'); return }
       const predictionId = (await startRes.json()).predictionId as string | undefined
@@ -447,7 +449,9 @@ export function VoiceSwapPage() {
       const startRes = await fetch('/api/gender-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vocalsUrl: result.vocalsUrl }),
+        // vocalsPath lets the route re-sign a fresh URL server-side — the main fix
+        // for intermittent duet-split failures from a stale cached vocalsUrl.
+        body: JSON.stringify({ vocalsUrl: result.vocalsUrl, vocalsPath: result.vocalsPath }),
       })
       // Gated responses are NOT processing failures — surface them distinctly.
       if (startRes.status === 403) {
@@ -756,11 +760,17 @@ export function VoiceSwapPage() {
         if (singerUrl) vocalsToConvert = singerUrl
       }
 
+      // Only the full vocals stem has a durable Supabase path; derived stems
+      // (lead/male/female) are still ephemeral until Increment B persists them,
+      // so we send vocalsPath only when converting the full vocal.
+      const usingFullVocals = vocalsToConvert === stemResult.vocalsUrl
+
       console.log('[voice-swap] starting swap:', {
         type,
         voiceId: voice.id,
         vocalsToConvert,
         usedLeadVocals: !!stemResult.leadVocalsUrl,
+        usingFullVocals,
         storagePath: stemResult.storagePath,
       })
 
@@ -769,6 +779,7 @@ export function VoiceSwapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vocalsUrl: vocalsToConvert,
+          vocalsPath: usingFullVocals ? stemResult.vocalsPath : undefined,
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift,

@@ -173,14 +173,14 @@ export async function POST(req: NextRequest) {
   // and the outer catch can refund a charge whose job never started.
   let chargedUserId: string | null = null
   try {
-    let body: { vocalsUrl?: string }
+    let body: { vocalsUrl?: string; vocalsPath?: string }
     try {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl } = body
+    const { vocalsUrl, vocalsPath } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -256,10 +256,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'MVSEP API token not configured' }, { status: 500 })
     }
 
+    // Re-sign the vocal stem from its durable Supabase path so MVSEP always
+    // fetches a fresh URL. A stale client-cached vocalsUrl — the Demucs output
+    // expires ~1h, and a duet split often runs well after that (cache restore,
+    // manual "Split Duet") — is the main cause of intermittent duet-split
+    // failures. Falls back to the supplied URL when no path is provided.
+    let effectiveVocalsUrl = vocalsUrl
+    if (vocalsPath && !vocalsPath.includes('..')) {
+      const { data: signed, error: signErr } = await supabaseAdmin.storage
+        .from(BUCKET)
+        .createSignedUrl(vocalsPath, SIGNED_URL_TTL)
+      if (signErr || !signed?.signedUrl) {
+        console.warn('[gender-split] vocalsPath re-sign failed, using supplied URL:', signErr?.message)
+      } else {
+        effectiveVocalsUrl = signed.signedUrl
+      }
+    }
+
     // MVSEP create takes multipart form data. Provide the audio by URL.
     const form = new FormData()
     form.append('api_token', token)
-    form.append('url', vocalsUrl)
+    form.append('url', effectiveVocalsUrl)
     form.append('remote_type', 'direct')
     form.append('sep_type', SEP_TYPE)
     form.append('add_opt1', ADD_OPT1)

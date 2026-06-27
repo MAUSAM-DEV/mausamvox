@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
   try {
     let body: {
       vocalsUrl?: string
+      vocalsPath?: string
       voiceModelUrl?: string
       voiceId?: string
       pitchShift?: number
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -185,6 +186,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Re-sign the vocal stem from its durable Supabase path so RVC always fetches
+    // a fresh URL. The client-supplied vocalsUrl can be a long-dead Replicate URL
+    // (the Demucs output expires ~1h) or a stale signed URL by the time a swap is
+    // submitted — especially after a localStorage cache restore. Falls back to the
+    // supplied URL for derived stems (lead/male/female) and manual/legacy results,
+    // which carry no vocalsPath yet (those land in Increment B).
+    let effectiveVocalsUrl = vocalsUrl
+    if (vocalsPath && !vocalsPath.includes('..')) {
+      const { data: signed, error: signErr } = await supabaseAdmin.storage
+        .from('audio-uploads')
+        .createSignedUrl(vocalsPath, 21600)
+      if (signErr || !signed?.signedUrl) {
+        console.warn('[voice-convert] vocalsPath re-sign failed, using supplied URL:', signErr?.message)
+      } else {
+        effectiveVocalsUrl = signed.signedUrl
+      }
+    }
+
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
     // Style Intensity (1–10, "Subtle" → "Full replacement") maps onto RVC's
@@ -203,7 +222,7 @@ export async function POST(req: NextRequest) {
       prediction = await replicate.predictions.create({
         version: RVC_VERSION,
         input: {
-          song_input: vocalsUrl,
+          song_input: effectiveVocalsUrl,
           rvc_model: 'CUSTOM',
           custom_rvc_model_download_url: effectiveModelUrl,
           pitch_change: 'no-change',

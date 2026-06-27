@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const maxDuration = 30
 
@@ -44,14 +45,14 @@ function safeStringify(v: unknown): string {
 // a swap and is always free (no credit deduction here).
 export async function POST(req: NextRequest) {
   try {
-    let body: { vocalsUrl?: string }
+    let body: { vocalsUrl?: string; vocalsPath?: string }
     try {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl } = body
+    const { vocalsUrl, vocalsPath } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -60,12 +61,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
+    // Re-sign the vocal stem from its durable Supabase path so the karaoke split
+    // always fetches a fresh URL — the client-cached vocalsUrl (Demucs output)
+    // expires ~1h. Falls back to the supplied URL when no path is provided.
+    let effectiveVocalsUrl = vocalsUrl
+    if (vocalsPath && !vocalsPath.includes('..')) {
+      const { data: signed, error: signErr } = await supabaseAdmin.storage
+        .from('audio-uploads')
+        .createSignedUrl(vocalsPath, 21600)
+      if (signErr || !signed?.signedUrl) {
+        console.warn('[karaoke-split] vocalsPath re-sign failed, using supplied URL:', signErr?.message)
+      } else {
+        effectiveVocalsUrl = signed.signedUrl
+      }
+    }
+
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
     const prediction = await replicate.predictions.create({
       version: KARAOKE_VERSION,
       input: {
-        music_input: vocalsUrl,
+        music_input: effectiveVocalsUrl,
         audioSeparator: true,
         audioSeparatorModel: KARAOKE_MODEL,
       },

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-// POST just creates the prediction and returns immediately — no blocking wait.
-// GET is a lightweight status check. Both fit comfortably inside 30 s.
-export const maxDuration = 30
+// POST creates the prediction and returns immediately. GET is the status poll;
+// on success it now also buffers the vocal stem from Replicate into Supabase
+// (a ~5 MB download + re-upload), so allow up to 60 s like voice-swaps/persist.
+export const maxDuration = 60
 
 const DEMUCS_VERSION = '25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953'
 
@@ -50,6 +51,42 @@ function extractStems(output: unknown): { bass: string; drums: string; other: st
 
 function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }
+}
+
+// ── Durable vocals copy ─────────────────────────────────────────────────────
+// Demucs returns ephemeral replicate.delivery URLs (~1h). The isolated vocal is
+// later fed to gender-split (MVSEP), karaoke-split, and voice-convert (RVC) —
+// often well past that hour (localStorage cache restore, duet flows). We copy
+// the vocal stem into the private audio-uploads bucket so those routes can
+// re-sign a fresh URL on demand. Same pattern as gender-split's persistStem and
+// voice-swaps/persist.
+const STEMS_BUCKET = 'audio-uploads'
+const STEM_URL_TTL = 21600 // 6h, matches upload-stem/sign
+
+// Copy the Demucs vocal stem into Supabase, keyed by predictionId. Returns a
+// durable signed URL + its storage path, or null on any failure (soft-fallback:
+// the caller keeps the ephemeral Replicate URL so today's flow still works).
+// Idempotent: a re-poll after success reuses the existing object.
+async function persistVocals(predictionId: string, vocalsUrl: string): Promise<{ url: string; path: string } | null> {
+  const path = `stems/${predictionId}-vocals.mp3`
+  try {
+    // createSignedUrl errors on a missing object, so it doubles as an existence
+    // probe — if the stem was already copied on a prior poll, reuse it.
+    const existing = await supabaseAdmin.storage.from(STEMS_BUCKET).createSignedUrl(path, STEM_URL_TTL)
+    if (existing.data?.signedUrl) return { url: existing.data.signedUrl, path }
+
+    const res = await fetch(vocalsUrl)
+    if (!res.ok) throw new Error(`download failed (http ${res.status})`)
+    const buffer = Buffer.from(await res.arrayBuffer())
+    const up = await supabaseAdmin.storage.from(STEMS_BUCKET).upload(path, buffer, { contentType: 'audio/mpeg', upsert: true })
+    if (up.error) throw new Error(`upload failed: ${up.error.message}`)
+    const signed = await supabaseAdmin.storage.from(STEMS_BUCKET).createSignedUrl(path, STEM_URL_TTL)
+    if (signed.error || !signed.data?.signedUrl) throw new Error(`sign failed: ${signed.error?.message ?? 'unknown'}`)
+    return { url: signed.data.signedUrl, path }
+  } catch (err) {
+    console.error('[stem-split] vocals persist failed, using ephemeral URL:', err instanceof Error ? err.message : String(err))
+    return null
+  }
 }
 
 // Starts a Demucs stem-split job. Returns immediately with a prediction ID —
@@ -147,7 +184,15 @@ export async function GET(req: NextRequest) {
         )
       }
       console.log(`[stem-split] prediction ${id} succeeded`)
-      return NextResponse.json({ status: 'succeeded', ...stems })
+      // Buffer the vocal stem into durable storage so later consumers can
+      // re-sign it after the Replicate URL expires. Soft-fallback: on failure we
+      // return the ephemeral URL and omit vocalsPath (callers behave as before).
+      const persistedVocals = await persistVocals(id, stems.vocals)
+      return NextResponse.json({
+        status: 'succeeded',
+        ...stems,
+        ...(persistedVocals ? { vocals: persistedVocals.url, vocalsPath: persistedVocals.path } : {}),
+      })
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {

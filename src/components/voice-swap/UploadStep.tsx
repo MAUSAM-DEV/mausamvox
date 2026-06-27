@@ -98,6 +98,11 @@ async function getDroppedFiles(dt: DataTransfer): Promise<File[]> {
 export interface StemResult {
   storagePath: string
   vocalsUrl: string
+  // Durable audio-uploads path for the vocal stem, set by /api/stem-split once it
+  // copies the Demucs output into Supabase. Lets gender-split / karaoke-split /
+  // voice-convert re-sign a fresh URL instead of trusting the ~1h Replicate URL.
+  // Absent for legacy cached results and the manual-extracted-stems path.
+  vocalsPath?: string
   // Lead/backing split of vocalsUrl, populated by /api/karaoke-split.
   // Optional: legacy cached results and the manual-stems path won't have them.
   // Every consumer falls back to vocalsUrl when leadVocalsUrl is empty.
@@ -340,6 +345,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const POLL_INTERVAL_MS = 3000
       const MAX_ATTEMPTS = 150 // ~7.5 minutes
       let stems: { vocals: string; bass: string; drums: string; other: string } | null = null
+      // Durable path for the vocal stem (set by /api/stem-split when it copies the
+      // Demucs output into Supabase). Empty if persistence soft-failed server-side.
+      let vocalsPath = ''
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         const pollRes = await fetch(`/api/stem-split?id=${predictionId}`)
@@ -351,6 +359,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         const pollData = await pollRes.json()
         if (pollData.status === 'succeeded') {
           stems = { vocals: pollData.vocals, bass: pollData.bass, drums: pollData.drums, other: pollData.other }
+          vocalsPath = pollData.vocalsPath ?? ''
           break
         }
         if (pollData.status === 'failed' || pollData.status === 'canceled') {
@@ -363,6 +372,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const stemResult: StemResult = {
         storagePath:     presign.path,
         vocalsUrl:       stems.vocals,
+        vocalsPath,
         leadVocalsUrl:   '',
         backingVocalsUrl:'',
         maleVocalsUrl:   '',
