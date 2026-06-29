@@ -50,13 +50,17 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Parse body ─────────────────────────────────────────────────────────────
-  let body: { predictionId?: string; songName?: string; voiceUsed?: string }
+  // mixedPath (optional): storage path in audio-uploads of the client-built
+  // FULL mix (clone vocal + instrumental). When present we store THAT as the
+  // durable result instead of the bare RVC vocal, so Recent Swaps plays the
+  // full track. result_url still holds the Replicate vocal URL as a fallback.
+  let body: { predictionId?: string; songName?: string; voiceUsed?: string; mixedPath?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { predictionId, songName, voiceUsed } = body
+  const { predictionId, songName, voiceUsed, mixedPath } = body
   if (!predictionId) return NextResponse.json({ error: 'predictionId is required' }, { status: 400 })
   if (!songName)     return NextResponse.json({ error: 'songName is required' }, { status: 400 })
   if (!voiceUsed)    return NextResponse.json({ error: 'voiceUsed is required' }, { status: 400 })
@@ -94,10 +98,26 @@ export async function POST(req: NextRequest) {
   const swapId = crypto.randomUUID()
   const swapPath = `${user.id}/${swapId}.mp3`
 
+  // ── Pick what to store durably ───────────────────────────────────────────
+  // Prefer the client-built full mix (signed from audio-uploads); fall back to
+  // the Replicate vocal URL when no mix was supplied or it can't be signed.
+  let downloadUrl = resultUrl
+  if (mixedPath && !mixedPath.includes('..')) {
+    const { data: signed, error: signErr } = await supabaseAdmin.storage
+      .from('audio-uploads')
+      .createSignedUrl(mixedPath, 600) // 10 min — fetched immediately below
+    if (signErr || !signed?.signedUrl) {
+      console.error('[voice-swaps/persist] mixed path sign failed, using vocal:', signErr?.message)
+    } else {
+      downloadUrl = signed.signedUrl
+      console.log('[voice-swaps/persist] storing FULL mix from', mixedPath)
+    }
+  }
+
   // ── Best-effort: download + upload to durable storage ────────────────────
   let resultPath: string | null = null
   try {
-    const res = await fetch(resultUrl)
+    const res = await fetch(downloadUrl)
     if (!res.ok) {
       console.error(`[voice-swaps/persist] download failed HTTP ${res.status}`)
     } else {

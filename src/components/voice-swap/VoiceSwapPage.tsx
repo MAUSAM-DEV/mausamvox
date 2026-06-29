@@ -121,6 +121,12 @@ export function VoiceSwapPage() {
     sourceUrl: string; startSeconds: number; lengthSeconds: number
     clipUrl: string; clipPath: string
   } | null>(null)
+  // Deferred persist for full swaps: we wait until ResultStep has built + uploaded
+  // the full-song mix, then persist with its path so Recent Swaps saves the FULL
+  // track. The ref holds the swap context; armMixUpload tells ResultStep to upload
+  // (true only for full swaps, never previews, so previews don't waste an upload).
+  const persistContextRef = useRef<{ predictionId: string; songName: string; voiceUsed: string } | null>(null)
+  const [armMixUpload, setArmMixUpload] = useState(false)
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps / regenerates of
   // the same pair don't re-fetch + re-decode the same audio.
@@ -364,13 +370,13 @@ export function VoiceSwapPage() {
   // Persists the swap result server-side: downloads the Replicate MP3, uploads
   // it to durable Supabase storage, and inserts the voice_swaps row — all within
   // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
-  async function persistSwap(predictionId: string, songName: string, voiceUsed: string) {
+  async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string) {
     if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return }
     try {
       const res = await fetch('/api/voice-swaps/persist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ predictionId, songName, voiceUsed }),
+        body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath }),
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
@@ -392,6 +398,19 @@ export function VoiceSwapPage() {
       console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
       showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
     }
+  }
+
+  // Called by ResultStep once the full-song mix is built (and uploaded). A null
+  // mixedPath means the mix/upload failed — we still persist, falling back to the
+  // vocal-only result so the swap isn't lost from Recent Swaps. No-op when there's
+  // no armed context (e.g. a preview, or already handled).
+  function handleFullMixReady(mixedPath: string | null) {
+    const ctx = persistContextRef.current
+    if (!ctx) return
+    persistContextRef.current = null
+    setArmMixUpload(false)
+    persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined)
+      .catch(() => { /* ignore — swap is still complete */ })
   }
 
   // Fires automatically after a server-side stem split to split the isolated
@@ -765,6 +784,10 @@ export function VoiceSwapPage() {
 
     setProcessingType(type)
     setProcessing(true)
+    // Clear any prior deferred-persist arming up front so a preview never uploads
+    // a mix or persists; full swaps re-arm it on success below.
+    persistContextRef.current = null
+    setArmMixUpload(false)
     // Vocals are already isolated during upload, so step 1 starts done.
     setOvSteps(['done', 'active', 'pending', 'pending'])
 
@@ -892,11 +915,13 @@ export function VoiceSwapPage() {
         // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
         // also sets indexRateOverride but passes isRegen:false, so it's exempt.
         if (isRegen) setRegenCount((c) => c + 1)
-        persistSwap(
-          dataA.data.predictionId as string,
-          stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
-          `${voice.name} + ${voice2.name}`,
-        ).catch(() => { /* ignore — swap is still complete */ })
+        // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
+        persistContextRef.current = {
+          predictionId: dataA.data.predictionId as string,
+          songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+          voiceUsed: `${voice.name} + ${voice2.name}`,
+        }
+        setArmMixUpload(true)
         return
       }
 
@@ -987,11 +1012,13 @@ export function VoiceSwapPage() {
         // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
         // also sets indexRateOverride but passes isRegen:false, so it's exempt.
         if (isRegen) setRegenCount((c) => c + 1)
-        persistSwap(
-          startData.predictionId as string,
-          stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
-          voice?.name ?? 'Unknown Voice',
-        ).catch(() => { /* ignore — swap is still complete */ })
+        // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
+        persistContextRef.current = {
+          predictionId: startData.predictionId as string,
+          songName: stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+          voiceUsed: voice?.name ?? 'Unknown Voice',
+        }
+        setArmMixUpload(true)
       }
       // Previews are no longer charged here — the server-side gate in
       // /api/voice-convert handles the "first 2 free, then 50" pricing at job
@@ -1253,6 +1280,8 @@ export function VoiceSwapPage() {
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
                 duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
+                persistMix={armMixUpload}
+                onFullMixReady={handleFullMixReady}
               />
             )}
           </div>

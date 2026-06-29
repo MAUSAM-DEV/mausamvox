@@ -33,6 +33,11 @@ interface ResultStepProps {
   // Duet Mode 2/3: the second converted vocal (female singer). When present,
   // the swapped mix blends both converted stems (each at 1/√2 gain).
   convertedVocalsUrl2?: string | null
+  // When true (a full swap, not a preview), upload the built full-song mix and
+  // report its storage path via onFullMixReady so Recent Swaps saves the FULL
+  // track. A null path means the mix/upload failed → caller persists the vocal.
+  persistMix?: boolean
+  onFullMixReady?: (mixedPath: string | null) => void
 }
 
 const SCORE_BARS = [
@@ -54,6 +59,40 @@ const PLAY_MODES: { id: PlayMode; label: string }[] = [
 // Vocal gain uses equal-power law (1/√N) so two vocal channels at N=2 have
 // the same perceived loudness as a single channel at N=1. musicGain: 0.8.
 // ---------------------------------------------------------------------------
+// Encode a WAV mix (object URL) to MP3 and upload it to audio-uploads via the
+// same presign → PUT flow the Fine-tune preview uses (bypasses Vercel's body
+// limit — a full-song mix is large). Returns the storage path, or null on any
+// failure so the caller can fall back to persisting the vocal-only result.
+async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(wavMixUrl)
+    if (!res.ok) return null
+    const ctx = new AudioContext()
+    const decoded = await ctx.decodeAudioData(await res.arrayBuffer())
+    await ctx.close()
+    const mp3 = encodeMp3(decoded)
+
+    const presignRes = await fetch('/api/upload-stem/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'swap-full-mix.mp3', contentType: 'audio/mpeg' }),
+    })
+    const presign = await presignRes.json()
+    if (!presignRes.ok) return null
+
+    const putRes = await fetch(presign.uploadUrl, {
+      method: 'PUT',
+      body: mp3,
+      headers: { 'Content-Type': 'audio/mpeg', 'x-upsert': 'false' },
+    })
+    if (!putRes.ok) return null
+
+    return presign.path as string
+  } catch {
+    return null
+  }
+}
+
 async function mixStems(
   vocalsUrls: string[],
   musicUrls: string[],
@@ -427,6 +466,7 @@ export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
   onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
+  persistMix, onFullMixReady,
 }: ResultStepProps) {
   const [barsAnimated, setBarsAnimated] = useState(false)
 
@@ -479,9 +519,11 @@ export function ResultStep({
     ].filter((u): u is string => Boolean(u))
 
     if (musicUrls.length === 0) {
-      // No music stems — Full song mode is impossible. Force vocals-only.
+      // No music stems — Full song mode is impossible. Force vocals-only and
+      // persist the vocal (null path) so the swap still lands in Recent Swaps.
       setFullMixState('no-stems')
       setMode('vocals')
+      if (persistMix) onFullMixReady?.(null)
       return
     }
 
@@ -506,6 +548,7 @@ export function ResultStep({
         if (cancelled) return
         if (!origBlob || !swapBlob) {
           setFullMixState('error')
+          if (persistMix) onFullMixReady?.(null) // fall back to vocal-only persist
           return
         }
         const origUrl = URL.createObjectURL(origBlob)
@@ -515,9 +558,16 @@ export function ResultStep({
         setMixedOriginalUrl(origUrl)
         setMixedSwappedUrl(swapUrl)
         setFullMixState('ready')
+        // Full swap → upload the full mix, then hand its path up for persisting.
+        // A null result (mix/upload failed) falls back to the vocal-only persist.
+        if (persistMix && onFullMixReady) {
+          uploadFullMixMp3(swapUrl).then((path) => { if (!cancelled) onFullMixReady(path) })
+        }
       })
       .catch(() => {
-        if (!cancelled) setFullMixState('error')
+        if (cancelled) return
+        setFullMixState('error')
+        if (persistMix) onFullMixReady?.(null)
       })
 
     return () => { cancelled = true }
