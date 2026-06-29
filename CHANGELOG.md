@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-06-30
 
+- Recent Swaps now saves the FULL track (clone vocal + instrumental) instead of the vocal-only file — ResultStep uploads the built mix (presign→PUT) and persist stores it as result_path; falls back to the vocal if the mix/upload fails; previews never upload. (commit: ff33ce5)
 - Fix hardcoded sidebar "My Voices" badge — VSidebar + VLSidebar now render a live voice_clones count (count:exact, head, eq user_id) instead of a static '3'. (commit: 42b21ba)
 - Fix stale dashboard counts — Voice Swaps + Voice Clones counts now refetch on window focus and tab visibilitychange (were fetched once on mount); delete handler refetches authoritatively instead of optimistic local −1. (commit: 3bb8d75)
 - Restore duet-split warning before auto-split — declared-duet uploads no longer silently run the 250cr gender-split; the existing amber gate renders and the user must click "Split duet · 250 cr · Premium" to proceed (Option A: handleStemDone no longer auto-calls runGenderSplit / sets genderSplitting). (commit: d273e69)
