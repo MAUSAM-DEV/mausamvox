@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
@@ -76,6 +76,39 @@ export function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
+  // Captured on mount so the focus/visibility refetch can re-query without
+  // re-resolving the session each time.
+  const userIdRef = useRef<string | null>(null)
+
+  // Live-refetch the dashboard counts (and the Recent Swaps list, same query) so
+  // revisiting the dashboard reflects swaps/clones created or deleted elsewhere.
+  // Stable identity (no deps) so the focus/visibility listeners stay attached.
+  const refetchCounts = useCallback(async () => {
+    const uid = userIdRef.current
+    if (!uid) return
+    const supabase = createClient()
+
+    supabase
+      .from('voice_clones')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', uid)
+      .then(({ count, error }) => {
+        if (error) console.error('voice_clones count failed', error)
+        else setVoiceClonesCount(count ?? 0)
+      })
+
+    supabase
+      .from('voice_swaps')
+      .select('id, song_name, voice_used, quality_score, created_at', { count: 'exact' })
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(4)
+      .then(({ data: s, count, error }) => {
+        if (error) console.error('voice_swaps fetch failed', error)
+        else { setVoiceSwapsCount(count ?? 0); setRecentSwaps(s ?? []) }
+        setSwapsLoading(false)
+      })
+  }, [])
 
   useEffect(() => {
     const supabase = createClient()
@@ -88,6 +121,7 @@ export function DashboardPage() {
       setUserName(display)
       setUserEmail(email)
       setUserInitial((display[0] ?? 'M').toUpperCase())
+      userIdRef.current = u.id
 
       supabase
         .from('users')
@@ -99,28 +133,24 @@ export function DashboardPage() {
           else if (error) console.error('credits fetch failed', error)
         })
 
-      supabase
-        .from('voice_clones')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', u.id)
-        .then(({ count, error }) => {
-          if (error) console.error('voice_clones count failed', error)
-          else setVoiceClonesCount(count ?? 0)
-        })
-
-      supabase
-        .from('voice_swaps')
-        .select('id, song_name, voice_used, quality_score, created_at', { count: 'exact' })
-        .eq('user_id', u.id)
-        .order('created_at', { ascending: false })
-        .limit(4)
-        .then(({ data: s, count, error }) => {
-          if (error) console.error('voice_swaps fetch failed', error)
-          else { setVoiceSwapsCount(count ?? 0); setRecentSwaps(s ?? []) }
-          setSwapsLoading(false)
-        })
+      // Initial counts + Recent Swaps load.
+      void refetchCounts()
     })
-  }, [])
+  }, [refetchCounts])
+
+  // Refetch counts whenever the dashboard regains focus or the tab becomes
+  // visible again, so numbers stay live after creating/deleting swaps or clones
+  // on another page or tab — without polling.
+  useEffect(() => {
+    const onFocus = () => { void refetchCounts() }
+    const onVisible = () => { if (document.visibilityState === 'visible') void refetchCounts() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refetchCounts])
 
   useEffect(() => {
     function onOutside(e: MouseEvent) {
@@ -137,8 +167,10 @@ export function DashboardPage() {
     try {
       const res = await fetch(`/api/voice-swaps/delete?id=${id}`, { method: 'DELETE' })
       if (res.ok) {
+        // Optimistically drop the row for snappy UI, then refetch so the count
+        // (and list) come from the DB rather than a local decrement.
         setRecentSwaps((prev) => prev.filter((s) => s.id !== id))
-        setVoiceSwapsCount((prev) => (prev !== null ? Math.max(0, prev - 1) : null))
+        void refetchCounts()
       }
     } finally {
       setDeletingId(null)
