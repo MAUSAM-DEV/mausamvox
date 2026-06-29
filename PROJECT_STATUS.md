@@ -51,6 +51,7 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Voice Lab (express + studio clone) | 🟡 Partial | Record/upload → dataset prep → RunPod training → test; durable model persistence fixed |
 | Stem Studio (karaoke/gender split) | 🟡 Partial | MVSEP-based; lead/backing + male/female routing |
 | Duet split confirm | ✅ Working | Declared-duet uploads no longer auto-run the 250cr gender-split; the amber "Run Duet Split before continuing" gate shows and the user must click "Split duet · 250 cr · Premium" to proceed |
+| Dashboard counts | ✅ Working | Voice Swaps + Voice Clones counts refetch on window focus / tab visibility (no longer stale after create/delete elsewhere); delete refetches authoritatively instead of optimistic local −1. Note: the sidebar "My Voices" badge is still a hardcoded `'3'` (VSidebar/VLSidebar) |
 | Onboarding journey | ✅ Working | Persona → magic moment → action → finale screens |
 | Landing page | ✅ Working | Full marketing site |
 | Choir generator / marketplace / API | ⬜ Not started | PRD V1.5–V2 scope |
