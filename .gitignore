@@ -37,3 +37,7 @@ Thumbs.db
 *.swp
 *.swo
 .vercel
+
+# investigation scratch (local audio + model zips — keep, never commit)
+.pull-ab.tmp.mjs
+repro-listen/
