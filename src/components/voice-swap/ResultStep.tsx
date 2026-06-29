@@ -273,6 +273,12 @@ function FineTunePanel({
   const setParam = (key: keyof TuneParams, value: number) =>
     setParams((p) => ({ ...p, [key]: value }))
 
+  // Reset every slider back to the seeded defaults in one click. Sliders only —
+  // does not touch takes, A/B, or the player.
+  const atDefaults = (Object.keys(TUNE_DEFAULTS) as (keyof TuneParams)[])
+    .every((k) => params[k] === TUNE_DEFAULTS[k])
+  const handleReset = () => setParams({ ...TUNE_DEFAULTS })
+
   return (
     <div className="vs-tune">
       <button className="vs-tune-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -302,6 +308,14 @@ function FineTunePanel({
           <div className="vs-tune-actions">
             <button className="vs-tune-preview-btn" onClick={handlePreview} disabled={busy}>
               {busy ? '⏳ Rendering…' : '▶ Preview 30 sec'}
+            </button>
+            <button
+              type="button"
+              className="vs-tune-reset-btn"
+              onClick={handleReset}
+              disabled={busy || atDefaults}
+            >
+              ↺ Reset to defaults
             </button>
             <span className="vs-tune-cost">First 2/track free · 50 cr after</span>
           </div>
@@ -995,6 +1009,13 @@ export function ResultStep({
         }
         .vs-tune-preview-btn:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(139,92,246,.4); }
         .vs-tune-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .vs-tune-reset-btn {
+          padding: 8px 14px; border-radius: 8px;
+          border: 1px solid rgba(139,92,246,.4); background: transparent; color: #C4B5FD;
+          font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .vs-tune-reset-btn:hover:not(:disabled) { background: rgba(139,92,246,.12); }
+        .vs-tune-reset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .vs-tune-cost { font-size: 11px; color: #5A5A80; }
         .vs-tune-compare {
           margin-top: 16px; padding-top: 14px; border-top: 1px solid #1E1E3A;
