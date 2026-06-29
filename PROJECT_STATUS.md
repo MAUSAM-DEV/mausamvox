@@ -112,4 +112,17 @@ DB migrations run via `node scripts/migrate.mjs`.
 
 - Untracked working files present: `.pull-ab.tmp.mjs`, `repro-listen/` (local repro/scratch — consider `.gitignore` or removal).
 - `MausamVox-PRD-v2.md` is the source-of-truth product spec.
-- No README yet — this file plus the PRD are the primary onboarding docs.
+- `README.md`, this file, and the PRD are the primary onboarding docs.
+
+---
+
+## 9. Known gotchas (reference, do not re-debug)
+
+These are settled. They cost real time to find — don't rediscover them.
+
+- **MVSEP male/female stem labels can be unreliable** for some tracks — the "male"/"female" split occasionally mislabels or bleeds. Treat gender-split output as a hint, not ground truth.
+- **Replicate filename-length bug** — Supabase signed URLs end in `?token=<300+ char JWT>`; the RVC container derives its local filename from the URL's last path segment without stripping the query string, hitting the OS 255-char limit (Errno 36). **Solved** via the `/api/voice-model/<id>/model.zip` proxy route that 307-redirects to the real signed URL.
+- **Use `@breezystack/lamejs`, not `lamejs`** — the original `lamejs` package is broken/unmaintained for our MP3 encoding path.
+- **Use `undici` with `allowH2: false`** for Supabase calls from Node — forcing HTTP/1.1 avoids HTTP/2 issues against Supabase.
+- **Node v26 HTTP/2 flood-protection issue** — Node 26's HTTP/2 stack trips flood protection on certain request patterns; another reason the `undici` / `allowH2: false` path above is required.
+- **Supabase Free 50 MB object cap** — trained RVC model zips are 116 MB+, which exceeds the Free-tier storage object limit. **Required upgrading to Supabase Pro** to store models.
