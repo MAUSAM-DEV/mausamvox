@@ -237,26 +237,54 @@ export function VoiceSwapPage() {
       })
   }, [step, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Duet mode — only active when stemResult has both maleVocalsUrl + femaleVocalsUrl
+  // Duet mode — only active when stemResult has both maleVocalsUrl + femaleVocalsUrl.
+  // `duetSinger` is the SINGLE source of truth for which singer is converted in
+  // one-singer mode (see duetTarget); Gender Lock writes into it. Its default MUST
+  // match the gender default below so the two controls agree before any input.
   const [duetMode, setDuetMode] = useState<DuetMode>('one')
   const [duetSinger, setDuetSinger] = useState<'male' | 'female'>('male')
   const [selectedVoiceId2, setSelectedVoiceId2] = useState<string | null>(null)
 
-  // Swap controls
-  const [gender, setGender] = useState<Gender>('Female')
+  // Swap controls. Gender Lock default is 'Male' to stay aligned with duetSinger
+  // ('male') — previously 'Female', which silently converted the female stem and
+  // left the original male untouched when a user picked "male" in the duet picker.
+  const [gender, setGender] = useState<Gender>('Male')
   const [ageRange, setAgeRange] = useState<AgeRange>('Young')
   const [accent, setAccent] = useState('Neutral')
   const [language, setLanguage] = useState('Same as Source')
   const [styleIntensity, setStyleIntensity] = useState(8)
   const [pitchShift, setPitchShift] = useState(0)
 
-  // Keeps duetSinger in sync when Gender Lock changes so the two controls
-  // never drift out of alignment (Male lock → male singer, Female lock → female).
+  // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
+  // Gender Lock (Male lock → male singer, Female lock → female). Neutral leaves the
+  // current singer choice intact (routing always reads duetSinger; see duetTarget).
   function handleSetGender(g: Gender) {
     setGender(g)
     if (g === 'Male') setDuetSinger('male')
     else if (g === 'Female') setDuetSinger('female')
-    // Neutral: leave duetSinger unchanged — still meaningful if duet mode is active
+    // Neutral: leave duetSinger unchanged — "no lock", keep the picked singer
+  }
+
+  // duetSinger → Gender Lock (the reverse sync). The "Which singer?" picker calls
+  // this so choosing a singer also updates Gender Lock — the two controls can never
+  // show different singers, which is what let `gender` silently override the picker.
+  function handleSetDuetSinger(s: 'male' | 'female') {
+    setDuetSinger(s)
+    setGender(s === 'male' ? 'Male' : 'Female')
+  }
+
+  // SINGLE source of truth for one-singer duet routing: which stem is converted and
+  // which is left untouched. Driven only by duetSinger (the user's explicit pick),
+  // never by gender — so the conversion target and the untouched partner can never
+  // point at different singers. Returns null for non-duets and for both-voices
+  // modes (the dual-job path handles those), so single-voice swaps are unaffected.
+  function duetTarget(): { convertUrl: string; untouchedUrl: string } | null {
+    const male = stemResult?.maleVocalsUrl
+    const female = stemResult?.femaleVocalsUrl
+    if (!male || !female || duetMode !== 'one') return null
+    return duetSinger === 'male'
+      ? { convertUrl: male, untouchedUrl: female }
+      : { convertUrl: female, untouchedUrl: male }
   }
 
   // Processing overlay
@@ -845,17 +873,12 @@ export function VoiceSwapPage() {
       // Clear any stale second URL from a previous Mode 2/3 run.
       setConvertedVocalsUrl2(null)
 
-      // Gender Lock drives stem routing when matching stems are available.
-      // Neutral falls through to the duetSinger picker (existing behaviour).
+      // One-singer duet routing: convert the singer chosen in the picker
+      // (duetTarget reads duetSinger — the single source of truth). Non-duets fall
+      // back to the lead/full vocal, so single-voice swaps are unchanged.
       let vocalsToConvert = stemResult.leadVocalsUrl || stemResult.vocalsUrl
-      if (gender === 'Male' && stemResult.maleVocalsUrl) {
-        vocalsToConvert = stemResult.maleVocalsUrl
-      } else if (gender === 'Female' && stemResult.femaleVocalsUrl) {
-        vocalsToConvert = stemResult.femaleVocalsUrl
-      } else if (hasDuetStems && duetMode === 'one') {
-        const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
-        if (singerUrl) vocalsToConvert = singerUrl
-      }
+      const target = duetTarget()
+      if (target) vocalsToConvert = target.convertUrl
 
       // Only the full vocals stem has a durable Supabase path; derived stems
       // (lead/male/female) are still ephemeral until Increment B persists them,
@@ -991,19 +1014,14 @@ export function VoiceSwapPage() {
     await handleProcess('full', { charge: true, indexRateOverride: indexRate, isRegen: true })
   }
 
-  // Resolve the single-voice vocal stem to convert — mirrors the standard
-  // (non-duet) selection in handleProcess. Returns null when no source/voice.
+  // Resolve the single-voice vocal stem to convert — mirrors handleProcess by
+  // reading the same duetTarget() source of truth, so the fine-tune preview tunes
+  // the exact stem the full swap will convert. Returns null when no source/voice.
   function pickTuningVocalUrl(): string | null {
     if (!stemResult) return null
-    const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
-    let url = stemResult.leadVocalsUrl || stemResult.vocalsUrl
-    if (gender === 'Male' && stemResult.maleVocalsUrl) url = stemResult.maleVocalsUrl
-    else if (gender === 'Female' && stemResult.femaleVocalsUrl) url = stemResult.femaleVocalsUrl
-    else if (hasDuetStems && duetMode === 'one') {
-      const singerUrl = duetSinger === 'male' ? stemResult.maleVocalsUrl : stemResult.femaleVocalsUrl
-      if (singerUrl) url = singerUrl
-    }
-    return url ?? null
+    const target = duetTarget()
+    if (target) return target.convertUrl
+    return (stemResult.leadVocalsUrl || stemResult.vocalsUrl) ?? null
   }
 
   // Fine-tune panel: render a SHORT (30 s) preview of the swap with the given RVC
@@ -1174,7 +1192,7 @@ export function VoiceSwapPage() {
                 duetMode={duetMode}
                 setDuetMode={setDuetMode}
                 duetSinger={duetSinger}
-                setDuetSinger={setDuetSinger}
+                setDuetSinger={handleSetDuetSinger}
                 selectedVoiceId2={selectedVoiceId2}
                 setSelectedVoiceId2={setSelectedVoiceId2}
               />
@@ -1190,14 +1208,7 @@ export function VoiceSwapPage() {
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
-                duetUntouchedVocalsUrl={(() => {
-                  const hasBoth = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
-                  if (!hasBoth || duetMode === 'both-split' || duetMode === 'both-same') return null
-                  if (gender === 'Male') return stemResult!.femaleVocalsUrl ?? null
-                  if (gender === 'Female') return stemResult!.maleVocalsUrl ?? null
-                  if (duetMode === 'one') return duetSinger === 'male' ? stemResult!.femaleVocalsUrl ?? null : stemResult!.maleVocalsUrl ?? null
-                  return null
-                })()}
+                duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
               />
             )}
           </div>
