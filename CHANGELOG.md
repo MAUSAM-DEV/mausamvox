@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-06-30
+
+- Restore duet-split warning before auto-split — declared-duet uploads no longer silently run the 250cr gender-split; the existing amber gate renders and the user must click "Split duet · 250 cr · Premium" to proceed (Option A: handleStemDone no longer auto-calls runGenderSplit / sets genderSplitting). (commit: d273e69)
+
 ## 2026-06-29
 
 - Add start-point picker to Fine-tune preview — choose which 12s window of the song to preview (skip music-only intros); trimAudioToClip gains startSeconds, clip cache key includes start+length, control bounded by song duration. (commit: eeb0fa1)

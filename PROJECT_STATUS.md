@@ -50,6 +50,7 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Auto pitch-shift (cross-range) | 🟡 Guarded | Recently guarded against unreliable stem detection (commit `8e53e45`) |
 | Voice Lab (express + studio clone) | 🟡 Partial | Record/upload → dataset prep → RunPod training → test; durable model persistence fixed |
 | Stem Studio (karaoke/gender split) | 🟡 Partial | MVSEP-based; lead/backing + male/female routing |
+| Duet split confirm | ✅ Working | Declared-duet uploads no longer auto-run the 250cr gender-split; the amber "Run Duet Split before continuing" gate shows and the user must click "Split duet · 250 cr · Premium" to proceed |
 | Onboarding journey | ✅ Working | Persona → magic moment → action → finale screens |
 | Landing page | ✅ Working | Full marketing site |
 | Choir generator / marketplace / API | ⬜ Not started | PRD V1.5–V2 scope |
