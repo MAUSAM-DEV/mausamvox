@@ -4,4 +4,4 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-06-29
 
-- Add handoff files: PROJECT_STATUS.md, CHANGELOG.md, CLAUDE.md (working rules + gotchas + session handoff protocol), AGENTS.md. (commit: 1612471)
+- Add handoff files: PROJECT_STATUS.md, CHANGELOG.md, CLAUDE.md (working rules + gotchas + session handoff protocol), AGENTS.md. (commit: 4da1ebc)
