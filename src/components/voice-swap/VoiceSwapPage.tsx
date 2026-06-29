@@ -12,7 +12,7 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { trimAudioToClip } from './audioClip'
-import { detectMedianF0, autoOctaveShiftSemitones } from './pitchDetect'
+import { detectMedianF0, autoOctaveShiftSemitones, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
 import type { TuneParams } from './ResultStep'
 
 type Step = 1 | 2 | 3
@@ -116,11 +116,11 @@ export function VoiceSwapPage() {
   // Caches the trimmed+uploaded 30 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
   const tunedClipRef = useRef<{ sourceUrl: string; clipUrl: string; clipPath: string } | null>(null)
-  // Auto key-match caches: detected median F0 (Hz, or null) per target voiceId
-  // and per source stem URL, so repeated swaps / regenerates of the same pair
-  // don't re-fetch + re-decode the same audio.
-  const targetF0Ref = useRef<Record<string, number | null>>({})
-  const sourceF0Ref = useRef<Record<string, number | null>>({})
+  // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
+  // per target voiceId and per source stem URL, so repeated swaps / regenerates of
+  // the same pair don't re-fetch + re-decode the same audio.
+  const targetF0Ref = useRef<Record<string, MedianF0 | null>>({})
+  const sourceF0Ref = useRef<Record<string, MedianF0 | null>>({})
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
   const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
@@ -656,11 +656,11 @@ export function VoiceSwapPage() {
   // forces a specific RVC index_rate (0–1) instead of deriving it from the
   // styleIntensity slider — used by Regenerate to step voice strength up.
   // ── Auto key-match helpers ──────────────────────────────────────────────────
-  // Median F0 of the target voice, from its reference sample (cached per voice).
-  // Null on any failure → no auto shift for that voice.
-  async function getTargetF0(voiceId: string): Promise<number | null> {
+  // Median F0 (+ voiced-frame confidence) of the target voice, from its reference
+  // sample (cached per voice). Null on any failure → no auto shift for that voice.
+  async function getTargetF0(voiceId: string): Promise<MedianF0 | null> {
     if (voiceId in targetF0Ref.current) return targetF0Ref.current[voiceId]
-    let f0: number | null = null
+    let f0: MedianF0 | null = null
     try {
       const res = await fetch(`/api/voice-lab/sample-url?id=${voiceId}`)
       if (res.ok) {
@@ -672,8 +672,8 @@ export function VoiceSwapPage() {
     return f0
   }
 
-  // Median F0 of a source stem (cached per URL).
-  async function getSourceF0(url: string): Promise<number | null> {
+  // Median F0 (+ confidence) of a source stem (cached per URL).
+  async function getSourceF0(url: string): Promise<MedianF0 | null> {
     if (url in sourceF0Ref.current) return sourceF0Ref.current[url]
     const f0 = await detectMedianF0(url)
     sourceF0Ref.current[url] = f0
@@ -681,15 +681,37 @@ export function VoiceSwapPage() {
   }
 
   // Octave shift (semitones) to bring `sourceUrl` into `voiceId`'s natural range.
-  // Returns 0 when the ranges already align or either F0 can't be detected, so
-  // swaps that already sound correct are unchanged. Never throws.
-  async function autoKeyShift(sourceUrl: string, voiceId: string): Promise<number> {
+  // Returns 0 (never throws) so swaps that don't clearly need a shift are unchanged.
+  //
+  // Two safety layers prevent the duet octave-doubling misfire that made swaps
+  // robotic:
+  //  1. Separated duet/gender-split stems (isDuetStem) have stripped fundamentals,
+  //     so F0 detection is unreliable (reads an octave high) — never auto-shift
+  //     them. The manual Pitch Shift control still applies on top.
+  //  2. For everything else, only shift when BOTH the source and target detections
+  //     are confident (>= MIN_RELIABLE_VOICED_FRAMES voiced frames). Weak detection
+  //     → 0 rather than guessing.
+  async function autoKeyShift(sourceUrl: string, voiceId: string, isDuetStem: boolean): Promise<number> {
+    if (isDuetStem) {
+      console.log('[voice-swap] auto key-match skipped — duet/gender-split stem (unreliable F0)', { voiceId })
+      return 0
+    }
     const [src, tgt] = await Promise.all([getSourceF0(sourceUrl), getTargetF0(voiceId)])
-    const shift = autoOctaveShiftSemitones(src, tgt)
+    const reliable = (r: MedianF0 | null): r is MedianF0 => r != null && r.voicedFrames >= MIN_RELIABLE_VOICED_FRAMES
+    if (!reliable(src) || !reliable(tgt)) {
+      console.log('[voice-swap] auto key-match skipped — low confidence', {
+        voiceId,
+        sourceF0: src ? Math.round(src.f0) : null, sourceFrames: src?.voicedFrames ?? 0,
+        targetF0: tgt ? Math.round(tgt.f0) : null, targetFrames: tgt?.voicedFrames ?? 0,
+        need: MIN_RELIABLE_VOICED_FRAMES,
+      })
+      return 0
+    }
+    const shift = autoOctaveShiftSemitones(src.f0, tgt.f0)
     console.log('[voice-swap] auto key-match', {
       voiceId,
-      sourceF0: src != null ? Math.round(src) : null,
-      targetF0: tgt != null ? Math.round(tgt) : null,
+      sourceF0: Math.round(src.f0), sourceFrames: src.voicedFrames,
+      targetF0: Math.round(tgt.f0), targetFrames: tgt.voicedFrames,
       autoShift: shift,
     })
     return shift
@@ -787,11 +809,12 @@ export function VoiceSwapPage() {
           return
         }
 
-        // Auto key-match each singer to its own target voice (octave-snapped;
-        // 0 when ranges align or detection fails). Manual pitchShift adds on top.
+        // Both inputs are gender-split duet stems (isDuetStem=true) → auto key-match
+        // is skipped (stripped fundamentals make F0 detection unreliable); this
+        // always yields 0. Manual pitchShift still adds on top.
         const [autoShiftA, autoShiftB] = await Promise.all([
-          autoKeyShift(stemResult.maleVocalsUrl!, voice.id),
-          autoKeyShift(stemResult.femaleVocalsUrl!, voice2.id),
+          autoKeyShift(stemResult.maleVocalsUrl!, voice.id, true),
+          autoKeyShift(stemResult.femaleVocalsUrl!, voice2.id, true),
         ])
         const effPitchA = clampPitch(autoShiftA + pitchShift)
         const effPitchB = clampPitch(autoShiftB + pitchShift)
@@ -895,9 +918,10 @@ export function VoiceSwapPage() {
       })
 
       // Auto key-match: octave-snap the source into the target voice's range so
-      // RVC can impose the clone identity. 0 when ranges align or detection
-      // fails (so correct swaps are unchanged); manual pitchShift adds on top.
-      const autoShift = await autoKeyShift(vocalsToConvert, voice.id)
+      // RVC can impose the clone identity. Skipped for duet stems (target != null)
+      // and low-confidence detections; 0 otherwise leaves correct swaps unchanged.
+      // Manual pitchShift adds on top.
+      const autoShift = await autoKeyShift(vocalsToConvert, voice.id, !!target)
       const effectivePitch = clampPitch(autoShift + pitchShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
@@ -1039,9 +1063,10 @@ export function VoiceSwapPage() {
     const sourceUrl = pickTuningVocalUrl()
     if (!sourceUrl) { showToast('No vocal available to preview'); return null }
 
-    // Same auto key-match as the full swap (detected on the full source stem, so
-    // the cache is shared and the preview's pitch matches the committed render).
-    const autoShift = await autoKeyShift(sourceUrl, voice.id)
+    // Same auto key-match as the full swap (shared cache, and isDuetStem from the
+    // same duetTarget() source of truth), so the preview's pitch matches the
+    // committed render — including being skipped for duet stems.
+    const autoShift = await autoKeyShift(sourceUrl, voice.id, !!duetTarget())
     const effectivePitch = clampPitch(autoShift + pitchShift)
 
     try {

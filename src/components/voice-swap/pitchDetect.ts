@@ -23,7 +23,13 @@ const F0_MIN = 80              // Hz — covers low male
 const F0_MAX = 500             // Hz — covers high female
 const VOICED_RMS = 0.01        // per-frame RMS gate (~ -40 dBFS)
 const AUTOCORR_VOICED = 0.30   // min normalised autocorrelation peak to accept a frame
-const MIN_VOICED_FRAMES = 12   // need this many voiced frames to trust the median
+const MIN_VOICED_FRAMES = 12   // absolute floor: fewer than this → no usable median
+
+// Higher bar for trusting a detection enough to AUTO-SHIFT on it. Separated duet
+// half-stems have stripped fundamentals and yield very few voiced frames (~17–33
+// observed) which mis-read F0 by an octave; full vocals and clone samples yield
+// many (hundreds). Below this, auto key-match defaults to 0 (manual still works).
+export const MIN_RELIABLE_VOICED_FRAMES = 150
 
 // ── Auto key-match tuning ────────────────────────────────────────────────────
 // Act only when the gap is within OCTAVE_TOLERANCE of a whole number of octaves,
@@ -53,10 +59,14 @@ function decimate(x: Float32Array, factor: number): Float32Array {
   return y
 }
 
+// Result of a median-F0 estimate: the pitch plus how many voiced frames backed
+// it — voicedFrames is a confidence proxy (see MIN_RELIABLE_VOICED_FRAMES).
+export type MedianF0 = { f0: number; voicedFrames: number }
+
 // Estimate the median fundamental frequency (Hz) of a decoded vocal buffer using
 // frame-wise autocorrelation. Returns null when there isn't enough voiced
 // material to be confident. Pure + synchronous so it's easy to reason about.
-export function estimateMedianF0(buffer: AudioBuffer): number | null {
+export function estimateMedianF0(buffer: AudioBuffer): MedianF0 | null {
   const sr = buffer.sampleRate / DECIMATE
   const x = decimate(toMono(buffer), DECIMATE)
   const frame = Math.round(FRAME_S * sr)
@@ -96,7 +106,7 @@ export function estimateMedianF0(buffer: AudioBuffer): number | null {
 
   if (f0s.length < MIN_VOICED_FRAMES) return null
   f0s.sort((a, b) => a - b)
-  return f0s[Math.floor(f0s.length / 2)]
+  return { f0: f0s[Math.floor(f0s.length / 2)], voicedFrames: f0s.length }
 }
 
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
@@ -109,10 +119,10 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   }
 }
 
-// Fetch + decode an audio URL and return its median F0 (Hz), or null on ANY
-// failure (network, decode, too few voiced frames, timeout). Never throws — a
-// null simply means "don't auto-shift", which keeps the swap behaving as today.
-export async function detectMedianF0(url: string, timeoutMs = 20000): Promise<number | null> {
+// Fetch + decode an audio URL and return its median F0 + voiced-frame count, or
+// null on ANY failure (network, decode, too few voiced frames, timeout). Never
+// throws — null simply means "don't auto-shift", keeping the swap as today.
+export async function detectMedianF0(url: string, timeoutMs = 20000): Promise<MedianF0 | null> {
   const AudioCtx =
     window.AudioContext ??
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
