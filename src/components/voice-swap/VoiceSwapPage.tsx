@@ -12,6 +12,7 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { trimAudioToClip } from './audioClip'
+import { detectMedianF0, autoOctaveShiftSemitones } from './pitchDetect'
 import type { TuneParams } from './ResultStep'
 
 type Step = 1 | 2 | 3
@@ -25,6 +26,11 @@ const PREVIEW_CLIP_SECONDS = 30
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
 // premium-split button's affordability state; the server remains the real gate.
 const GENDER_SPLIT_COST = 250
+// Final pitch sent to RVC = auto key-match + manual Pitch Shift, clamped to a
+// sane semitone range (manual is ±12, auto up to ±24) and rounded to an integer.
+const clampPitch = (v: number) => Math.max(-24, Math.min(24, Math.round(v)))
+// Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
+const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
 type AgeRange = 'Young' | 'Mid' | 'Mature'
 
@@ -110,6 +116,11 @@ export function VoiceSwapPage() {
   // Caches the trimmed+uploaded 30 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
   const tunedClipRef = useRef<{ sourceUrl: string; clipUrl: string; clipPath: string } | null>(null)
+  // Auto key-match caches: detected median F0 (Hz, or null) per target voiceId
+  // and per source stem URL, so repeated swaps / regenerates of the same pair
+  // don't re-fetch + re-decode the same audio.
+  const targetF0Ref = useRef<Record<string, number | null>>({})
+  const sourceF0Ref = useRef<Record<string, number | null>>({})
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
   const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
@@ -616,6 +627,46 @@ export function VoiceSwapPage() {
   // normal Preview/Full buttons bill as before). `indexRateOverride`, when set,
   // forces a specific RVC index_rate (0–1) instead of deriving it from the
   // styleIntensity slider — used by Regenerate to step voice strength up.
+  // ── Auto key-match helpers ──────────────────────────────────────────────────
+  // Median F0 of the target voice, from its reference sample (cached per voice).
+  // Null on any failure → no auto shift for that voice.
+  async function getTargetF0(voiceId: string): Promise<number | null> {
+    if (voiceId in targetF0Ref.current) return targetF0Ref.current[voiceId]
+    let f0: number | null = null
+    try {
+      const res = await fetch(`/api/voice-lab/sample-url?id=${voiceId}`)
+      if (res.ok) {
+        const { signedUrl } = await res.json()
+        if (typeof signedUrl === 'string') f0 = await detectMedianF0(signedUrl)
+      }
+    } catch { /* leave null */ }
+    targetF0Ref.current[voiceId] = f0
+    return f0
+  }
+
+  // Median F0 of a source stem (cached per URL).
+  async function getSourceF0(url: string): Promise<number | null> {
+    if (url in sourceF0Ref.current) return sourceF0Ref.current[url]
+    const f0 = await detectMedianF0(url)
+    sourceF0Ref.current[url] = f0
+    return f0
+  }
+
+  // Octave shift (semitones) to bring `sourceUrl` into `voiceId`'s natural range.
+  // Returns 0 when the ranges already align or either F0 can't be detected, so
+  // swaps that already sound correct are unchanged. Never throws.
+  async function autoKeyShift(sourceUrl: string, voiceId: string): Promise<number> {
+    const [src, tgt] = await Promise.all([getSourceF0(sourceUrl), getTargetF0(voiceId)])
+    const shift = autoOctaveShiftSemitones(src, tgt)
+    console.log('[voice-swap] auto key-match', {
+      voiceId,
+      sourceF0: src != null ? Math.round(src) : null,
+      targetF0: tgt != null ? Math.round(tgt) : null,
+      autoShift: shift,
+    })
+    return shift
+  }
+
   async function handleProcess(
     type: 'preview' | 'full',
     opts: {
@@ -708,6 +759,18 @@ export function VoiceSwapPage() {
           return
         }
 
+        // Auto key-match each singer to its own target voice (octave-snapped;
+        // 0 when ranges align or detection fails). Manual pitchShift adds on top.
+        const [autoShiftA, autoShiftB] = await Promise.all([
+          autoKeyShift(stemResult.maleVocalsUrl!, voice.id),
+          autoKeyShift(stemResult.femaleVocalsUrl!, voice2.id),
+        ])
+        const effPitchA = clampPitch(autoShiftA + pitchShift)
+        const effPitchB = clampPitch(autoShiftB + pitchShift)
+        if (autoShiftA !== 0 || autoShiftB !== 0) {
+          showToast(`Auto key-match — male ${fmtSt(autoShiftA)}, female ${fmtSt(autoShiftB)}`, 4000)
+        }
+
         // Fire both jobs in parallel, then poll both in parallel.
         // deductCredits(400) is only reached if Promise.all resolves — if either
         // job fails, the catch block runs and no credits are charged.
@@ -718,7 +781,7 @@ export function VoiceSwapPage() {
             body: JSON.stringify({
               vocalsUrl: stemResult.maleVocalsUrl,
               voiceId: voice.id,
-              pitchShift,
+              pitchShift: effPitchA,
               styleIntensity,
               // Regenerate forces a stepped-up index_rate; omitted (undefined)
               // on normal swaps so the server derives it from styleIntensity.
@@ -736,7 +799,7 @@ export function VoiceSwapPage() {
             body: JSON.stringify({
               vocalsUrl: stemResult.femaleVocalsUrl,
               voiceId: voice2.id,
-              pitchShift,
+              pitchShift: effPitchB,
               styleIntensity,
               indexRate: indexRateOverride,
               isPreview: false,
@@ -808,6 +871,13 @@ export function VoiceSwapPage() {
         storagePath: stemResult.storagePath,
       })
 
+      // Auto key-match: octave-snap the source into the target voice's range so
+      // RVC can impose the clone identity. 0 when ranges align or detection
+      // fails (so correct swaps are unchanged); manual pitchShift adds on top.
+      const autoShift = await autoKeyShift(vocalsToConvert, voice.id)
+      const effectivePitch = clampPitch(autoShift + pitchShift)
+      if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
+
       const startRes = await fetch('/api/voice-convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -816,7 +886,7 @@ export function VoiceSwapPage() {
           vocalsPath: usingFullVocals ? stemResult.vocalsPath : undefined,
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
-          pitchShift,
+          pitchShift: effectivePitch,
           styleIntensity,
           // Regenerate forces a stepped-up index_rate; omitted (undefined) on
           // normal swaps so the server derives it from styleIntensity.
@@ -951,6 +1021,11 @@ export function VoiceSwapPage() {
     const sourceUrl = pickTuningVocalUrl()
     if (!sourceUrl) { showToast('No vocal available to preview'); return null }
 
+    // Same auto key-match as the full swap (detected on the full source stem, so
+    // the cache is shared and the preview's pitch matches the committed render).
+    const autoShift = await autoKeyShift(sourceUrl, voice.id)
+    const effectivePitch = clampPitch(autoShift + pitchShift)
+
     try {
       // 1. Reuse the cached clip for this source, else trim → upload → sign once.
       let clip = tunedClipRef.current
@@ -993,7 +1068,7 @@ export function VoiceSwapPage() {
           vocalsPath: clip.clipPath, // server re-signs from audio-uploads
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
-          pitchShift,
+          pitchShift: effectivePitch,
           indexRate: params.indexRate,
           protect: params.protect,
           filterRadius: params.filterRadius,

@@ -236,6 +236,12 @@ export async function POST(req: NextRequest) {
     const rmsMixRateVal = typeof rmsMixRate === 'number' && Number.isFinite(rmsMixRate)
       ? clamp(rmsMixRate, 0, 1) : 0.25
 
+    // Final pitch shift (semitones) for the converted vocal. The client folds its
+    // auto key-match (octave snap) and the manual Pitch Shift control into this
+    // value; we round + clamp defensively to a sane range here. Default 0 = no
+    // shift, identical to the prior behaviour.
+    const pitchChangeAll = Math.round(clamp(pitchShift, -24, 24))
+
     let prediction
     try {
       prediction = await replicate.predictions.create({
@@ -245,7 +251,7 @@ export async function POST(req: NextRequest) {
           rvc_model: 'CUSTOM',
           custom_rvc_model_download_url: effectiveModelUrl,
           pitch_change: 'no-change',
-          pitch_change_all: pitchShift,
+          pitch_change_all: pitchChangeAll,
           index_rate: indexRate,
           filter_radius: filterRadiusVal,
           rms_mix_rate: rmsMixRateVal,
