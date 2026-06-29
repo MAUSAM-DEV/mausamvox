@@ -19,7 +19,7 @@ interface ResultStepProps {
   // True once the per-track regenerate cap is hit — disables the button.
   regenCapReached: boolean
   onToast: (msg: string) => void
-  // Fine-tune panel: render a short 30 s preview with the given RVC params
+  // Fine-tune panel: render a short 12 s preview with the given RVC params
   // (resolves to the converted vocal URL, or null on failure), and commit a
   // chosen take to a full-song render.
   onTunedPreview: (p: TuneParams) => Promise<string | null>
@@ -201,7 +201,7 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Fine-tune panel — adjust RVC params, render a short 30 s preview, A/B compare
+// Fine-tune panel — adjust RVC params, render a short 12 s preview, A/B compare
 // ---------------------------------------------------------------------------
 export interface TuneParams {
   indexRate: number
@@ -241,7 +241,7 @@ function FineTunePanel({
   const [busy, setBusy] = useState(false)
   const takeIdRef = useRef(0)
 
-  // Mini player — vocals-only, 30 s, independent of the main full-song player.
+  // Mini player — vocals-only, 12 s, independent of the main full-song player.
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -252,7 +252,7 @@ function FineTunePanel({
   async function handlePreview() {
     if (busy) return
     setBusy(true)
-    onToast('Rendering 30-sec preview…')
+    onToast('Rendering 12-sec preview…')
     const url = await onTunedPreview(params)
     setBusy(false)
     if (!url) return // failure already toasted upstream
@@ -307,7 +307,7 @@ function FineTunePanel({
 
           <div className="vs-tune-actions">
             <button className="vs-tune-preview-btn" onClick={handlePreview} disabled={busy}>
-              {busy ? '⏳ Rendering…' : '▶ Preview 30 sec'}
+              {busy ? '⏳ Rendering…' : '▶ Preview 12 sec'}
             </button>
             <button
               type="button"

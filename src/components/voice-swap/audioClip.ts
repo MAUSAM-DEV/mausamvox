@@ -60,7 +60,7 @@ export function encodeMp3(buffer: AudioBuffer): Blob {
 
 // ---------------------------------------------------------------------------
 // Decode an audio URL, keep only the first `seconds`, and re-encode as MP3.
-// Used to build a short preview clip so a tuning render processes ~30 s instead
+// Used to build a short preview clip so a tuning render processes ~12 s instead
 // of the whole song (faster + cheaper). Returns an MP3 Blob.
 // ---------------------------------------------------------------------------
 export async function trimAudioToClip(url: string, seconds: number): Promise<Blob> {

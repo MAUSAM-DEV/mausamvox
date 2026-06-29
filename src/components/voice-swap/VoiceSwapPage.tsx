@@ -21,8 +21,8 @@ type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 // Length of the short clip the Fine-tune panel renders for previews — keeps a
-// tuning render to ~30 s of vocal instead of the whole song (faster + cheaper).
-const PREVIEW_CLIP_SECONDS = 30
+// tuning render to ~12 s of vocal instead of the whole song (faster + cheaper).
+const PREVIEW_CLIP_SECONDS = 12
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
 // premium-split button's affordability state; the server remains the real gate.
 const GENDER_SPLIT_COST = 250
@@ -113,7 +113,7 @@ export function VoiceSwapPage() {
   // steps index_rate up (0.80 → 0.85 → 0.90) for a progressively stronger
   // voice match. Reset to 0 on a new track (handleNewSwap). Capped at 2.
   const [regenCount, setRegenCount] = useState(0)
-  // Caches the trimmed+uploaded 30 s preview clip for the current source vocal so
+  // Caches the trimmed+uploaded 12 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
   const tunedClipRef = useRef<{ sourceUrl: string; clipUrl: string; clipPath: string } | null>(null)
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
@@ -1048,10 +1048,10 @@ export function VoiceSwapPage() {
     return (stemResult.leadVocalsUrl || stemResult.vocalsUrl) ?? null
   }
 
-  // Fine-tune panel: render a SHORT (30 s) preview of the swap with the given RVC
+  // Fine-tune panel: render a SHORT (12 s) preview of the swap with the given RVC
   // params, without disturbing the committed full result. Trims+uploads the clip
   // once per source vocal (cached), then runs voice-convert as a preview and
-  // returns the converted 30 s vocal URL. Returns null on any failure (toasted).
+  // returns the converted 12 s vocal URL. Returns null on any failure (toasted).
   async function runTunedPreview(params: TuneParams): Promise<string | null> {
     if (!stemResult) { showToast('Upload a track first'); return null }
     const voice = voices.find((v) => v.id === selectedVoiceId)
@@ -1078,7 +1078,7 @@ export function VoiceSwapPage() {
         const presignRes = await fetch('/api/upload-stem/presign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: 'tuning-preview-30s.mp3', contentType: 'audio/mpeg' }),
+          body: JSON.stringify({ filename: 'tuning-preview-12s.mp3', contentType: 'audio/mpeg' }),
         })
         const presign = await presignRes.json()
         if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
