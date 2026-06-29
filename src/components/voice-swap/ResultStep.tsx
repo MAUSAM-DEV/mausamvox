@@ -19,10 +19,11 @@ interface ResultStepProps {
   // True once the per-track regenerate cap is hit — disables the button.
   regenCapReached: boolean
   onToast: (msg: string) => void
-  // Fine-tune panel: render a short 12 s preview with the given RVC params
-  // (resolves to the converted vocal URL, or null on failure), and commit a
-  // chosen take to a full-song render.
-  onTunedPreview: (p: TuneParams) => Promise<string | null>
+  // Fine-tune panel: render a short 12 s preview with the given RVC params,
+  // starting at an optional offset (seconds) so the user can skip music-only
+  // intros (resolves to the converted vocal URL, or null on failure), and commit
+  // a chosen take to a full-song render.
+  onTunedPreview: (p: TuneParams, startSeconds?: number) => Promise<string | null>
   onApplyToFull: (p: TuneParams) => void
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
@@ -226,20 +227,41 @@ const TUNE_SLIDERS: {
 
 interface Take { id: number; params: TuneParams; url: string }
 
+// Clip length the preview renders — mirrors PREVIEW_CLIP_SECONDS in
+// VoiceSwapPage (kept local to avoid a circular import). Only used here to bound
+// the start-point control; the real window is clamped server-side in trimAudioToClip.
+const FINE_TUNE_CLIP_SECONDS = 12
+
+// Format a number of seconds as m:ss for the start-point label.
+const fmtMSS = (s: number) => {
+  const t = Math.max(0, Math.floor(s))
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+}
+
 function FineTunePanel({
-  onTunedPreview, onApplyToFull, onToast,
+  onTunedPreview, onApplyToFull, onToast, durationSeconds,
 }: {
-  onTunedPreview: (p: TuneParams) => Promise<string | null>
+  onTunedPreview: (p: TuneParams, startSeconds?: number) => Promise<string | null>
   onApplyToFull: (p: TuneParams) => void
   onToast: (msg: string) => void
+  // Source song length (seconds) — bounds the start-point control. 0 until the
+  // main player has loaded metadata, or when unknown.
+  durationSeconds: number
 }) {
   const [open, setOpen] = useState(false)
   const [params, setParams] = useState<TuneParams>(TUNE_DEFAULTS)
+  const [startSeconds, setStartSeconds] = useState(0)
   const [prevTake, setPrevTake] = useState<Take | null>(null)
   const [curTake, setCurTake] = useState<Take | null>(null)
   const [ab, setAb] = useState<'A' | 'B'>('B')
   const [busy, setBusy] = useState(false)
   const takeIdRef = useRef(0)
+
+  // Latest valid start point: 0..(duration − clip). When the song is shorter than
+  // one clip (or duration unknown), there's no room to move the start.
+  const maxStart = Math.max(0, Math.floor(durationSeconds) - FINE_TUNE_CLIP_SECONDS)
+  const startDisabled = busy || maxStart <= 0
+  const clampedStart = Math.min(startSeconds, maxStart)
 
   // Mini player — vocals-only, 12 s, independent of the main full-song player.
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -253,7 +275,7 @@ function FineTunePanel({
     if (busy) return
     setBusy(true)
     onToast('Rendering 12-sec preview…')
-    const url = await onTunedPreview(params)
+    const url = await onTunedPreview(params, clampedStart)
     setBusy(false)
     if (!url) return // failure already toasted upstream
     const take: Take = { id: ++takeIdRef.current, params: { ...params }, url }
@@ -288,6 +310,26 @@ function FineTunePanel({
 
       {open && (
         <div className="vs-tune-body">
+          {/* Preview start point — skip music-only intros, audition any 12 s window. */}
+          <div className="vs-tune-row">
+            <div className="vs-tune-rowtop">
+              <span className="vs-tune-label">Preview start <span className="vs-tune-hint">m:ss</span></span>
+              <span className="vs-tune-val">
+                {startDisabled && maxStart <= 0
+                  ? '0:00 (full clip)'
+                  : `${fmtMSS(clampedStart)} – ${fmtMSS(clampedStart + FINE_TUNE_CLIP_SECONDS)}`}
+              </span>
+            </div>
+            <input
+              type="range"
+              className="vs-tune-slider"
+              min={0} max={Math.max(maxStart, 1)} step={1}
+              value={clampedStart}
+              disabled={startDisabled}
+              onChange={(e) => setStartSeconds(Number(e.target.value))}
+            />
+          </div>
+
           {TUNE_SLIDERS.map((s) => (
             <div key={s.key} className="vs-tune-row">
               <div className="vs-tune-rowtop">
@@ -793,6 +835,7 @@ export function ResultStep({
             onTunedPreview={onTunedPreview}
             onApplyToFull={onApplyToFull}
             onToast={onToast}
+            durationSeconds={duration}
           />
         )}
 

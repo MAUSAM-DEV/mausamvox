@@ -59,11 +59,18 @@ export function encodeMp3(buffer: AudioBuffer): Blob {
 }
 
 // ---------------------------------------------------------------------------
-// Decode an audio URL, keep only the first `seconds`, and re-encode as MP3.
-// Used to build a short preview clip so a tuning render processes ~12 s instead
-// of the whole song (faster + cheaper). Returns an MP3 Blob.
+// Decode an audio URL, keep a `seconds`-long window starting at `startSeconds`,
+// and re-encode as MP3. Used to build a short preview clip so a tuning render
+// processes ~12 s instead of the whole song (faster + cheaper). `startSeconds`
+// lets the caller skip music-only intros and preview any part of the track; the
+// window is clamped so start + length never runs past the decoded length.
+// Returns an MP3 Blob.
 // ---------------------------------------------------------------------------
-export async function trimAudioToClip(url: string, seconds: number): Promise<Blob> {
+export async function trimAudioToClip(
+  url: string,
+  seconds: number,
+  startSeconds = 0,
+): Promise<Blob> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Could not fetch source audio (${res.status})`)
   const arr = await res.arrayBuffer()
@@ -73,10 +80,15 @@ export async function trimAudioToClip(url: string, seconds: number): Promise<Blo
     const decoded = await ctx.decodeAudioData(arr)
     const sr = decoded.sampleRate
     const numCh = Math.min(decoded.numberOfChannels, 2)
-    const frames = Math.min(decoded.length, Math.ceil(seconds * sr))
+    const total = decoded.length
+    const wantFrames = Math.ceil(seconds * sr)
+    // Clamp the start so a full-length window still fits inside the track; never
+    // let start + length exceed the decoded length.
+    const startFrame = Math.max(0, Math.min(Math.floor(startSeconds * sr), Math.max(0, total - wantFrames)))
+    const frames = Math.min(wantFrames, total - startFrame)
     const clip = ctx.createBuffer(numCh, frames, sr)
     for (let c = 0; c < numCh; c++) {
-      clip.copyToChannel(decoded.getChannelData(c).subarray(0, frames), c)
+      clip.copyToChannel(decoded.getChannelData(c).subarray(startFrame, startFrame + frames), c)
     }
     return encodeMp3(clip)
   } finally {

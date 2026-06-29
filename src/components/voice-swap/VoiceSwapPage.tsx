@@ -115,7 +115,12 @@ export function VoiceSwapPage() {
   const [regenCount, setRegenCount] = useState(0)
   // Caches the trimmed+uploaded 12 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
-  const tunedClipRef = useRef<{ sourceUrl: string; clipUrl: string; clipPath: string } | null>(null)
+  // Keyed on sourceUrl + start + length: changing the start point (or clip length)
+  // must rebuild the clip, never serve the stale cached segment.
+  const tunedClipRef = useRef<{
+    sourceUrl: string; startSeconds: number; lengthSeconds: number
+    clipUrl: string; clipPath: string
+  } | null>(null)
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps / regenerates of
   // the same pair don't re-fetch + re-decode the same audio.
@@ -1052,7 +1057,7 @@ export function VoiceSwapPage() {
   // params, without disturbing the committed full result. Trims+uploads the clip
   // once per source vocal (cached), then runs voice-convert as a preview and
   // returns the converted 12 s vocal URL. Returns null on any failure (toasted).
-  async function runTunedPreview(params: TuneParams): Promise<string | null> {
+  async function runTunedPreview(params: TuneParams, startSeconds = 0): Promise<string | null> {
     if (!stemResult) { showToast('Upload a track first'); return null }
     const voice = voices.find((v) => v.id === selectedVoiceId)
     if (!voice) { showToast('Select a voice first'); return null }
@@ -1070,10 +1075,18 @@ export function VoiceSwapPage() {
     const effectivePitch = clampPitch(autoShift + pitchShift)
 
     try {
-      // 1. Reuse the cached clip for this source, else trim → upload → sign once.
+      // 1. Reuse the cached clip for this source + segment, else trim → upload →
+      //    sign once. A different start point (or clip length) is a different
+      //    segment, so it must miss the cache and rebuild — never serve a stale clip.
+      const startFloor = Math.max(0, startSeconds)
       let clip = tunedClipRef.current
-      if (!clip || clip.sourceUrl !== sourceUrl) {
-        const blob = await trimAudioToClip(sourceUrl, PREVIEW_CLIP_SECONDS)
+      if (
+        !clip ||
+        clip.sourceUrl !== sourceUrl ||
+        clip.startSeconds !== startFloor ||
+        clip.lengthSeconds !== PREVIEW_CLIP_SECONDS
+      ) {
+        const blob = await trimAudioToClip(sourceUrl, PREVIEW_CLIP_SECONDS, startFloor)
 
         const presignRes = await fetch('/api/upload-stem/presign', {
           method: 'POST',
@@ -1098,7 +1111,10 @@ export function VoiceSwapPage() {
         const sign = await signRes.json()
         if (!signRes.ok) throw new Error(sign.error ?? 'Failed to sign clip URL')
 
-        clip = { sourceUrl, clipUrl: sign.url, clipPath: presign.path }
+        clip = {
+          sourceUrl, startSeconds: startFloor, lengthSeconds: PREVIEW_CLIP_SECONDS,
+          clipUrl: sign.url, clipPath: presign.path,
+        }
         tunedClipRef.current = clip
       }
 
