@@ -639,14 +639,17 @@ export function VoiceSwapPage() {
       console.warn('[stem-cache] save failed:', e)
     }
     // Server-driven stem splits (not manual extracted stems) cost credits and
-    // get the automatic background vocal split. Duet tracks skip KARA_2 (which
-    // can't separate alternating leads) and go straight to MVSEP gender-split.
+    // get the automatic background vocal split. Non-duet tracks get the
+    // background karaoke (lead/backing) split automatically.
+    //
+    // Duet tracks do NOT auto-run the 250-credit MVSEP gender-split. Leaving
+    // genderSplitting false lets the existing "Run Duet Split before continuing"
+    // gate render (UploadStep isDuetGated), so the user must click the cost-labeled
+    // "Split duet · 250 cr · Premium" button (onSplitDuet → handleSplitDuet) to
+    // proceed — restoring the explicit confirm before any charge.
     if (result.storagePath) {
       if (!isAdmin) deductCredits(50, 'stem_split')
-      if (isDuet) {
-        setGenderSplitting(true)
-        runGenderSplit(result).then(() => refreshCredits()).finally(() => setGenderSplitting(false))
-      } else {
+      if (!isDuet) {
         void runKaraokeSplit(result)
       }
     }
