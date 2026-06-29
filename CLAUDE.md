@@ -19,7 +19,7 @@
 At the end of **every completed step or session**, you must:
 
 1. **Update `PROJECT_STATUS.md`** to reflect the current state.
-2. **Append a dated one-line entry to `CHANGELOG.md`** including the commit hash.
+2. **Append a dated `CHANGELOG.md` entry referencing the hash of the WORK commit being logged** (the feature/fix commit) — **not** the handoff commit itself. This avoids the self-reference problem and the extra backfill commit.
 3. **Commit** all changed handoff files.
 4. **Push to `main`.**
 
