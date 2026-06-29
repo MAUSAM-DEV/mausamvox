@@ -15,7 +15,7 @@ const TOOLS = [
 ]
 
 const LIBRARY = [
-  { emoji: '🎙️', label: 'My Voices', badge: '3' },
+  { emoji: '🎙️', label: 'My Voices', badge: '' },
   { emoji: '📁', label: 'Projects', badge: '' },
   { emoji: '🛒', label: 'Marketplace', badge: '' },
 ]
@@ -31,6 +31,9 @@ function fmtN(n: number) {
 export function VLSidebar({ onToast }: VLSidebarProps) {
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
+  // Live "My Voices" count from voice_clones (same query the dashboard + pickers
+  // use), so the sidebar badge reflects the real number instead of a stale '3'.
+  const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -45,6 +48,15 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
         .then(({ data: u, error }) => {
           if (u) { setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
           else if (error) console.error('credits fetch failed', error)
+        })
+
+      supabase
+        .from('voice_clones')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .then(({ count, error }) => {
+          if (error) console.error('voice_clones count failed', error)
+          else setVoiceClonesCount(count ?? 0)
         })
     })
   }, [])
@@ -89,13 +101,18 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
           )}
 
           <div className="vls-group-lbl">Library</div>
-          {LIBRARY.map((item) => (
-            <div key={item.label} className="vls-link" onClick={() => onToast(item.label + ' — coming soon')}>
-              <span className="vls-ico">{item.emoji}</span>
-              <span className="vls-lbl">{item.label}</span>
-              {item.badge && <span className="vls-badge">{item.badge}</span>}
-            </div>
-          ))}
+          {LIBRARY.map((item) => {
+            const badge = item.label === 'My Voices'
+              ? (voiceClonesCount === null ? '' : String(voiceClonesCount))
+              : item.badge
+            return (
+              <div key={item.label} className="vls-link" onClick={() => onToast(item.label + ' — coming soon')}>
+                <span className="vls-ico">{item.emoji}</span>
+                <span className="vls-lbl">{item.label}</span>
+                {badge && <span className="vls-badge">{badge}</span>}
+              </div>
+            )
+          })}
         </nav>
 
         <div className="vls-foot">

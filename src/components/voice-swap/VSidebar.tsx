@@ -1,7 +1,9 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/ui/Logo'
+import { createClient } from '@/lib/supabase/client'
 
 const TOOLS = [
   { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap', active: true },
@@ -13,7 +15,7 @@ const TOOLS = [
 ]
 
 const LIBRARY = [
-  { emoji: '🎙️', label: 'My Voices', badge: '3' },
+  { emoji: '🎙️', label: 'My Voices', badge: '' },
   { emoji: '📁', label: 'Projects', badge: '' },
   { emoji: '🛒', label: 'Marketplace', badge: '' },
 ]
@@ -29,6 +31,25 @@ function fmtN(n: number) {
 }
 
 export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarProps) {
+  // Live "My Voices" count from voice_clones (same query the dashboard + pickers
+  // use), so the sidebar badge reflects the real number instead of a stale '3'.
+  const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id
+      if (!uid) return
+      supabase
+        .from('voice_clones')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .then(({ count, error }) => {
+          if (error) console.error('voice_clones count failed', error)
+          else setVoiceClonesCount(count ?? 0)
+        })
+    })
+  }, [])
+
   const hasCredits = creditsRemaining !== null && creditsTotal !== null && creditsTotal > 0
   // Bar fill = remaining fraction; empty when data is unavailable (never a full bar on failure)
   const remainingPct = hasCredits ? Math.min(100, Math.max(0, (creditsRemaining / creditsTotal) * 100)) : 0
@@ -70,13 +91,18 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarPr
           )}
 
           <div className="vs-group-lbl">Library</div>
-          {LIBRARY.map((item) => (
-            <div key={item.label} className="vs-sb-link" onClick={() => onToast(item.label + ' — coming soon')}>
-              <span className="vs-sb-ico">{item.emoji}</span>
-              <span className="vs-sb-lbl">{item.label}</span>
-              {item.badge && <span className="vs-sb-badge">{item.badge}</span>}
-            </div>
-          ))}
+          {LIBRARY.map((item) => {
+            const badge = item.label === 'My Voices'
+              ? (voiceClonesCount === null ? '' : String(voiceClonesCount))
+              : item.badge
+            return (
+              <div key={item.label} className="vs-sb-link" onClick={() => onToast(item.label + ' — coming soon')}>
+                <span className="vs-sb-ico">{item.emoji}</span>
+                <span className="vs-sb-lbl">{item.label}</span>
+                {badge && <span className="vs-sb-badge">{badge}</span>}
+              </div>
+            )
+          })}
         </nav>
 
         {/* Footer */}
