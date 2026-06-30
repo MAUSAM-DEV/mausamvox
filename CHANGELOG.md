@@ -11,6 +11,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-06-29
 
+- Duet swap "male sounds like original" investigation — root-caused to **weak clone identity from stem-separated training**. Ruled out: the four RVC conversion params (index_rate/protect/filter_radius/rms_mix_rate identical on single-voice and duet paths), pitch (male stem already within Raju's ~235 Hz range; auto key-match skipped on duet stems), routing, and mix wiring. Dropped undertraining/samplerate as the cause. Agreed fix: clean dry-mic retrain of Raju (also fixes glitchy non-duet clone quality — same root cause). Parked pending retrain. (investigation only — no code commit)
 - Add start-point picker to Fine-tune preview — choose which 12s window of the song to preview (skip music-only intros); trimAudioToClip gains startSeconds, clip cache key includes start+length, control bounded by song duration. (commit: eeb0fa1)
 - Shorten Fine-tune preview clip from 30s to 12s (PREVIEW_CLIP_SECONDS=12 + all "30 sec" UI text/labels updated); faster + cheaper tuning previews. (commit: 8f37e83)
 - Add "Reset to defaults" button to the Fine-tune Advanced panel — restores all tuner sliders (Voice strength/index_rate, protect, filter_radius, rms_mix_rate) to defaults in one click. (commit: 213aa49)

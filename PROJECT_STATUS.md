@@ -85,7 +85,11 @@ Storage buckets for voice samples, voice models, and swap outputs (signed on-rea
 
 ## 6. Known Issues / Open Items
 
-- 🐛 **OPEN: Duet swap — male voice sounds like original.** **Root-caused (2026-06-29):** RVC ran but barely transformed identity — a near-passthrough (A/B of persisted result vs male input stem: waveform corr 0.910 @ zero lag; output is 48 kHz so it *did* come from RVC, ruling out mix-routing/labels/wrong-file). Model zip is valid (real 57.5 MB `.pth` + index). Likely an undertrained model (`DEFAULT_EPOCH=50`, `voice_clones.score` never computed) or an RVC samplerate/config mismatch. Decisive next step: a controlled direct RVC call to confirm (spends a Replicate credit).
+- 🐛 **PARKED: Duet swap — male voice sounds like original.** **Root cause (confirmed 2026-06-29):** weak clone identity. Raju was trained on **stem-separated audio** (not a clean dry mic), so the clone's identity is thin and falls back toward the source singer on conversion — producing the near-passthrough.
+  - **Ruled out (all confirmed 2026-06-29):** the four RVC conversion params (`index_rate`/`protect`/`filter_radius`/`rms_mix_rate` are **identical** on the single-voice and duet paths, not weaker); pitch (auto key-match is skipped on duet stems, but the male stem is already within Raju's ~235 Hz range, so pitch placement is not the cause); routing; and mix wiring.
+  - **NOT the cause:** undertraining or samplerate mismatch — the "direct RVC undertraining test" is dropped as the next step.
+  - **Agreed fix:** clean **dry-mic retrain** of Raju (3–5 min, no backing music, quiet room). This also fixes the glitchy/not-smooth quality on non-duet clones — same root cause.
+  - **Status:** parked pending the retrain decision.
 - 💳 **Billing not wired:** Stripe + India INR tiers (₹499/₹999/₹2,499) from PRD are not implemented.
 - 🌐 **Languages:** Only EN/Hindi-ready in practice; Bengali/Tamil/Telugu/Punjabi/Marathi pending.
 - ⏱️ Long-running AI jobs depend on Replicate/RunPod/MVSEP cold starts and poll ceilings (RVC poll raised to ~25 min).
