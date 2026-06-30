@@ -259,7 +259,12 @@ export async function POST(req: NextRequest) {
           pitch_detection_algorithm: 'rmvpe',
           crepe_hop_length: 128,
           protect: protectVal,
-          output_format: 'mp3',
+          // WAV (not mp3) so the converted vocal isn't re-compressed: the vocal
+          // already took one lossy encode at Demucs separation, and an mp3 here
+          // would be a SECOND lossy generation the instrumental never suffers.
+          // Downstream (mixStems, Fine-tune preview) decodes WAV identically.
+          // Tradeoff: WAV is ~10x larger → slower vocal fetch in the browser mix.
+          output_format: 'wav',
           // Random seed on every call so Replicate can't return a cached
           // prediction when the same vocalsUrl + model are resubmitted (Regenerate).
           seed: Math.floor(Math.random() * 2147483647),
