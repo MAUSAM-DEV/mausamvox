@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-06-30
 
+- Add per-stage cold-start vs compute timing logs to the pipeline routes (instrumentation only, no behavior change). New `logReplicateTiming` helper (`src/lib/replicate-timing.ts`) logs one `TIMING` line per finished prediction — cold-start/queue (started_at−created_at), compute (metrics.predict_time), total — wired into stem-split/Demucs, karaoke-split, and voice-convert/RVC GET success branches. gender-split (MVSEP) logs wall-clock total from the client-supplied elapsedMs (MVSEP returns no queue/compute split). Read in Vercel logs by searching `TIMING` after one real swap. (commit: 73fb83c)
 - Recent Swaps now saves the FULL track (clone vocal + instrumental) instead of the vocal-only file — ResultStep uploads the built mix (presign→PUT) and persist stores it as result_path; falls back to the vocal if the mix/upload fails; previews never upload. (commit: ff33ce5)
 - Fix hardcoded sidebar "My Voices" badge — VSidebar + VLSidebar now render a live voice_clones count (count:exact, head, eq user_id) instead of a static '3'. (commit: 42b21ba)
 - Fix stale dashboard counts — Voice Swaps + Voice Clones counts now refetch on window focus and tab visibilitychange (were fetched once on mount); delete handler refetches authoritatively instead of optimistic local −1. (commit: 3bb8d75)
