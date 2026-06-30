@@ -18,7 +18,7 @@ const techs = [
   {
     tag: "Full Stem Split",
     title: "StemSplit Engine",
-    desc: "Clean 6-stem separation built for production work — vocals, bass, drums, and more, isolated with studio-grade clarity.",
+    desc: "Clean 4-stem separation built for production work — vocals, bass, drums, and more, isolated with studio-grade clarity.",
     model: "StemSplit · Mausam Studio Engine",
   },
   {

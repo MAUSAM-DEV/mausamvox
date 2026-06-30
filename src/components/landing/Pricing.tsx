@@ -45,7 +45,7 @@ const plans: Plan[] = [
       { text: '8,000 credits/month' },
       { text: 'Unlimited voice swaps' },
       { text: '1 studio clone/month' },
-      { text: '6-stem split + BPM/key' },
+      { text: '4-stem split + BPM/key' },
       { text: 'Standard quality' },
       { text: 'No SATB choir', dim: true },
     ],
