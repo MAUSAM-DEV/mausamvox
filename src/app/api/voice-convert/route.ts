@@ -3,6 +3,7 @@ import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
+import { logReplicateTiming } from '@/lib/replicate-timing'
 
 export const maxDuration = 30
 
@@ -302,6 +303,7 @@ export async function GET(req: NextRequest) {
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {
+      logReplicateTiming('voice-convert', prediction)
       const convertedVocalsUrl = toUrlString(prediction.output)
       if (!convertedVocalsUrl) {
         return NextResponse.json(

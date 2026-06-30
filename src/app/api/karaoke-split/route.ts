@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { logReplicateTiming } from '@/lib/replicate-timing'
 
 export const maxDuration = 30
 
@@ -117,6 +118,7 @@ export async function GET(req: NextRequest) {
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {
+      logReplicateTiming('karaoke-split', prediction)
       const output = prediction.output as Record<string, unknown> | null
       const leadVocalsUrl = toUrlString(output?.mdx_vocals)
       const backingVocalsUrl = toUrlString(output?.mdx_instrumental)

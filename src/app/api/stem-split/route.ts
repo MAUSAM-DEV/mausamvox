@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { logReplicateTiming } from '@/lib/replicate-timing'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
 // on success it now also buffers the vocal stem from Replicate into Supabase
@@ -166,6 +167,7 @@ export async function GET(req: NextRequest) {
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {
+      logReplicateTiming('stem-split', prediction)
       // Log raw output shape so Vercel logs can diagnose any future parse issues.
       console.log('[stem-split] raw output type:', typeof prediction.output, Array.isArray(prediction.output) ? 'array' : '')
       console.log('[stem-split] raw output keys:', prediction.output && typeof prediction.output === 'object' ? Object.keys(prediction.output as object) : 'n/a')

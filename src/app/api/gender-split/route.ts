@@ -422,6 +422,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'failed', error: 'Could not parse male/female stems from output' })
       }
 
+      // TIMING (instrumentation only): MVSEP returns no queue/compute breakdown,
+      // so the best signal is the client-supplied elapsedMs = wall-clock since
+      // the job was created (queue + compute combined).
+      const mvsepTotal = elapsedMs > 0 ? `${(elapsedMs / 1000).toFixed(1)}s` : 'n/a'
+      console.log(`[gender-split] TIMING job=${createHash} mvsep-total(wall-clock)=${mvsepTotal} (MVSEP gives no cold-start/compute split)`)
+
       // Copy to durable Supabase URLs (soft-fallback to MVSEP URLs on failure).
       const durable = await persistStems(createHash, maleVocalsUrl, femaleVocalsUrl)
       return NextResponse.json({ status: 'succeeded', maleVocalsUrl: durable.male, femaleVocalsUrl: durable.female })
