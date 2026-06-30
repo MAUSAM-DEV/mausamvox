@@ -93,9 +93,17 @@ async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
   }
 }
 
+// Warmth EQ: a gentle low-shelf applied to the CONVERTED VOCAL only (the music
+// bed is never coloured). warmth 0..100 maps to 0..WARMTH_MAX_DB of low-shelf
+// gain at WARMTH_FREQ_HZ. At warmth 0 NO filter is inserted at all, so the mix
+// graph is byte-identical to before this control existed.
+const WARMTH_FREQ_HZ = 200
+const WARMTH_MAX_DB = 6
+
 async function mixStems(
   vocalsUrls: string[],
   musicUrls: string[],
+  opts?: { warmth?: number },
 ): Promise<Blob | null> {
   const decodeCtx = new AudioContext()
 
@@ -129,20 +137,36 @@ async function mixStems(
 
   const offline = new OfflineAudioContext(2, numFrames, SAMPLE_RATE)
 
-  function addSource(buf: AudioBuffer, gain: number) {
+  // Low-shelf gain (dB) for the vocal path; 0 at default warmth → no filter.
+  const warmthDb = opts?.warmth
+    ? (Math.min(100, Math.max(0, opts.warmth)) / 100) * WARMTH_MAX_DB
+    : 0
+
+  function addSource(buf: AudioBuffer, gain: number, warm = false) {
     const gainNode = offline.createGain()
     gainNode.gain.value = gain
-    gainNode.connect(offline.destination)
     const src = offline.createBufferSource()
     src.buffer = buf
     src.connect(gainNode)
+    // Insert the warmth low-shelf ONLY on the vocal path and ONLY when warmth>0,
+    // so the instrumental is never coloured and warmth 0 == today's exact graph.
+    if (warm && warmthDb > 0) {
+      const eq = offline.createBiquadFilter()
+      eq.type = 'lowshelf'
+      eq.frequency.value = WARMTH_FREQ_HZ
+      eq.gain.value = warmthDb
+      gainNode.connect(eq)
+      eq.connect(offline.destination)
+    } else {
+      gainNode.connect(offline.destination)
+    }
     src.start(0)
   }
 
   // 1/√N per vocal channel: keeps perceived loudness flat as N increases.
   const vocalGain = 1 / Math.sqrt(validVocals.length)
-  for (const buf of validVocals) addSource(buf, vocalGain)
-  for (const buf of validMusic) addSource(buf, 0.8)
+  for (const buf of validVocals) addSource(buf, vocalGain, true) // vocal: warmth-eligible
+  for (const buf of validMusic) addSource(buf, 0.8)              // music: never warmed
 
   const rendered = await offline.startRendering()
   return encodeWav(rendered)
@@ -487,6 +511,27 @@ export function ResultStep({
 
   const [mp3Encoding, setMp3Encoding] = useState(false)
 
+  // ── Warmth (vocal polish) ────────────────────────────────────────────────
+  // 0..100, default 0 = no change (identical mix to before). Debounced before it
+  // drives a re-render so dragging doesn't re-mix on every pixel. Applies to the
+  // CONVERTED vocal in the full-song swapped mix (and the saved track).
+  const [warmth, setWarmth] = useState(0)
+  const [debouncedWarmth, setDebouncedWarmth] = useState(0)
+  const [warmthRendering, setWarmthRendering] = useState(false)
+  // Latest settled warmth, read (not depended-on) by the build effect so a
+  // regenerate rebuilds at the current warmth without the effect re-firing on
+  // every warmth change.
+  const warmthRef = useRef(0)
+  warmthRef.current = debouncedWarmth
+  // The parent persists the swap exactly once (it nulls its persist context after
+  // the first onFullMixReady). So we DEFER that single upload until warmth has
+  // settled — guaranteeing the saved file matches what the user hears. Reset on
+  // each new swap/regenerate (top of the build effect).
+  const persistedRef = useRef(false)
+  // Skips the warmth re-render effect's first run (the build effect already
+  // rendered the swapped mix at this warmth on mount).
+  const warmthInitRef = useRef(true)
+
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0) // 0..1
@@ -506,9 +551,17 @@ export function ResultStep({
     return () => clearTimeout(t)
   }, [])
 
+  // Debounce the warmth slider → debouncedWarmth is what actually drives a re-mix.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedWarmth(warmth), 280)
+    return () => clearTimeout(t)
+  }, [warmth])
+
   // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
   useEffect(() => {
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
+    // New swap / regenerate → re-arm the deferred one-shot persist.
+    persistedRef.current = false
 
     // Collect non-empty music stem URLs (the shared instrumental bed)
     const musicUrls = [
@@ -523,6 +576,7 @@ export function ResultStep({
       // persist the vocal (null path) so the swap still lands in Recent Swaps.
       setFullMixState('no-stems')
       setMode('vocals')
+      persistedRef.current = true
       if (persistMix) onFullMixReady?.(null)
       return
     }
@@ -541,13 +595,15 @@ export function ResultStep({
     let cancelled = false
     setFullMixState('mixing')
     Promise.all([
+      // Original (reference) mix is never warmed — only the swapped vocal is.
       mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
-      mixStems(swapVocalUrls, musicUrls),
+      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current }),
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return
         if (!origBlob || !swapBlob) {
           setFullMixState('error')
+          persistedRef.current = true
           if (persistMix) onFullMixReady?.(null) // fall back to vocal-only persist
           return
         }
@@ -558,20 +614,69 @@ export function ResultStep({
         setMixedOriginalUrl(origUrl)
         setMixedSwappedUrl(swapUrl)
         setFullMixState('ready')
-        // Full swap → upload the full mix, then hand its path up for persisting.
-        // A null result (mix/upload failed) falls back to the vocal-only persist.
-        if (persistMix && onFullMixReady) {
-          uploadFullMixMp3(swapUrl).then((path) => { if (!cancelled) onFullMixReady(path) })
-        }
+        // NOTE: upload+persist is intentionally NOT done here — it's deferred
+        // until warmth settles (see the persist effect below) so the saved file
+        // reflects the warmth the user chose, not the initial warmth-0 render.
       })
       .catch(() => {
         if (cancelled) return
         setFullMixState('error')
+        persistedRef.current = true
         if (persistMix) onFullMixReady?.(null)
       })
 
     return () => { cancelled = true }
   }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live warmth preview: when settled warmth changes, re-render ONLY the swapped
+  // full-song mix (music bed + the Original reference mix stay untouched). No
+  // fullMixState flip, so the player never drops to the "Mixing…" banner — we
+  // just swap in the warmed URL when it's ready.
+  useEffect(() => {
+    if (warmthInitRef.current) { warmthInitRef.current = false; return }
+    if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
+    const musicUrls = [
+      stemResult.instrumentalUrl,
+      stemResult.bassUrl,
+      stemResult.drumsUrl,
+      stemResult.otherUrl,
+    ].filter((u): u is string => Boolean(u))
+    if (musicUrls.length === 0) return // no full mix to warm
+    const swapVocalUrls = [
+      convertedVocalsUrl,
+      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
+      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
+    ]
+    let cancelled = false
+    setWarmthRendering(true)
+    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth })
+      .then((blob) => {
+        if (cancelled || !blob) return
+        const url = URL.createObjectURL(blob)
+        if (mixedSwappedRef.current) URL.revokeObjectURL(mixedSwappedRef.current)
+        mixedSwappedRef.current = url
+        setMixedSwappedUrl(url)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setWarmthRendering(false) })
+    return () => { cancelled = true }
+  }, [debouncedWarmth]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deferred one-shot persist: the parent saves the swap exactly once (it nulls
+  // its persist context after the first onFullMixReady). Wait until the swapped
+  // mix is ready AND warmth has settled (not mid-drag, not re-rendering), then
+  // upload that settled mix a single time so Recent Swaps matches what was heard.
+  useEffect(() => {
+    if (!persistMix || persistedRef.current) return
+    if (fullMixState !== 'ready' || !mixedSwappedUrl) return
+    if (warmthRendering || debouncedWarmth !== warmth) return // still settling
+    const t = setTimeout(() => {
+      if (persistedRef.current) return
+      persistedRef.current = true
+      uploadFullMixMp3(mixedSwappedUrl).then((path) => onFullMixReady?.(path))
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only blend for duet modes: mixes the N swapped/untouched vocal
   // channels with no music so the Vocals-only tab hears all singers.
@@ -878,6 +983,38 @@ export function ResultStep({
           )}
         </div>
 
+        {/* Polish — free, client-side vocal sweetening on the CONVERTED vocal.
+            Unlike the Fine-tune panel (a paid RVC re-convert), this is a Web Audio
+            EQ baked into the full-song mix and the saved track. Hidden when there's
+            no full mix to colour. */}
+        {fullMixState !== 'no-stems' && (
+          <div className="vs-polish">
+            <div className="vs-polish-head">
+              <span className="vs-polish-title">Polish</span>
+              <span className="vs-polish-val">
+                {warmth === 0 ? 'Off' : `+${((warmth / 100) * WARMTH_MAX_DB).toFixed(1)} dB`}
+                {warmthRendering && <span className="vs-polish-spin" />}
+              </span>
+            </div>
+            <div className="vs-polish-row">
+              <label className="vs-polish-label" htmlFor="vs-warmth">
+                Warmth <span className="vs-polish-hint">— adds body/warmth to the vocal</span>
+              </label>
+              <input
+                id="vs-warmth"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={warmth}
+                onChange={(e) => setWarmth(Number(e.target.value))}
+                className="vs-polish-slider"
+              />
+            </div>
+            <div className="vs-polish-foot">Free · client-side · baked into the full-song mix &amp; the saved track.</div>
+          </div>
+        )}
+
         {/* Fine-tune panel — single-voice swaps only for v1 (duet tuning is a
             follow-up). Hidden when a second converted vocal is present. */}
         {!convertedVocalsUrl2 && (
@@ -1025,6 +1162,41 @@ export function ResultStep({
           transition: all 0.2s; box-shadow: 0 4px 12px rgba(139,92,246,.4);
         }
         .vs-play-btn:hover { transform: scale(1.1); box-shadow: 0 6px 18px rgba(139,92,246,.5); }
+        .vs-polish {
+          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 10px;
+          padding: 12px 14px; margin-bottom: 14px;
+        }
+        .vs-polish-head {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 9px;
+        }
+        .vs-polish-title {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 12px; font-weight: 700; color: #C4B5FD; letter-spacing: 0.3px;
+          text-transform: uppercase;
+        }
+        .vs-polish-val {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-size: 12px; font-weight: 600; color: #8B5CF6;
+        }
+        .vs-polish-spin {
+          width: 9px; height: 9px; border-radius: 50%;
+          border: 1.5px solid rgba(139,92,246,.3); border-top-color: #8B5CF6;
+          animation: vsPolishSpin 0.7s linear infinite;
+        }
+        @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
+        .vs-polish-row { display: flex; align-items: center; gap: 12px; }
+        .vs-polish-label { font-size: 12px; color: #C4C4E0; white-space: nowrap; }
+        .vs-polish-hint { color: #5A5A80; }
+        .vs-polish-slider {
+          flex: 1; min-width: 120px; height: 4px; cursor: pointer;
+          accent-color: #8B5CF6;
+        }
+        .vs-polish-foot { font-size: 11px; color: #5A5A80; margin-top: 8px; }
+        @media (max-width: 560px) {
+          .vs-polish-row { flex-direction: column; align-items: stretch; gap: 7px; }
+          .vs-polish-slider { width: 100%; }
+        }
         .vs-regen-row {
           display: flex; align-items: center; justify-content: space-between;
           padding: 10px 14px; background: #0E0E20; border: 1px solid #1E1E3A;
