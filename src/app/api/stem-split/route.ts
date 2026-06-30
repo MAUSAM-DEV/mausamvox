@@ -134,9 +134,12 @@ export async function POST(req: NextRequest) {
     const prediction = await replicate.predictions.create({
       version: DEMUCS_VERSION,
       input: {
+        // cjwbw/demucs's param is `model_name` (not `model`); the old `model` key
+        // was silently ignored, so the cog ran its default htdemucs (4-stem) by
+        // luck. Name it explicitly. `mp3: true` was likewise an ignored key —
+        // output_format already defaults to mp3, so it's dropped. Output unchanged.
         audio: signed.signedUrl,
-        model: 'htdemucs',
-        mp3: true,
+        model_name: 'htdemucs',
         mp3_bitrate: 320,
       },
     })
