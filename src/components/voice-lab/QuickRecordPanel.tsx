@@ -173,8 +173,6 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
 
   return (
     <div className="qr-panel">
-      <p className="qr-hint">Speak naturally for at least {MIN_DURATION_SEC} seconds — read anything, or just talk about your day.</p>
-
       {phase === 'idle' && (
         <button className="qr-btn qr-btn--main" onClick={handleStart}>
           ⏺ Start Recording
@@ -224,7 +222,6 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
 
       <style suppressHydrationWarning>{`
         .qr-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-        .qr-hint { font-size: 12px; color: #5A5A80; max-width: 420px; margin: 0; }
         .qr-status { font-size: 13px; color: #8B5CF6; padding: 16px 0; }
         .qr-device { font-size: 11px; color: #5A5A80; }
         .qr-timer { font-family: var(--font-grotesk), 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #C4C4E0; }

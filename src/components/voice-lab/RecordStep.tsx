@@ -174,6 +174,11 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
           border-radius: 14px;
           overflow: hidden;
           animation: vlFadeUp 0.3s ease;
+          /* Don't let the flex column workspace compress the card below its
+             content height — without this it shrinks and overflow:hidden clips
+             the record button at the bottom instead of letting the workspace
+             scroll. */
+          flex-shrink: 0;
         }
         @keyframes vlFadeUp {
           from { opacity: 0; transform: translateY(10px); }
@@ -205,13 +210,13 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         .vlrec-tab-desc { font-size: 11px; color: #5A5A80; }
         .vlrec-body { padding: 32px 24px; }
         .vlrec-script {
-          margin: 0 auto 24px; max-width: 560px;
+          margin: 0 auto 16px; max-width: 560px;
           background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 12px;
-          padding: 16px 18px;
+          padding: 12px 14px;
         }
         .vlrec-script-head {
           display: flex; align-items: center; justify-content: space-between;
-          gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+          gap: 10px; margin-bottom: 7px; flex-wrap: wrap;
         }
         .vlrec-script-label {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
@@ -219,16 +224,16 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         }
         .vlrec-script-shuffle {
           border: 1px solid #2A2A4A; background: transparent; color: #8B5CF6;
-          font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 7px;
+          font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
         .vlrec-script-shuffle:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
         .vlrec-script-text {
-          margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #E2E2F5;
+          margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: #E2E2F5;
         }
         .vlrec-script-tip {
-          margin: 0; font-size: 12px; line-height: 1.5; color: #8585A8;
-          border-top: 1px solid #1A1A30; padding-top: 10px;
+          margin: 0; font-size: 11.5px; line-height: 1.45; color: #8585A8;
+          border-top: 1px solid #1A1A30; padding-top: 8px;
         }
         .vlrec-script-tip strong { color: #C4B5FD; font-weight: 600; }
         .vlrec-save-row {

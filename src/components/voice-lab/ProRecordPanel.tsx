@@ -146,8 +146,6 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
 
   return (
     <div className="pr-panel">
-      <p className="pr-hint">Pick your audio interface or condenser mic, then record at least {MIN_DURATION_SEC} seconds in WAV.</p>
-
       {phase === 'idle' && (
         <button className="pr-btn pr-btn--main" onClick={handleDetectDevices}>
           🎚️ Detect Audio Devices
@@ -223,7 +221,6 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
 
       <style suppressHydrationWarning>{`
         .pr-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-        .pr-hint { font-size: 12px; color: #5A5A80; max-width: 420px; margin: 0; }
         .pr-status { font-size: 13px; color: #8B5CF6; padding: 16px 0; }
         .pr-select-wrap { position: relative; width: 100%; max-width: 360px; }
         .pr-select {
