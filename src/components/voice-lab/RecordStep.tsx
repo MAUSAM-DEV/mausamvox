@@ -5,6 +5,7 @@ import { QuickRecordPanel } from './QuickRecordPanel'
 import { ProRecordPanel } from './ProRecordPanel'
 import { UploadRecordingPanel } from './UploadRecordingPanel'
 import { MIN_DURATION_SEC, extFromMimeType } from './audioUtils'
+import { RECORDING_SCRIPTS, nextScript } from './recordingScripts'
 
 type Mode = 'quick' | 'pro' | 'upload'
 type CloneType = 'express' | 'studio'
@@ -43,6 +44,9 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
   const [name, setName] = useState('My Voice')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Read-aloud passage shown above Quick/Pro capture. Starts on the first script;
+  // the "New script" button advances through the list.
+  const [script, setScript] = useState(RECORDING_SCRIPTS[0])
 
   function handleModeChange(next: Mode) {
     setMode(next)
@@ -116,6 +120,30 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         </div>
 
         <div className="vlrec-body">
+          {/* Read-aloud script — guidance on what to say. Shown for the two live
+              capture modes (Quick/Pro); the Upload mode has no live recording. */}
+          {(mode === 'quick' || mode === 'pro') && (
+            <div className="vlrec-script">
+              <div className="vlrec-script-head">
+                <span className="vlrec-script-label">Read this aloud (or sing across your range):</span>
+                {RECORDING_SCRIPTS.length > 1 && (
+                  <button
+                    type="button"
+                    className="vlrec-script-shuffle"
+                    onClick={() => setScript((s) => nextScript(s.id))}
+                  >
+                    ↻ New script
+                  </button>
+                )}
+              </div>
+              <p className="vlrec-script-text">{script.text}</p>
+              <p className="vlrec-script-tip">
+                🎤 For singing clones, don&apos;t read flatly — go <strong>low and high</strong>, and
+                <strong> soft and loud</strong>, so the clone captures your full range.
+              </p>
+            </div>
+          )}
+
           {mode === 'quick' && <QuickRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
           {mode === 'pro' && <ProRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
           {mode === 'upload' && <UploadRecordingPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
@@ -176,6 +204,33 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         }
         .vlrec-tab-desc { font-size: 11px; color: #5A5A80; }
         .vlrec-body { padding: 32px 24px; }
+        .vlrec-script {
+          margin: 0 auto 24px; max-width: 560px;
+          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 12px;
+          padding: 16px 18px;
+        }
+        .vlrec-script-head {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+        }
+        .vlrec-script-label {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 12px; font-weight: 600; color: #A78BFA; letter-spacing: 0.2px;
+        }
+        .vlrec-script-shuffle {
+          border: 1px solid #2A2A4A; background: transparent; color: #8B5CF6;
+          font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 7px;
+          cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        }
+        .vlrec-script-shuffle:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .vlrec-script-text {
+          margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #E2E2F5;
+        }
+        .vlrec-script-tip {
+          margin: 0; font-size: 12px; line-height: 1.5; color: #8585A8;
+          border-top: 1px solid #1A1A30; padding-top: 10px;
+        }
+        .vlrec-script-tip strong { color: #C4B5FD; font-weight: 600; }
         .vlrec-save-row {
           display: flex; gap: 10px; padding: 16px 24px;
           border-top: 1px solid #1E1E3A; background: rgba(139,92,246,.02);
