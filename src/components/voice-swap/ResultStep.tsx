@@ -98,7 +98,7 @@ async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
 // gain at WARMTH_FREQ_HZ. At warmth 0 NO filter is inserted at all, so the mix
 // graph is byte-identical to before this control existed.
 const WARMTH_FREQ_HZ = 200
-const WARMTH_MAX_DB = 6
+const WARMTH_MAX_DB = 10
 
 async function mixStems(
   vocalsUrls: string[],
@@ -514,7 +514,9 @@ export function ResultStep({
   // ── Warmth (vocal polish) ────────────────────────────────────────────────
   // 0..100, default 0 = no change (identical mix to before). Debounced before it
   // drives a re-render so dragging doesn't re-mix on every pixel. Applies to the
-  // CONVERTED vocal in the full-song swapped mix (and the saved track).
+  // CONVERTED vocal on BOTH the full-song swapped mix and the Vocals-only
+  // playback (and the saved track), so soloing the vocal to judge it matches
+  // what Full-song plays and what gets saved.
   const [warmth, setWarmth] = useState(0)
   const [debouncedWarmth, setDebouncedWarmth] = useState(0)
   const [warmthRendering, setWarmthRendering] = useState(false)
@@ -678,10 +680,12 @@ export function ResultStep({
     return () => clearTimeout(t)
   }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vocals-only blend for duet modes: mixes the N swapped/untouched vocal
-  // channels with no music so the Vocals-only tab hears all singers.
-  // Standard (single-vocal) swaps skip this — srcFor falls back to
-  // convertedVocalsUrl directly, so there's no regression.
+  // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
+  // same warmth as the Full-song mix, so soloing the vocal to judge the EQ (or
+  // just listening on the Vocals-only tab) matches Full-song and the saved
+  // file — both read the same debouncedWarmth. Falls back to convertedVocalsUrl
+  // directly when there's nothing to blend or warm (single vocal, warmth off),
+  // keeping that common case instant instead of round-tripping through mixStems.
   useEffect(() => {
     const swapVocalUrls = [
       convertedVocalsUrl,
@@ -689,13 +693,17 @@ export function ResultStep({
       ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
     ].filter(Boolean) as string[]
 
-    if (swapVocalUrls.length <= 1) {
+    if (swapVocalUrls.length === 0) {
+      setMixedSwappedVocalsUrl(null)
+      return
+    }
+    if (swapVocalUrls.length === 1 && debouncedWarmth === 0) {
       setMixedSwappedVocalsUrl(null)
       return
     }
 
     let cancelled = false
-    mixStems(swapVocalUrls, []).then((blob) => {
+    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth }).then((blob) => {
       if (cancelled || !blob) return
       if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
       const url = URL.createObjectURL(blob)
@@ -704,7 +712,7 @@ export function ResultStep({
     }).catch(() => {})
 
     return () => { cancelled = true }
-  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revoke all three blob URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -985,8 +993,8 @@ export function ResultStep({
 
         {/* Polish — free, client-side vocal sweetening on the CONVERTED vocal.
             Unlike the Fine-tune panel (a paid RVC re-convert), this is a Web Audio
-            EQ baked into the full-song mix and the saved track. Hidden when there's
-            no full mix to colour. */}
+            EQ applied on BOTH the Full-song and Vocals-only tabs (and baked into
+            the saved track). Hidden when there's no full mix to colour. */}
         {fullMixState !== 'no-stems' && (
           <div className="vs-polish">
             <div className="vs-polish-head">
@@ -1011,7 +1019,7 @@ export function ResultStep({
                 className="vs-polish-slider"
               />
             </div>
-            <div className="vs-polish-foot">Free · client-side · baked into the full-song mix &amp; the saved track.</div>
+            <div className="vs-polish-foot">Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
           </div>
         )}
 
