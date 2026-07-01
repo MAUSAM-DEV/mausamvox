@@ -57,6 +57,7 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Onboarding journey | ✅ Working | Persona → magic moment → action → finale screens |
 | Landing page | ✅ Working | Full marketing site |
 | Choir generator / marketplace / API | ⬜ Not started | PRD V1.5–V2 scope |
+| Configure screen — honest controls | ✅ Working | Investigation (2026-07-01) confirmed **Style Intensity** (→`index_rate`) and **Pitch Shift** are the only two controls with a real backend effect. **Age Range / Accent / Output Language** are never sent to any API — now shown **disabled with a "Coming soon" badge** (`5dbac6e`) instead of implying a working capability. **Gender Lock** has a narrow real effect (routes which duet stem is converted, only in single-singer duet mode) but its old copy claimed a "hard guarantee" on the *output voice's gender*, which it never delivered (gender is fully determined by the chosen voice model) — copy reworded to describe the actual stem-routing behavior; control left enabled. |
 
 Legend: ✅ working · 🟡 partial/in-progress · ⬜ not started
 
