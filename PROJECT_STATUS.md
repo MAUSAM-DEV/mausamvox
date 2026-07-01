@@ -1,6 +1,6 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-06-30 · Branch: `main` · Status: Active development (pre-launch)_
+_Last updated: 2026-07-01 · Branch: `main` · Status: Active development (pre-launch)_
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 
@@ -47,7 +47,7 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Founder/admin bypass | ✅ Working | `ADMIN_EMAILS` in `src/lib/admin.ts` skips all deductions |
 | Voice Swap (full pipeline) | 🟡 Mostly working | Upload (75 MB) → stem/gender split → RVC swap → 30s preview → MP3 result + A/B; persists to durable storage. Recent Swaps now saves the **full track** (clone vocal + instrumental), not the bare vocal — client uploads the built mix; persist stores it as result_path (falls back to vocal on mix/upload failure). **RVC now outputs WAV** (`e5968d7`) to kill the second lossy vocal encode (vocal sounded duller than music); tradeoff = ~10× larger vocal fetch — watching mix/preview speed. Demucs still mp3 320 (next lever if more headroom needed). |
 | Fine-tune panel (RVC params) | ✅ Working | Adjustable protect / index_rate / filter_radius / rms_mix_rate w/ 12s preview; **start-point picker** (m:ss, bounded by song duration) to preview any window / skip music-only intros; "Reset to defaults" button restores all sliders in one click |
-| Vocal polish — Warmth | 🟢 New | Free client-side low-shelf EQ (200Hz, 0–6 dB) on the **converted vocal** in the full-song mix, debounced live preview; baked into the saved track via a deferred one-shot persist. "Polish" slider above the Fine-tune panel (`ResultStep.tsx`, `9b0100a`). Reverb (ConvolverNode) is the planned next step. Known limit: re-tweaking warmth after the initial settle updates preview but not the already-saved file (parent persists once). |
+| Vocal polish — Warmth | 🟢 New | Free client-side low-shelf EQ (200Hz, 0–10 dB, bumped from 0–6 dB `f0408c1` for audibility) on the **converted vocal**, debounced live preview; baked into the saved track via a deferred one-shot persist. "Polish" slider above the Fine-tune panel (`ResultStep.tsx`, `9b0100a`). **Now applies on both the Full-song AND Vocals-only tabs** (`f0408c1`) — previously Vocals-only bypassed warmth entirely (standard swaps played the raw converted vocal; duet blends were built without the `{warmth}` opt), so soloing the vocal to judge the effect produced no audible change and the saved file (always built from the Full-song render) differed from what was just previewed. Reverb (ConvolverNode) is the planned next step. Known limit: re-tweaking warmth after the initial settle updates preview but not the already-saved file (parent persists once). |
 | Auto pitch-shift (cross-range) | 🟡 Guarded | Recently guarded against unreliable stem detection (commit `8e53e45`) |
 | Voice Lab (express + studio clone) | 🟡 Partial | Record/upload → dataset prep → RunPod training → test; durable model persistence fixed. Recording UI now shows a **read-aloud script** (Quick/Pro modes) with phonetically-varied passages + a shuffle button + singing guidance (low/high, soft/loud) — `recordingScripts.ts` (`61e7ad2`); record-card clipping + duplicate-hint cleanup followed (`b7887ed`). Helps the planned dry-mic retrain of Raju produce a consistent take. |
 | Stem Studio (karaoke/gender split) | 🟡 Partial | MVSEP-based; lead/backing + male/female routing |
@@ -94,6 +94,7 @@ Storage buckets for voice samples, voice models, and swap outputs (signed on-rea
 - 💳 **Billing not wired:** Stripe + India INR tiers (₹499/₹999/₹2,499) from PRD are not implemented.
 - 🌐 **Languages:** Only EN/Hindi-ready in practice; Bengali/Tamil/Telugu/Punjabi/Marathi pending.
 - ⏱️ Long-running AI jobs depend on Replicate/RunPod/MVSEP cold starts and poll ceilings (RVC poll raised to ~25 min). **Per-stage timing logs are now live** (`73fb83c`): in Vercel logs, search `TIMING` to see each stage's cold-start/queue vs compute breakdown — `[stem-split]`/`[karaoke-split]`/`[voice-convert] TIMING … cold-start/queue=… compute=… total=…` (from Replicate timestamps + `metrics.predict_time`), and `[gender-split] TIMING … mvsep-total(wall-clock)=…` (MVSEP gives no queue/compute split). Read after one real swap.
+- 🐛 **Known, unreachable: duet Mode 2/3 ("both singers converted") female-vocal job is missing `protect`/`filterRadius`/`rmsMixRate` overrides** that the male job's fetch includes (`VoiceSwapPage.tsx` dual-job branch). Found during the 2026-07-01 Warmth investigation. **Not currently exploitable** — the only source of those overrides is the Fine-tune panel's "Apply to Full Track", and that panel is intentionally hidden whenever a second converted vocal exists (duet fine-tuning is a v2 follow-up). Leave as-is until duet fine-tuning ships; fix then by adding the three missing keys to the female fetch body.
 
 ---
 

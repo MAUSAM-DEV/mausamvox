@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-07-01
+
+- Investigated two reported Warmth-control bugs ("slider does nothing" / "preview doesn't match saved file") — root-caused to the Polish panel being shown on both the Full-song and Vocals-only tabs while warmth was only ever wired into the Full-song `mixStems()` call. Vocals-only played `convertedVocalsUrl` directly for standard swaps, or a `mixStems()` blend built with no `{warmth}` opt for duet — so soloing the vocal (the natural way to judge an EQ tweak) produced zero change, and the saved file (always built from the Full-song render) differed from what had just been previewed. Fixed: the vocals-only blend effect now passes `debouncedWarmth` into `mixStems()` and depends on it (for both duet N>1 and single-vocal swaps), falling back to the instant raw `convertedVocalsUrl` only when there's nothing to blend or warm (single vocal, warmth=0). Also raised `WARMTH_MAX_DB` 6→10 dB so the low-shelf boost is clearly hearable instead of getting masked by the instrumental bed; warmth=0 still inserts no filter node (byte-identical). Found and deliberately left alone: an unrelated, currently-unreachable gap in the duet Mode 2/3 female-vocal RVC job (missing `protect`/`filterRadius`/`rmsMixRate` overrides) — logged in PROJECT_STATUS.md §6 for whenever duet fine-tuning ships. (commit: f0408c1)
+
 ## 2026-06-30
 
 - Recover clone-vocal quality — switch RVC `output_format` from `mp3` to `wav` in voice-convert (`route.ts:262`). The vocal was double-lossy-encoded (Demucs separation mp3 → RVC mp3) while the instrumental encodes only once, making the clone vocal sound duller than the music (~75% vs 95%). WAV removes that second compression; downstream (mixStems, Fine-tune preview) already decodes WAV. Single-variable change to measure impact alone — Demucs format untouched. Tradeoff: WAV is ~10× larger, so the vocal fetch in the browser mix/preview is slower. (commit: e5968d7)
