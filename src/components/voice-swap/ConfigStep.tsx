@@ -57,16 +57,19 @@ function SegControl<T extends string>({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   options: T[]
   value: T
   onChange: (v: T) => void
+  disabled?: boolean
 }) {
   return (
-    <div className="vs-seg">
+    <div className={`vs-seg${disabled ? ' vs-seg--disabled' : ''}`}>
       {options.map((opt) => (
         <button
           key={opt}
+          disabled={disabled}
           className={`vs-seg-btn ${value === opt ? 'vs-seg-btn--active' : ''}`}
           onClick={() => onChange(opt)}
         >
@@ -230,27 +233,35 @@ export function ConfigStep({
             />
             {gender !== 'Neutral' && (
               hasDuet
-                ? <div className="vs-gl-status vs-gl-status--active">✓ Stems isolated — hard guarantee</div>
-                : <div className="vs-gl-status vs-gl-status--soft">Run Duet Split for strongest enforcement</div>
+                ? <div className="vs-gl-status vs-gl-status--active">✓ Converts only the {gender.toLowerCase()} singer's isolated stem</div>
+                : <div className="vs-gl-status vs-gl-status--soft">No effect until you run Duet Split — it only routes stems, doesn't change the output voice's gender</div>
             )}
           </div>
 
           <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">Age Range</label>
+            <label className="vs-ctrl-lbl">
+              Age Range
+              <span className="vs-badge-soon">Coming soon</span>
+            </label>
             <SegControl<AgeRange>
               options={['Young', 'Mid', 'Mature']}
               value={ageRange}
               onChange={setAgeRange}
+              disabled
             />
           </div>
 
           <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">Accent</label>
-            <div className="vs-select-wrap">
+            <label className="vs-ctrl-lbl">
+              Accent
+              <span className="vs-badge-soon">Coming soon</span>
+            </label>
+            <div className="vs-select-wrap vs-select-wrap--disabled">
               <select
                 className="vs-select"
                 value={accent}
                 onChange={(e) => setAccent(e.target.value)}
+                disabled
               >
                 {ACCENTS.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -259,12 +270,16 @@ export function ConfigStep({
           </div>
 
           <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">Output Language</label>
-            <div className="vs-select-wrap">
+            <label className="vs-ctrl-lbl">
+              Output Language
+              <span className="vs-badge-soon">Coming soon</span>
+            </label>
+            <div className="vs-select-wrap vs-select-wrap--disabled">
               <select
                 className="vs-select"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
+                disabled
               >
                 {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
@@ -500,9 +515,26 @@ export function ConfigStep({
           color: #fff;
           font-weight: 600;
         }
+        .vs-seg--disabled { opacity: 0.5; }
+        .vs-seg-btn:disabled {
+          cursor: not-allowed;
+        }
+        .vs-seg-btn:disabled:hover { color: #7878A0; background: transparent; }
+        .vs-badge-soon {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          color: #5A5A80;
+          background: #1E1E3A;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
         .vs-select-wrap {
           position: relative;
         }
+        .vs-select-wrap--disabled { opacity: 0.5; }
+        .vs-select:disabled { cursor: not-allowed; }
         .vs-select {
           width: 100%;
           background: #0E0E20;
