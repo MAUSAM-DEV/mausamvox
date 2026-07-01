@@ -59,6 +59,24 @@ export function encodeMp3(buffer: AudioBuffer): Blob {
 }
 
 // ---------------------------------------------------------------------------
+// Synthetic reverb impulse response — an exponentially-decaying stereo noise
+// buffer, generated in code so the Reverb polish control needs no bundled
+// asset or fetch. `seconds` sets the tail length, `decay` shapes how fast it
+// dies out (higher = tighter "room" feel rather than a long cathedral tail).
+// ---------------------------------------------------------------------------
+export function createReverbImpulse(ctx: BaseAudioContext, seconds: number, decay: number): AudioBuffer {
+  const length = Math.max(1, Math.round(ctx.sampleRate * seconds))
+  const buf = ctx.createBuffer(2, length, ctx.sampleRate)
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const data = buf.getChannelData(c)
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay)
+    }
+  }
+  return buf
+}
+
+// ---------------------------------------------------------------------------
 // Decode an audio URL, keep a `seconds`-long window starting at `startSeconds`,
 // and re-encode as MP3. Used to build a short preview clip so a tuning render
 // processes ~12 s instead of the whole song (faster + cheaper). `startSeconds`

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
-import { encodeWav, encodeMp3 } from './audioClip'
+import { encodeWav, encodeMp3, createReverbImpulse } from './audioClip'
 
 type AbSide = 'Original' | 'Swapped'
 type PlayMode = 'full' | 'vocals'
@@ -100,10 +100,19 @@ async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
 const WARMTH_FREQ_HZ = 200
 const WARMTH_MAX_DB = 10
 
+// Reverb: a short synthetic "vocal space" convolution chained AFTER warmth, on
+// the same CONVERTED VOCAL path (music bed untouched). reverb 0..100 maps to
+// 0..REVERB_MAX_WET of wet mix — capped well under 100% since a fully-wet
+// soloed vocal sounds washy/unnatural. At reverb 0 NO convolver/split nodes
+// are inserted at all, so the graph is byte-identical to before this control.
+const REVERB_MAX_WET = 0.35
+const REVERB_IR_SECONDS = 1.8
+const REVERB_IR_DECAY = 2.5
+
 async function mixStems(
   vocalsUrls: string[],
   musicUrls: string[],
-  opts?: { warmth?: number },
+  opts?: { warmth?: number; reverb?: number },
 ): Promise<Blob | null> {
   const decodeCtx = new AudioContext()
 
@@ -141,6 +150,34 @@ async function mixStems(
   const warmthDb = opts?.warmth
     ? (Math.min(100, Math.max(0, opts.warmth)) / 100) * WARMTH_MAX_DB
     : 0
+  // Wet fraction for the vocal path; 0 at default reverb → no convolver.
+  const reverbWet = opts?.reverb
+    ? (Math.min(100, Math.max(0, opts.reverb)) / 100) * REVERB_MAX_WET
+    : 0
+
+  // Shared dry/wet reverb bus — ONE ConvolverNode for ALL vocal channels.
+  // Convolution distributes over summed inputs, so feeding every vocal
+  // channel into one shared convolver is identical to giving each its own,
+  // just cheaper. Built lazily so a reverb=0 render never creates it.
+  let reverbBus: { dry: GainNode; wetIn: ConvolverNode } | null = null
+  function getReverbBus() {
+    if (!reverbBus) {
+      const dry = offline.createGain()
+      dry.gain.value = 1 - reverbWet
+      dry.connect(offline.destination)
+
+      const convolver = offline.createConvolver()
+      convolver.buffer = createReverbImpulse(offline, REVERB_IR_SECONDS, REVERB_IR_DECAY)
+
+      const wetGain = offline.createGain()
+      wetGain.gain.value = reverbWet
+      convolver.connect(wetGain)
+      wetGain.connect(offline.destination)
+
+      reverbBus = { dry, wetIn: convolver }
+    }
+    return reverbBus
+  }
 
   function addSource(buf: AudioBuffer, gain: number, warm = false) {
     const gainNode = offline.createGain()
@@ -148,17 +185,24 @@ async function mixStems(
     const src = offline.createBufferSource()
     src.buffer = buf
     src.connect(gainNode)
-    // Insert the warmth low-shelf ONLY on the vocal path and ONLY when warmth>0,
-    // so the instrumental is never coloured and warmth 0 == today's exact graph.
+    // Warmth low-shelf, then reverb — both ONLY on the vocal path (warm=true)
+    // and ONLY inserted when their amount is >0, so at warmth=0/reverb=0 the
+    // graph is byte-identical to before either control existed.
+    let node: AudioNode = gainNode
     if (warm && warmthDb > 0) {
       const eq = offline.createBiquadFilter()
       eq.type = 'lowshelf'
       eq.frequency.value = WARMTH_FREQ_HZ
       eq.gain.value = warmthDb
-      gainNode.connect(eq)
-      eq.connect(offline.destination)
+      node.connect(eq)
+      node = eq
+    }
+    if (warm && reverbWet > 0) {
+      const { dry, wetIn } = getReverbBus()
+      node.connect(dry)
+      node.connect(wetIn)
     } else {
-      gainNode.connect(offline.destination)
+      node.connect(offline.destination)
     }
     src.start(0)
   }
@@ -534,6 +578,15 @@ export function ResultStep({
   // rendered the swapped mix at this warmth on mount).
   const warmthInitRef = useRef(true)
 
+  // ── Reverb (vocal polish, chained after warmth) ──────────────────────────
+  // 0..100, default 0 = no change. Same debounce/settle/persist pattern as
+  // warmth — see comments above. Applies to the CONVERTED vocal on BOTH the
+  // full-song swapped mix and the Vocals-only playback (and the saved track).
+  const [reverb, setReverb] = useState(0)
+  const [debouncedReverb, setDebouncedReverb] = useState(0)
+  const reverbRef = useRef(0)
+  reverbRef.current = debouncedReverb
+
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0) // 0..1
@@ -558,6 +611,12 @@ export function ResultStep({
     const t = setTimeout(() => setDebouncedWarmth(warmth), 280)
     return () => clearTimeout(t)
   }, [warmth])
+
+  // Debounce the reverb slider → debouncedReverb is what actually drives a re-mix.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedReverb(reverb), 280)
+    return () => clearTimeout(t)
+  }, [reverb])
 
   // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
   useEffect(() => {
@@ -599,7 +658,7 @@ export function ResultStep({
     Promise.all([
       // Original (reference) mix is never warmed — only the swapped vocal is.
       mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
-      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current }),
+      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current, reverb: reverbRef.current }),
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return
@@ -630,10 +689,10 @@ export function ResultStep({
     return () => { cancelled = true }
   }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live warmth preview: when settled warmth changes, re-render ONLY the swapped
-  // full-song mix (music bed + the Original reference mix stay untouched). No
-  // fullMixState flip, so the player never drops to the "Mixing…" banner — we
-  // just swap in the warmed URL when it's ready.
+  // Live polish preview: when settled warmth OR reverb changes, re-render ONLY
+  // the swapped full-song mix (music bed + the Original reference mix stay
+  // untouched). No fullMixState flip, so the player never drops to the
+  // "Mixing…" banner — we just swap in the polished URL when it's ready.
   useEffect(() => {
     if (warmthInitRef.current) { warmthInitRef.current = false; return }
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
@@ -643,7 +702,7 @@ export function ResultStep({
       stemResult.drumsUrl,
       stemResult.otherUrl,
     ].filter((u): u is string => Boolean(u))
-    if (musicUrls.length === 0) return // no full mix to warm
+    if (musicUrls.length === 0) return // no full mix to polish
     const swapVocalUrls = [
       convertedVocalsUrl,
       ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
@@ -651,7 +710,7 @@ export function ResultStep({
     ]
     let cancelled = false
     setWarmthRendering(true)
-    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth })
+    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth, reverb: debouncedReverb })
       .then((blob) => {
         if (cancelled || !blob) return
         const url = URL.createObjectURL(blob)
@@ -662,30 +721,32 @@ export function ResultStep({
       .catch(() => {})
       .finally(() => { if (!cancelled) setWarmthRendering(false) })
     return () => { cancelled = true }
-  }, [debouncedWarmth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedWarmth, debouncedReverb]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deferred one-shot persist: the parent saves the swap exactly once (it nulls
   // its persist context after the first onFullMixReady). Wait until the swapped
-  // mix is ready AND warmth has settled (not mid-drag, not re-rendering), then
-  // upload that settled mix a single time so Recent Swaps matches what was heard.
+  // mix is ready AND warmth+reverb have both settled (not mid-drag, not
+  // re-rendering), then upload that settled mix a single time so Recent Swaps
+  // matches what was heard.
   useEffect(() => {
     if (!persistMix || persistedRef.current) return
     if (fullMixState !== 'ready' || !mixedSwappedUrl) return
-    if (warmthRendering || debouncedWarmth !== warmth) return // still settling
+    if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb) return // still settling
     const t = setTimeout(() => {
       if (persistedRef.current) return
       persistedRef.current = true
       uploadFullMixMp3(mixedSwappedUrl).then((path) => onFullMixReady?.(path))
     }, 1000)
     return () => clearTimeout(t)
-  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
-  // same warmth as the Full-song mix, so soloing the vocal to judge the EQ (or
-  // just listening on the Vocals-only tab) matches Full-song and the saved
-  // file — both read the same debouncedWarmth. Falls back to convertedVocalsUrl
-  // directly when there's nothing to blend or warm (single vocal, warmth off),
-  // keeping that common case instant instead of round-tripping through mixStems.
+  // same warmth+reverb as the Full-song mix, so soloing the vocal to judge the
+  // effects (or just listening on the Vocals-only tab) matches Full-song and
+  // the saved file — both read the same debounced values. Falls back to
+  // convertedVocalsUrl directly when there's nothing to blend or polish (single
+  // vocal, both controls off), keeping that common case instant instead of
+  // round-tripping through mixStems.
   useEffect(() => {
     const swapVocalUrls = [
       convertedVocalsUrl,
@@ -697,13 +758,13 @@ export function ResultStep({
       setMixedSwappedVocalsUrl(null)
       return
     }
-    if (swapVocalUrls.length === 1 && debouncedWarmth === 0) {
+    if (swapVocalUrls.length === 1 && debouncedWarmth === 0 && debouncedReverb === 0) {
       setMixedSwappedVocalsUrl(null)
       return
     }
 
     let cancelled = false
-    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth }).then((blob) => {
+    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth, reverb: debouncedReverb }).then((blob) => {
       if (cancelled || !blob) return
       if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
       const url = URL.createObjectURL(blob)
@@ -712,7 +773,7 @@ export function ResultStep({
     }).catch(() => {})
 
     return () => { cancelled = true }
-  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth, debouncedReverb]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revoke all three blob URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -993,16 +1054,14 @@ export function ResultStep({
 
         {/* Polish — free, client-side vocal sweetening on the CONVERTED vocal.
             Unlike the Fine-tune panel (a paid RVC re-convert), this is a Web Audio
-            EQ applied on BOTH the Full-song and Vocals-only tabs (and baked into
-            the saved track). Hidden when there's no full mix to colour. */}
+            EQ (Warmth) + convolution reverb (Reverb, chained after Warmth) applied
+            on BOTH the Full-song and Vocals-only tabs (and baked into the saved
+            track). Hidden when there's no full mix to colour. */}
         {fullMixState !== 'no-stems' && (
           <div className="vs-polish">
             <div className="vs-polish-head">
               <span className="vs-polish-title">Polish</span>
-              <span className="vs-polish-val">
-                {warmth === 0 ? 'Off' : `+${((warmth / 100) * WARMTH_MAX_DB).toFixed(1)} dB`}
-                {warmthRendering && <span className="vs-polish-spin" />}
-              </span>
+              {warmthRendering && <span className="vs-polish-spin" />}
             </div>
             <div className="vs-polish-row">
               <label className="vs-polish-label" htmlFor="vs-warmth">
@@ -1018,6 +1077,27 @@ export function ResultStep({
                 onChange={(e) => setWarmth(Number(e.target.value))}
                 className="vs-polish-slider"
               />
+              <span className="vs-polish-val">
+                {warmth === 0 ? 'Off' : `+${((warmth / 100) * WARMTH_MAX_DB).toFixed(1)} dB`}
+              </span>
+            </div>
+            <div className="vs-polish-row">
+              <label className="vs-polish-label" htmlFor="vs-reverb">
+                Reverb <span className="vs-polish-hint">— adds space/room to the vocal</span>
+              </label>
+              <input
+                id="vs-reverb"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={reverb}
+                onChange={(e) => setReverb(Number(e.target.value))}
+                className="vs-polish-slider"
+              />
+              <span className="vs-polish-val">
+                {reverb === 0 ? 'Off' : `${Math.round((reverb / 100) * REVERB_MAX_WET * 100)}% wet`}
+              </span>
             </div>
             <div className="vs-polish-foot">Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
           </div>
