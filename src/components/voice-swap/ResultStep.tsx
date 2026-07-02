@@ -105,7 +105,7 @@ const WARMTH_MAX_DB = 10
 // 0..REVERB_MAX_WET of wet mix — capped well under 100% since a fully-wet
 // soloed vocal sounds washy/unnatural. At reverb 0 NO convolver/split nodes
 // are inserted at all, so the graph is byte-identical to before this control.
-const REVERB_MAX_WET = 0.35
+const REVERB_MAX_WET = 0.5
 const REVERB_IR_SECONDS = 1.8
 const REVERB_IR_DECAY = 2.5
 
