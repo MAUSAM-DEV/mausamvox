@@ -108,16 +108,27 @@ export interface StemResult {
   // Every consumer falls back to vocalsUrl when leadVocalsUrl is empty.
   leadVocalsUrl?: string
   backingVocalsUrl?: string
+  leadVocalsPath?: string
+  backingVocalsPath?: string
   // Male/female split of vocalsUrl, populated by /api/gender-split (premium).
   // Optional, same as lead/backing: empty until a gender split runs; consumers
   // fall back to vocalsUrl. Nothing populates these yet (Layer 1 Step 1 adds the
   // fields only — the runner/trigger/UI come in later steps).
   maleVocalsUrl?: string
   femaleVocalsUrl?: string
+  maleVocalsPath?: string
+  femaleVocalsPath?: string
   instrumentalUrl: string
   bassUrl: string
   drumsUrl: string
   otherUrl: string
+  // Durable audio-uploads paths for the music stems, set by /api/stem-split
+  // alongside vocalsPath. Used to re-sign fresh URLs on a cache restore so the
+  // full-song mix never silently drops an expired stem. Optional: legacy cached
+  // results and the manual-extracted-stems path won't have them.
+  bassPath?: string
+  drumsPath?: string
+  otherPath?: string
   fileName: string
 }
 
@@ -345,9 +356,12 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const POLL_INTERVAL_MS = 3000
       const MAX_ATTEMPTS = 150 // ~7.5 minutes
       let stems: { vocals: string; bass: string; drums: string; other: string } | null = null
-      // Durable path for the vocal stem (set by /api/stem-split when it copies the
+      // Durable paths for the stems (set by /api/stem-split when it copies the
       // Demucs output into Supabase). Empty if persistence soft-failed server-side.
       let vocalsPath = ''
+      let bassPath = ''
+      let drumsPath = ''
+      let otherPath = ''
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         const pollRes = await fetch(`/api/stem-split?id=${predictionId}`)
@@ -360,6 +374,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         if (pollData.status === 'succeeded') {
           stems = { vocals: pollData.vocals, bass: pollData.bass, drums: pollData.drums, other: pollData.other }
           vocalsPath = pollData.vocalsPath ?? ''
+          bassPath = pollData.bassPath ?? ''
+          drumsPath = pollData.drumsPath ?? ''
+          otherPath = pollData.otherPath ?? ''
           break
         }
         if (pollData.status === 'failed' || pollData.status === 'canceled') {
@@ -381,6 +398,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         bassUrl:         stems.bass,
         drumsUrl:        stems.drums,
         otherUrl:        stems.other,
+        bassPath,
+        drumsPath,
+        otherPath,
         fileName:        file.name,
       }
 

@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
+import { persistStemFile } from '@/lib/stem-persist'
 
-export const maxDuration = 30
+// GET buffers the lead/backing stems from Replicate into Supabase on success
+// (two parallel ~5 MB download + re-uploads), so allow up to 60 s like stem-split.
+export const maxDuration = 60
 
 // erickluis00/all-in-one-audio — wraps python-audio-separator. We feed it an
 // already-isolated full-vocal stem and ask the UVR karaoke model to split it
@@ -134,7 +137,26 @@ export async function GET(req: NextRequest) {
 
       // backingVocalsUrl may legitimately be '' (e.g. parse miss); still usable —
       // caller swaps the lead and simply has no backing to fold into the bed.
-      return NextResponse.json({ status: 'succeeded', leadVocalsUrl, backingVocalsUrl })
+      //
+      // Buffer both stems into durable storage so voice-convert (and the
+      // full-song mix) can re-sign fresh URLs after the Replicate URLs expire
+      // (~1h) — the lead is the DEFAULT input to a single-voice swap, so a
+      // stale cached leadVocalsUrl previously went to RVC unchecked. Soft-
+      // fallback per stem: on persist failure return the ephemeral URL and
+      // omit that stem's path (callers behave as before).
+      const [persistedLead, persistedBacking] = await Promise.all([
+        persistStemFile('karaoke-split', `stems/${id}-lead.mp3`, leadVocalsUrl),
+        backingVocalsUrl
+          ? persistStemFile('karaoke-split', `stems/${id}-backing.mp3`, backingVocalsUrl)
+          : Promise.resolve(null),
+      ])
+      return NextResponse.json({
+        status: 'succeeded',
+        leadVocalsUrl: persistedLead?.url ?? leadVocalsUrl,
+        backingVocalsUrl: persistedBacking?.url ?? backingVocalsUrl,
+        ...(persistedLead ? { leadVocalsPath: persistedLead.path } : {}),
+        ...(persistedBacking ? { backingVocalsPath: persistedBacking.path } : {}),
+      })
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {

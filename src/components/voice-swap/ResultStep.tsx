@@ -133,6 +133,15 @@ async function mixStems(
   ])
   await decodeCtx.close()
 
+  // STRICT: every requested stem must decode, or the whole mix fails (null →
+  // the caller's 'error' state). A partial mix used to slip through here — an
+  // expired music-stem URL quietly produced a vocals-only "full song" that
+  // looked like success. Better an honest error than a silently wrong file.
+  const failedCount = [...vocalBufs, ...musicBufs].filter((b) => b === null).length
+  if (failedCount > 0) {
+    console.error(`[mixStems] ${failedCount}/${vocalsUrls.length + musicUrls.length} stem fetches failed — aborting mix (stale URLs?)`)
+    return null
+  }
   const validVocals = vocalBufs.filter((b): b is AudioBuffer => b !== null)
   if (validVocals.length === 0) return null
   const validMusic = musicBufs.filter((b): b is AudioBuffer => b !== null)
@@ -664,6 +673,10 @@ export function ResultStep({
         if (cancelled) return
         if (!origBlob || !swapBlob) {
           setFullMixState('error')
+          // Drop to Vocals-only so playback keeps working AND the error note
+          // (rendered only in vocals mode) is actually visible — mixStems is
+          // now strict, so this fires whenever any stem URL has gone stale.
+          setMode('vocals')
           persistedRef.current = true
           if (persistMix) onFullMixReady?.(null) // fall back to vocal-only persist
           return
@@ -682,6 +695,7 @@ export function ResultStep({
       .catch(() => {
         if (cancelled) return
         setFullMixState('error')
+        setMode('vocals') // see the error branch above
         persistedRef.current = true
         if (persistMix) onFullMixReady?.(null)
       })

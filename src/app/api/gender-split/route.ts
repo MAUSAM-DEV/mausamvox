@@ -128,12 +128,18 @@ async function persistStem(mvsepUrl: string, path: string): Promise<string> {
   return signed.data.signedUrl
 }
 
-// Copy the mapped MVSEP stems into Supabase, returning durable signed URLs.
-// Idempotent: if both already exist (a re-poll), reuse them with no re-download.
-// Soft-fallback: on ANY failure, return the MVSEP URLs so the caller still gets
-// a usable (if ephemeral) result rather than nothing. Keyed by the create hash;
-// no userId folder yet (tier-gating is a later step).
-async function persistStems(createHash: string, maleUrl: string, femaleUrl: string): Promise<{ male: string; female: string }> {
+// Copy the mapped MVSEP stems into Supabase, returning durable signed URLs
+// plus their storage paths so callers (voice-convert, cache restore) can
+// re-sign fresh URLs later. Idempotent: if both already exist (a re-poll),
+// reuse them with no re-download. Soft-fallback: on ANY failure, return the
+// MVSEP URLs with EMPTY paths so the caller still gets a usable (if ephemeral)
+// result rather than nothing. Keyed by the create hash; no userId folder yet
+// (tier-gating is a later step).
+async function persistStems(
+  createHash: string,
+  maleUrl: string,
+  femaleUrl: string,
+): Promise<{ male: string; female: string; malePath: string; femalePath: string }> {
   const malePath = `gender-split/${createHash}-male.mp3`
   const femalePath = `gender-split/${createHash}-female.mp3`
   try {
@@ -144,17 +150,22 @@ async function persistStems(createHash: string, maleUrl: string, femaleUrl: stri
     // Reuse if every present stem is already persisted (idempotent re-poll).
     if ((!maleUrl || existMale) && (!femaleUrl || existFemale)) {
       console.log(`[gender-split] reused persisted stems (no re-download) for ${createHash}`)
-      return { male: existMale || '', female: existFemale || '' }
+      return {
+        male: existMale || '',
+        female: existFemale || '',
+        malePath: existMale ? malePath : '',
+        femalePath: existFemale ? femalePath : '',
+      }
     }
     const [male, female] = await Promise.all([
       maleUrl ? persistStem(maleUrl, malePath) : Promise.resolve(''),
       femaleUrl ? persistStem(femaleUrl, femalePath) : Promise.resolve(''),
     ])
     console.log(`[gender-split] persisted stems to Supabase for ${createHash}`)
-    return { male, female }
+    return { male, female, malePath: male ? malePath : '', femalePath: female ? femalePath : '' }
   } catch (err) {
     console.error('[gender-split] persistence failed, returning MVSEP URLs:', err instanceof Error ? err.message : String(err))
-    return { male: maleUrl, female: femaleUrl }
+    return { male: maleUrl, female: femaleUrl, malePath: '', femalePath: '' }
   }
 }
 
@@ -429,8 +440,15 @@ export async function GET(req: NextRequest) {
       console.log(`[gender-split] TIMING job=${createHash} mvsep-total(wall-clock)=${mvsepTotal} (MVSEP gives no cold-start/compute split)`)
 
       // Copy to durable Supabase URLs (soft-fallback to MVSEP URLs on failure).
+      // Paths are '' on soft-fallback — the client only stores non-empty ones.
       const durable = await persistStems(createHash, maleVocalsUrl, femaleVocalsUrl)
-      return NextResponse.json({ status: 'succeeded', maleVocalsUrl: durable.male, femaleVocalsUrl: durable.female })
+      return NextResponse.json({
+        status: 'succeeded',
+        maleVocalsUrl: durable.male,
+        femaleVocalsUrl: durable.female,
+        maleVocalsPath: durable.malePath,
+        femaleVocalsPath: durable.femalePath,
+      })
     }
 
     return NextResponse.json({ status: 'failed', error: `Unexpected MVSEP status: ${String(result.json?.status)}` })

@@ -40,6 +40,55 @@ const AVATAR_PALETTE = [
   'linear-gradient(135deg,#06B6D4,#8B5CF6)',
 ]
 
+// Every StemResult URL field that has a durable-path twin. Used on cache
+// restore to re-sign fresh URLs for all of them in one /api/stems/refresh call.
+const STEM_PATH_FIELDS: { path: keyof StemResult; url: keyof StemResult }[] = [
+  { path: 'vocalsPath',        url: 'vocalsUrl' },
+  { path: 'leadVocalsPath',    url: 'leadVocalsUrl' },
+  { path: 'backingVocalsPath', url: 'backingVocalsUrl' },
+  { path: 'maleVocalsPath',    url: 'maleVocalsUrl' },
+  { path: 'femaleVocalsPath',  url: 'femaleVocalsUrl' },
+  { path: 'bassPath',          url: 'bassUrl' },
+  { path: 'drumsPath',         url: 'drumsUrl' },
+  { path: 'otherPath',         url: 'otherUrl' },
+]
+
+// Re-sign every stem in a restored StemResult from its durable storage path.
+// Cached signed URLs go stale (6h TTL, and Replicate/MVSEP source URLs die in
+// ~1h) — feeding them to RVC or the full-song mix is what produced wrong-voice
+// and music-missing swaps. Soft per-stem: a stem whose path is absent (legacy
+// cache) or fails to sign keeps its old URL, and the whole thing never throws.
+async function refreshStemUrls(result: StemResult): Promise<StemResult> {
+  const wanted = STEM_PATH_FIELDS.filter(({ path }) => result[path])
+  if (wanted.length === 0) return result
+  try {
+    const res = await fetch('/api/stems/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: wanted.map(({ path }) => result[path]) }),
+    })
+    if (!res.ok) {
+      console.warn('[stem-cache] URL refresh failed:', res.status)
+      return result
+    }
+    const { urls } = (await res.json()) as { urls: Record<string, string | null> }
+    const refreshed = { ...result }
+    let count = 0
+    for (const { path, url } of wanted) {
+      const fresh = urls[result[path] as string]
+      if (fresh) {
+        (refreshed as Record<string, string>)[url] = fresh
+        count++
+      }
+    }
+    console.log(`[stem-cache] re-signed ${count}/${wanted.length} stem URLs on restore`)
+    return refreshed
+  } catch (e) {
+    console.warn('[stem-cache] URL refresh threw:', e)
+    return result
+  }
+}
+
 // ── Lead vocal quality assessment ─────────────────────────────────────────────
 // After KARA_2 finishes, we compare the lead stem against the full vocal stem to
 // detect dropout artifacts: sustained silence gaps (≥ 2 s) in the lead where the
@@ -159,25 +208,41 @@ export function VoiceSwapPage() {
   const [swaps, setSwaps] = useState<VoiceSwap[]>([])
   const [swapsLoading, setSwapsLoading] = useState(true)
 
-  // Restore last stem result from localStorage (5-hour TTL)
+  // Restore last stem result from localStorage (5-hour TTL). The cached signed
+  // URLs may be hours old — possibly expired — so before the result is used we
+  // re-sign every stem that has a durable path via /api/stems/refresh, then
+  // show a visible toast so a restored track never masquerades as a fresh swap
+  // (stale restored URLs were the root cause of the wrong-voice / missing-music
+  // bug: dead links fed RVC and silently dropped music stems from the mix).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STEM_CACHE_KEY)
-      console.log('[stem-cache] restore attempt — raw:', raw ? raw.slice(0, 80) + '…' : 'null')
-      if (!raw) return
-      const { result, savedAt } = JSON.parse(raw) as { result: StemResult; savedAt: number }
-      const ageMs = Date.now() - savedAt
-      console.log('[stem-cache] age', Math.round(ageMs / 60000), 'min, TTL', Math.round(STEM_CACHE_TTL_MS / 60000), 'min')
-      if (ageMs < STEM_CACHE_TTL_MS) {
-        console.log('[stem-cache] restoring result for', result.fileName)
-        setStemResult(result)
-      } else {
-        console.log('[stem-cache] expired — clearing')
-        localStorage.removeItem(STEM_CACHE_KEY)
+    let cancelled = false
+    async function restore() {
+      let result: StemResult
+      try {
+        const raw = localStorage.getItem(STEM_CACHE_KEY)
+        console.log('[stem-cache] restore attempt — raw:', raw ? raw.slice(0, 80) + '…' : 'null')
+        if (!raw) return
+        const parsed = JSON.parse(raw) as { result: StemResult; savedAt: number }
+        result = parsed.result
+        const ageMs = Date.now() - parsed.savedAt
+        console.log('[stem-cache] age', Math.round(ageMs / 60000), 'min, TTL', Math.round(STEM_CACHE_TTL_MS / 60000), 'min')
+        if (ageMs >= STEM_CACHE_TTL_MS) {
+          console.log('[stem-cache] expired — clearing')
+          localStorage.removeItem(STEM_CACHE_KEY)
+          return
+        }
+      } catch (e) {
+        console.warn('[stem-cache] restore failed:', e)
+        return
       }
-    } catch (e) {
-      console.warn('[stem-cache] restore failed:', e)
+      const refreshed = await refreshStemUrls(result)
+      if (cancelled) return
+      console.log('[stem-cache] restoring result for', refreshed.fileName)
+      setStemResult(refreshed)
+      showToast(`Restored "${refreshed.fileName}" from your last session — use New Swap to upload a different song.`, 6000)
     }
+    void restore()
+    return () => { cancelled = true }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch user id, credits, and recent swaps on mount
@@ -289,13 +354,16 @@ export function VoiceSwapPage() {
   // never by gender — so the conversion target and the untouched partner can never
   // point at different singers. Returns null for non-duets and for both-voices
   // modes (the dual-job path handles those), so single-voice swaps are unaffected.
-  function duetTarget(): { convertUrl: string; untouchedUrl: string } | null {
+  function duetTarget(): { convertUrl: string; convertPath: string; untouchedUrl: string } | null {
     const male = stemResult?.maleVocalsUrl
     const female = stemResult?.femaleVocalsUrl
     if (!male || !female || duetMode !== 'one') return null
+    // convertPath is the durable storage path twin of convertUrl ('' when the
+    // server-side persist soft-failed) — sent to voice-convert so it can re-sign
+    // a fresh URL instead of trusting a possibly-stale cached one.
     return duetSinger === 'male'
-      ? { convertUrl: male, untouchedUrl: female }
-      : { convertUrl: female, untouchedUrl: male }
+      ? { convertUrl: male, convertPath: stemResult?.maleVocalsPath ?? '', untouchedUrl: female }
+      : { convertUrl: female, convertPath: stemResult?.femaleVocalsPath ?? '', untouchedUrl: male }
   }
 
   // Processing overlay
@@ -449,6 +517,9 @@ export function VoiceSwapPage() {
         if (pollData.status === 'succeeded') {
           const leadVocalsUrl = pollData.leadVocalsUrl as string
           const backingVocalsUrl = (pollData.backingVocalsUrl as string) ?? ''
+          // Durable paths (may be '' if server-side persistence soft-failed).
+          const leadVocalsPath = (pollData.leadVocalsPath as string) ?? ''
+          const backingVocalsPath = (pollData.backingVocalsPath as string) ?? ''
           if (!leadVocalsUrl || karaokeJobRef.current !== jobId) return
 
           // Assess lead quality before committing: if KARA_2 dropped vocal
@@ -457,15 +528,22 @@ export function VoiceSwapPage() {
           // A new upload may have superseded us while the assessment was running.
           if (karaokeJobRef.current !== jobId) return
           const effectiveLead = leadHealthy ? leadVocalsUrl : ''
+          const effectiveLeadPath = leadHealthy ? leadVocalsPath : ''
 
+          const patch = {
+            leadVocalsUrl: effectiveLead,
+            leadVocalsPath: effectiveLeadPath,
+            backingVocalsUrl,
+            backingVocalsPath,
+          }
           setStemResult((prev) =>
             prev && prev.storagePath === result.storagePath
-              ? { ...prev, leadVocalsUrl: effectiveLead, backingVocalsUrl }
+              ? { ...prev, ...patch }
               : prev
           )
           setKaraokeStatus('done')
           try {
-            const merged: StemResult = { ...result, leadVocalsUrl: effectiveLead, backingVocalsUrl }
+            const merged: StemResult = { ...result, ...patch }
             localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
           } catch { /* ignore */ }
           console.log(`[karaoke-split] ${leadHealthy ? 'lead/backing ready' : 'dropout detected — full vocals fallback'} for ${result.fileName}`)
@@ -572,19 +650,23 @@ export function VoiceSwapPage() {
         if (pollData.status === 'succeeded') {
           const maleVocalsUrl = (pollData.maleVocalsUrl as string) ?? ''
           const femaleVocalsUrl = (pollData.femaleVocalsUrl as string) ?? ''
+          // Durable paths (may be '' if server-side persistence soft-failed).
+          const maleVocalsPath = (pollData.maleVocalsPath as string) ?? ''
+          const femaleVocalsPath = (pollData.femaleVocalsPath as string) ?? ''
           // Route guarantees at least one stem on success; bail if neither or superseded.
           if ((!maleVocalsUrl && !femaleVocalsUrl) || genderSplitJobRef.current !== jobId) return
 
-          // Merge the two new fields into the live result, only if it's still
+          const patch = { maleVocalsUrl, femaleVocalsUrl, maleVocalsPath, femaleVocalsPath }
+          // Merge the new fields into the live result, only if it's still
           // the same upload — preserving everything else in StemResult.
           setStemResult((prev) =>
             prev && prev.storagePath === result.storagePath
-              ? { ...prev, maleVocalsUrl, femaleVocalsUrl }
+              ? { ...prev, ...patch }
               : prev
           )
           // Keep the cached session in sync so a later restore retains the split.
           try {
-            const merged: StemResult = { ...result, maleVocalsUrl, femaleVocalsUrl }
+            const merged: StemResult = { ...result, ...patch }
             localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
           } catch { /* ignore */ }
           console.log('[gender-split] male/female ready for', result.fileName)
@@ -862,6 +944,7 @@ export function VoiceSwapPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               vocalsUrl: stemResult.maleVocalsUrl,
+              vocalsPath: stemResult.maleVocalsPath || undefined,
               voiceId: voice.id,
               pitchShift: effPitchA,
               styleIntensity,
@@ -880,6 +963,7 @@ export function VoiceSwapPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               vocalsUrl: stemResult.femaleVocalsUrl,
+              vocalsPath: stemResult.femaleVocalsPath || undefined,
               voiceId: voice2.id,
               pitchShift: effPitchB,
               styleIntensity,
@@ -932,21 +1016,27 @@ export function VoiceSwapPage() {
       // One-singer duet routing: convert the singer chosen in the picker
       // (duetTarget reads duetSinger — the single source of truth). Non-duets fall
       // back to the lead/full vocal, so single-voice swaps are unchanged.
+      // Every branch also carries the durable storage path matching the URL
+      // ('' when the server-side persist soft-failed), so voice-convert can
+      // re-sign a fresh URL at the moment of use — previously only the full
+      // vocal had a path, and the lead (the DEFAULT swap input) went to RVC
+      // with an unvalidated, possibly-stale cached URL.
       let vocalsToConvert = stemResult.leadVocalsUrl || stemResult.vocalsUrl
+      let vocalsToConvertPath = stemResult.leadVocalsUrl
+        ? stemResult.leadVocalsPath ?? ''
+        : stemResult.vocalsPath ?? ''
       const target = duetTarget()
-      if (target) vocalsToConvert = target.convertUrl
-
-      // Only the full vocals stem has a durable Supabase path; derived stems
-      // (lead/male/female) are still ephemeral until Increment B persists them,
-      // so we send vocalsPath only when converting the full vocal.
-      const usingFullVocals = vocalsToConvert === stemResult.vocalsUrl
+      if (target) {
+        vocalsToConvert = target.convertUrl
+        vocalsToConvertPath = target.convertPath
+      }
 
       console.log('[voice-swap] starting swap:', {
         type,
         voiceId: voice.id,
         vocalsToConvert,
+        vocalsToConvertPath,
         usedLeadVocals: !!stemResult.leadVocalsUrl,
-        usingFullVocals,
         storagePath: stemResult.storagePath,
       })
 
@@ -963,7 +1053,7 @@ export function VoiceSwapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vocalsUrl: vocalsToConvert,
-          vocalsPath: usingFullVocals ? stemResult.vocalsPath : undefined,
+          vocalsPath: vocalsToConvertPath || undefined,
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift: effectivePitch,
