@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 const TOOLS = [
   { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap', active: false },
   { emoji: '🧬', label: 'Voice Lab', href: '/voice-lab', active: true },
-  { emoji: '✂️', label: 'Stem Studio', href: '#', active: false },
+  { emoji: '✂️', label: 'Stem Studio', href: '/stem-studio', active: false },
   { emoji: '🎼', label: 'Choir Composer', href: '#', active: false },
   { emoji: '🎷', label: 'Instruments', href: '#', active: false },
   { emoji: '🎵', label: 'Song Studio', href: '#', active: false },

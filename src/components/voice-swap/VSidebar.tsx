@@ -6,12 +6,12 @@ import { LogoMark } from '@/components/ui/Logo'
 import { createClient } from '@/lib/supabase/client'
 
 const TOOLS = [
-  { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap', active: true },
-  { emoji: '🧬', label: 'Voice Lab', href: '/voice-lab', active: false },
-  { emoji: '✂️', label: 'Stem Studio', href: '#', active: false },
-  { emoji: '🎼', label: 'Choir Composer', href: '#', active: false },
-  { emoji: '🎷', label: 'Instruments', href: '#', active: false },
-  { emoji: '🎵', label: 'Song Studio', href: '#', active: false },
+  { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap' },
+  { emoji: '🧬', label: 'Voice Lab', href: '/voice-lab' },
+  { emoji: '✂️', label: 'Stem Studio', href: '/stem-studio' },
+  { emoji: '🎼', label: 'Choir Composer', href: '#' },
+  { emoji: '🎷', label: 'Instruments', href: '#' },
+  { emoji: '🎵', label: 'Song Studio', href: '#' },
 ]
 
 const LIBRARY = [
@@ -27,6 +27,9 @@ interface VSidebarProps {
   // Real plan from users.plan (free | starter | pro | studio), owned by the
   // page alongside credits — the sidebar previously hardcoded "Pro Plan".
   plan: string | null
+  // Which tool this sidebar instance highlights — the sidebar is shared by
+  // Voice Swap and Stem Studio.
+  activeTool?: string
 }
 
 function fmtN(n: number) {
@@ -38,7 +41,7 @@ function planLabel(plan: string | null) {
   return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
 }
 
-export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan }: VSidebarProps) {
+export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan, activeTool = 'Voice Swap' }: VSidebarProps) {
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
@@ -85,7 +88,7 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan }: VSid
         <nav className="vs-sb-nav">
           <div className="vs-group-lbl">Tools</div>
           {TOOLS.map((item) =>
-            item.active ? (
+            item.label === activeTool ? (
               <Link key={item.href} href={item.href} className="vs-sb-link vs-sb-link--active">
                 <span className="vs-sb-ico">{item.emoji}</span>
                 <span className="vs-sb-lbl">{item.label}</span>
