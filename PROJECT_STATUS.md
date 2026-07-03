@@ -52,7 +52,7 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Voice Lab (express + studio clone) | 🟡 Partial | Record/upload → dataset prep → RunPod training → test; durable model persistence fixed. Recording UI now shows a **read-aloud script** (Quick/Pro modes) with phonetically-varied passages + a shuffle button + singing guidance (low/high, soft/loud) — `recordingScripts.ts` (`61e7ad2`); record-card clipping + duplicate-hint cleanup followed (`b7887ed`). Helps the planned dry-mic retrain of Raju produce a consistent take. |
 | Stem Studio (karaoke/gender split) | 🟡 Partial | MVSEP-based; lead/backing + male/female routing |
 | Duet split confirm | ✅ Working | Declared-duet uploads no longer auto-run the 250cr gender-split; the amber "Run Duet Split before continuing" gate shows and the user must click "Split duet · 250 cr · Premium" to proceed |
-| Dashboard counts | ✅ Working | Voice Swaps + Voice Clones counts refetch on window focus / tab visibility (no longer stale after create/delete elsewhere); delete refetches authoritatively instead of optimistic local −1 |
+| Dashboard counts | ✅ Working | Saved Tracks (ex "Voice Swaps") + Voice Clones counts refetch on window focus / tab visibility (no longer stale after create/delete elsewhere); delete refetches authoritatively instead of optimistic local −1. Swap count/list (dashboard + voice-swap history) now filter `result_path` not-null (`b3edba7`) — only playable swaps count; unplayable phantom rows (persist soft-fail or 90-day expiry) are excluded, and the 2 existing phantoms were deleted from prod. Stat relabeled "Saved Tracks" since it counts saved versions (every full swap / fine-tune apply is a row — e.g. one tuning session = 14 rows of one song), not unique songs |
 | Sidebar "My Voices" badge | ✅ Working | VSidebar + VLSidebar now show a live `voice_clones` count (was hardcoded `'3'`) |
 | Sidebar user row | ✅ Working | VSidebar + VLSidebar show the real name/initial (same derivation as the dashboard header: metadata name, else email prefix) and the real `users.plan` ("Free/Starter/Pro/Studio Plan") — was hardcoded "Mausam / Pro Plan" (`68d7478`) |
 | Onboarding journey | ✅ Working | Persona → magic moment → action → finale screens. Magic-moment screen no longer fakes a demo player (`95956a6`): the result card is a static, explicitly-badged "Preview" (no play button/duration/score); fake "Try another style" button removed. Finale screen greets the real user (`139229a`) — same name derivation as the dashboard header (metadata name, else email prefix); plain "You're in." until loaded — was hardcoded "You're in, Mausam." for every account |
@@ -79,7 +79,7 @@ Focus has been hardening the **Voice Swap / Voice Convert** pipeline:
 
 ## 5. Database
 
-Supabase Postgres, migrations in `supabase/migrations/` (16 migrations, Jun 11–25).
+Supabase Postgres, migrations in `supabase/migrations/` (17 migrations, Jun 11–Jul 3).
 
 **Core tables:** `users` (plan, credits default 500, onboarded), `voice_clones` (clone_type, status, model_url, score), `voice_swaps` (persisted swap outputs), `preview_uses` (free-preview tracking). RLS enabled on user tables. **Note:** `voice_swaps` uses no RLS — access is via admin client + app-code ownership checks, and **each new DB op on it needs its own explicit `GRANT` to `service_role`** (recurring gotcha — see migrations `20260624*`/`20260625*`).
 
