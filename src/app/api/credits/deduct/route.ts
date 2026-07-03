@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
+  // Session auth — deductions may only target the signed-in caller. The route
+  // previously trusted a userId from the body, letting anyone deduct anyone's
+  // credits; the admin client below bypasses RLS, so this check is the gate.
+  const sessionClient = await createClient()
+  const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+  if (!sessionUser) {
+    return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  }
+
   let body: { userId?: string; amount?: number; action?: string }
   try {
     body = await req.json()
@@ -9,10 +19,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { userId, amount, action } = body
+  const { amount, action } = body
 
-  if (!userId || typeof amount !== 'number' || amount <= 0) {
-    return NextResponse.json({ error: 'userId and a positive amount are required' }, { status: 400 })
+  // The client still sends userId; reject a mismatch rather than silently
+  // charging a different account than the caller intended.
+  if (body.userId && body.userId !== sessionUser.id) {
+    return NextResponse.json({ error: 'Cannot deduct credits for another user' }, { status: 403 })
+  }
+  const userId = sessionUser.id
+
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'A positive amount is required' }, { status: 400 })
   }
 
   // Fetch current balance
