@@ -28,25 +28,42 @@ function fmtN(n: number) {
   return n.toLocaleString('en-US')
 }
 
+// 'free' → 'Free Plan' etc.; placeholder while the plan is still loading.
+function planLabel(plan: string | null) {
+  return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
+}
+
 export function VLSidebar({ onToast }: VLSidebarProps) {
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
+  // Real plan from users.plan (free | starter | pro | studio) — was hardcoded
+  // "Pro Plan".
+  const [plan, setPlan] = useState<string | null>(null)
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
+  // Real user name + avatar initial, derived exactly like the dashboard header
+  // (metadata full_name/name, else email prefix) — was hardcoded "Mausam"/"M".
+  const [userName, setUserName] = useState('')
+  const [userInitial, setUserInitial] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
-      const uid = data.user?.id
-      if (!uid) return
+      const u = data.user
+      const uid = u?.id
+      if (!u || !uid) return
+      const name = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
+      const display = name || (u.email ?? '').split('@')[0]
+      setUserName(display)
+      setUserInitial((display[0] ?? '').toUpperCase())
       supabase
         .from('users')
-        .select('credits_remaining, credits_total')
+        .select('credits_remaining, credits_total, plan')
         .eq('id', uid)
         .single()
-        .then(({ data: u, error }) => {
-          if (u) { setCreditsRemaining(u.credits_remaining); setCreditsTotal(u.credits_total) }
+        .then(({ data: row, error }) => {
+          if (row) { setCreditsRemaining(row.credits_remaining); setCreditsTotal(row.credits_total); setPlan(row.plan) }
           else if (error) console.error('credits fetch failed', error)
         })
 
@@ -129,10 +146,10 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
           </div>
 
           <div className="vls-user-row">
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>M</div>
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{userInitial || '·'}</div>
             <div className="vls-uinfo">
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>Mausam</div>
-              <div style={{ fontSize: '11px', color: '#5A5A80' }}>Pro Plan</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>{userName || '…'}</div>
+              <div style={{ fontSize: '11px', color: '#5A5A80' }}>{planLabel(plan)}</div>
             </div>
           </div>
         </div>

@@ -24,21 +24,38 @@ interface VSidebarProps {
   onToast: (msg: string) => void
   creditsRemaining: number | null
   creditsTotal: number | null
+  // Real plan from users.plan (free | starter | pro | studio), owned by the
+  // page alongside credits — the sidebar previously hardcoded "Pro Plan".
+  plan: string | null
 }
 
 function fmtN(n: number) {
   return n.toLocaleString('en-US')
 }
 
-export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarProps) {
+// 'free' → 'Free Plan' etc.; placeholder while the plan is still loading.
+function planLabel(plan: string | null) {
+  return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
+}
+
+export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan }: VSidebarProps) {
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
+  // Real user name + avatar initial, derived exactly like the dashboard header
+  // (metadata full_name/name, else email prefix) — was hardcoded "Mausam"/"M".
+  const [userName, setUserName] = useState('')
+  const [userInitial, setUserInitial] = useState('')
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
-      const uid = data.user?.id
-      if (!uid) return
+      const u = data.user
+      const uid = u?.id
+      if (!u || !uid) return
+      const name = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
+      const display = name || (u.email ?? '').split('@')[0]
+      setUserName(display)
+      setUserInitial((display[0] ?? '').toUpperCase())
       supabase
         .from('voice_clones')
         .select('*', { count: 'exact', head: true })
@@ -143,11 +160,11 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal }: VSidebarPr
                 flexShrink: 0,
               }}
             >
-              M
+              {userInitial || '·'}
             </div>
             <div className="vs-uinfo">
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>Mausam</div>
-              <div style={{ fontSize: '11px', color: '#5A5A80' }}>Pro Plan</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>{userName || '…'}</div>
+              <div style={{ fontSize: '11px', color: '#5A5A80' }}>{planLabel(plan)}</div>
             </div>
           </div>
         </div>

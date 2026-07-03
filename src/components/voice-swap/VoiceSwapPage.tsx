@@ -1304,7 +1304,7 @@ export function VoiceSwapPage() {
   return (
     <>
       <div className="vs-shell">
-        <VSidebar onToast={showToast} creditsRemaining={creditsRemaining} creditsTotal={creditsTotal} />
+        <VSidebar onToast={showToast} creditsRemaining={creditsRemaining} creditsTotal={creditsTotal} plan={plan} />
 
         {/* Centre column */}
         <div className="vs-centre">
