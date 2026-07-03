@@ -1372,6 +1372,10 @@ export function VoiceSwapPage() {
                 duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
                 persistMix={armMixUpload}
                 onFullMixReady={handleFullMixReady}
+                voiceName={[
+                  voices.find((v) => v.id === selectedVoiceId)?.name,
+                  convertedVocalsUrl2 ? voices.find((v) => v.id === selectedVoiceId2)?.name : null,
+                ].filter(Boolean).join(' + ') || null}
               />
             )}
           </div>

@@ -38,14 +38,9 @@ interface ResultStepProps {
   // track. A null path means the mix/upload failed → caller persists the vocal.
   persistMix?: boolean
   onFullMixReady?: (mixedPath: string | null) => void
+  // Name(s) of the voice model(s) the swap used — shown in the result summary.
+  voiceName?: string | null
 }
-
-const SCORE_BARS = [
-  { label: 'Voice Match', pct: 94 },
-  { label: 'Pitch Accuracy', pct: 87 },
-  { label: 'Naturalness', pct: 78 },
-  { label: 'Emotion Transfer', pct: 71 },
-]
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
 const PLAY_MODES: { id: PlayMode; label: string }[] = [
@@ -354,35 +349,6 @@ function PlayerWaveCanvas({ playing }: { playing: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Score ring (unchanged from before)
-// ---------------------------------------------------------------------------
-function ScoreRing({ score }: { score: number }) {
-  const r = 28, cx = 34, circ = 2 * Math.PI * r
-  return (
-    <svg width="68" height="68" viewBox="0 0 68 68" style={{ flexShrink: 0 }}>
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="#1E1E3A" strokeWidth="5" />
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="url(#rg)" strokeWidth="5"
-        strokeLinecap="round" strokeDasharray={circ}
-        strokeDashoffset={circ * (1 - score / 100)}
-        transform={`rotate(-90 ${cx} ${cx})`}
-        style={{ transition: 'stroke-dashoffset 1s ease' }}
-      />
-      <defs>
-        <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#8B5CF6" />
-          <stop offset="50%" stopColor="#EC4899" />
-          <stop offset="100%" stopColor="#06B6D4" />
-        </linearGradient>
-      </defs>
-      <text x={cx} y={cx + 5} textAnchor="middle" fill="#F0F0FF" fontSize="14"
-        fontWeight="700" fontFamily="var(--font-grotesk), 'Space Grotesk', sans-serif">
-        {score}
-      </text>
-    </svg>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Polish knob — rotary dial for the Warmth/Reverb/Echo controls. Same contract
 // as the sliders it replaced: value + onChange over 0–100 (the audio engine,
 // debounce, and persist wiring are untouched). Drag vertically (~200px = full
@@ -687,10 +653,8 @@ export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
   onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady,
+  persistMix, onFullMixReady, voiceName,
 }: ResultStepProps) {
-  const [barsAnimated, setBarsAnimated] = useState(false)
-
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
   const [mode, setMode] = useState<PlayMode>('full')
@@ -761,12 +725,6 @@ export function ResultStep({
   const pendingSeekRef = useRef(0)
   const pendingPlayRef = useRef(false)
   const seekingRef = useRef(false)
-
-  // Animate score bars on mount
-  useEffect(() => {
-    const t = setTimeout(() => setBarsAnimated(true), 300)
-    return () => clearTimeout(t)
-  }, [])
 
   // Debounce the warmth slider → debouncedWarmth is what actually drives a re-mix.
   useEffect(() => {
@@ -1103,34 +1061,27 @@ export function ResultStep({
       )}
 
       <div className="vs-panel">
-        {/* Score row */}
-        <div className="vs-result-top">
-          <ScoreRing score={82} />
+        {/* Result summary — real facts only (voice used, length, what's in the
+            file). We don't compute any quality metric, so we don't show one. */}
+        <div className="vs-result-top" style={{ marginBottom: '20px' }}>
+          <div className="vs-result-check" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
           <div>
-            <div className="vs-result-score-lbl">Quality Score <span className="vs-est-tag">Est.</span></div>
-            <div className="grad-text" style={{ fontFamily: 'var(--font-grotesk),"Space Grotesk",sans-serif', fontSize: '36px', fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
-              ~82<span style={{ fontSize: '14px', fontWeight: 400, color: '#5A5A80', letterSpacing: 0, marginLeft: '6px', background: 'none', WebkitTextFillColor: '#5A5A80' }}> / 100</span>
+            <div className="vs-result-score-lbl">Swap complete</div>
+            <div className="grad-text" style={{ fontFamily: 'var(--font-grotesk),"Space Grotesk",sans-serif', fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+              Your track is ready
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-              {['✓ Ready to download', fullReady ? '✓ Full mix included' : '✓ High fidelity'].map((c) => (
-                <span key={c} className="vs-result-chip">{c}</span>
-              ))}
+              {voiceName && <span className="vs-result-chip">🎤 {voiceName}</span>}
+              {duration > 0 && <span className="vs-result-chip">⏱ {fmt(duration)}</span>}
+              <span className="vs-result-chip">
+                {fullReady ? '♫ Full mix — vocals + music' : '♫ Converted vocals'}
+              </span>
             </div>
           </div>
-        </div>
-
-        {/* Score bars */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', margin: '20px 0' }}>
-          {SCORE_BARS.map((bar, i) => (
-            <div key={bar.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#7878A0', marginBottom: '5px' }}>
-                <span>{bar.label}</span><span>~{bar.pct}%</span>
-              </div>
-              <div style={{ height: '5px', background: '#1E1E3A', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '3px', background: 'linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4)', width: barsAnimated ? `${bar.pct}%` : '0%', transition: `width 1.4s ease ${i * 150}ms` }} />
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Player */}
@@ -1336,12 +1287,11 @@ export function ResultStep({
           font-size: 10px; font-weight: 700; letter-spacing: 2px;
           text-transform: uppercase; color: #5A5A80; margin-bottom: 4px;
         }
-        .vs-est-tag {
-          display: inline-block; font-size: 8px; font-weight: 700;
-          letter-spacing: 1px; text-transform: uppercase;
-          padding: 1px 5px; border-radius: 4px; vertical-align: middle;
-          background: rgba(90,90,128,.15); color: #5A5A80;
-          border: 1px solid rgba(90,90,128,.25); margin-left: 4px;
+        .vs-result-check {
+          width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 8px 24px rgba(139,92,246,.35);
         }
         .vs-result-chip {
           padding: 3px 10px; border-radius: 999px;
