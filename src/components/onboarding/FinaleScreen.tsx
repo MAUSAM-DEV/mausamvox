@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import type { Persona } from './OnboardingPage'
 
 const FINALE_SUB: Record<Persona, string> = {
@@ -25,12 +27,28 @@ interface FinaleScreenProps {
 
 export function FinaleScreen({ persona, onToast }: FinaleScreenProps) {
   const router = useRouter()
+  const [userName, setUserName] = useState('')
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => {
+      const u = data.user
+      if (!u) return
+      const name = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
+      const email = u.email ?? ''
+      setUserName(name || email.split('@')[0])
+    })
+  }, [])
+
   return (
     <>
       <div className="ob-screen ob-sc-center">
         <div className="obf-badge">🎉</div>
         <h1 className="ob-h1">
-          You&apos;re in, <span className="ob-gt">Mausam</span>.
+          {userName ? (
+            <>You&apos;re in, <span className="ob-gt">{userName}</span>.</>
+          ) : (
+            <>You&apos;re in.</>
+          )}
         </h1>
         <p className="ob-sub">{FINALE_SUB[persona]}</p>
 
