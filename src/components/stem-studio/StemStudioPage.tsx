@@ -246,7 +246,7 @@ export function StemStudioPage() {
           <header className="ss-head">
             <div>
               <h1 className="ss-h1">Stem Studio</h1>
-              <p className="ss-sub">Split any track into vocals, bass, drums and other — powered by Demucs.</p>
+              <p className="ss-sub">Split any track into vocals, bass, drums and other — powered by the StemSplit Engine.</p>
             </div>
             <span className="ss-cost-chip">✂️ {STEM_SPLIT_COST} credits per split</span>
           </header>
@@ -295,7 +295,7 @@ export function StemStudioPage() {
                 <div className="ss-prog-sub">
                   {phase === 'uploading'
                     ? fileName
-                    : `Demucs is working on “${fileName}” — usually 1–3 minutes${elapsed >= 5 ? ` · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : ''}`}
+                    : `StemSplit Engine is working on “${fileName}” — usually 1–3 minutes${elapsed >= 5 ? ` · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : ''}`}
                 </div>
               </div>
             )}

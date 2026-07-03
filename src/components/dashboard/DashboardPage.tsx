@@ -25,7 +25,7 @@ const TOOLS = [
   {
     emoji: '✂️',
     name: 'Stem Studio',
-    desc: 'Separate any track into vocals, bass, drums and more with Demucs.',
+    desc: 'Separate any track into vocals, bass, drums and more with the StemSplit Engine.',
     href: '/stem-studio',
     live: true,
     gradient: 'linear-gradient(135deg,#06B6D4,#8B5CF6)',
