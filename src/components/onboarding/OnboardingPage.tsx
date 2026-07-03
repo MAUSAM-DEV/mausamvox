@@ -14,7 +14,6 @@ export function OnboardingPage() {
   const [screen, setScreen]           = useState<1 | 2 | 3 | 4>(1)
   const [persona, setPersona]         = useState<Persona>('artist')
   const [canContinue, setCanContinue] = useState(false)
-  const [resultPlaying, setResultPlaying] = useState(false)
   const [toast, setToast]             = useState({ visible: false, message: '' })
 
   const showToast = useCallback((m: string) => {
@@ -78,7 +77,7 @@ export function OnboardingPage() {
               persona={persona}
               canContinue={canContinue}
               onCanContinue={() => setCanContinue(true)}
-              onContinue={() => { setResultPlaying(false); setScreen(3) }}
+              onContinue={() => setScreen(3)}
               onToast={showToast}
             />
           )}
@@ -86,10 +85,7 @@ export function OnboardingPage() {
             <MagicMomentScreen
               key="sc3"
               persona={persona}
-              resultPlaying={resultPlaying}
-              setResultPlaying={setResultPlaying}
               onNext={() => setScreen(4)}
-              onToast={showToast}
             />
           )}
           {screen === 4 && (
