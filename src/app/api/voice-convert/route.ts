@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
@@ -133,14 +134,24 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (clone?.model_path) {
-        // Route Replicate through our proxy (/api/voice-model/<id>/model.zip) so
-        // the last URL segment is the clean string "model.zip". The RVC container
-        // derives its local filename from url.split('/')[-1] without stripping
-        // query strings — passing a signed Supabase URL directly produces
-        // "uuid.zip?token=<JWT>" (300+ chars), hitting Errno 36 (name too long).
+        // Route Replicate through our proxy so the last URL segment is a clean,
+        // short filename. The RVC container derives its local filename from
+        // url.split('/')[-1] without stripping query strings — passing a signed
+        // Supabase URL directly produces "uuid.zip?token=<JWT>" (300+ chars),
+        // hitting Errno 36 (name too long).
+        //
+        // The filename doubles as the container's MODEL CACHE KEY: the cog
+        // extracts the zip to a folder named after it and skips the download if
+        // that folder already exists on the (shared, warm) instance. A constant
+        // name like "model.zip" made every voice share one cache entry — two
+        // voices converted back-to-back on the same instance would silently
+        // reuse the first voice's weights. So the name must be unique per voice
+        // AND per model file (hash of model_path, so a retrain that writes a
+        // new path also busts the cache).
+        const modelTag = createHash('sha1').update(clone.model_path).digest('hex').slice(0, 8)
         const origin = new URL(req.url).origin
-        effectiveModelUrl = `${origin}/api/voice-model/${voiceId}/model.zip`
-        console.log('[voice-convert] using model proxy for', voiceId)
+        effectiveModelUrl = `${origin}/api/voice-model/${voiceId}/${voiceId}-${modelTag}.zip`
+        console.log('[voice-convert] using model proxy for', voiceId, `(cache key ${voiceId}-${modelTag})`)
       } else if (clone?.model_url) {
         effectiveModelUrl = clone.model_url
         console.log('[voice-convert] model_path null, using model_url from DB for', voiceId)
