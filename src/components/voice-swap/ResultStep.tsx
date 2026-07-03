@@ -383,6 +383,85 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Polish knob — rotary dial for the Warmth/Reverb/Echo controls. Same contract
+// as the sliders it replaced: value + onChange over 0–100 (the audio engine,
+// debounce, and persist wiring are untouched). Drag vertically (~200px = full
+// travel), arrow keys when focused, double-click resets to 0.
+// ---------------------------------------------------------------------------
+const KNOB_SWEEP = 270 // degrees of dial travel; gap centered at the bottom
+
+function PolishKnob({ id, label, hint, value, onChange, format }: {
+  id: string; label: string; hint: string; value: number
+  onChange: (v: number) => void; format: (v: number) => string
+}) {
+  const drag = useRef<{ startY: number; startValue: number } | null>(null)
+  const r = 19, c = 24, circ = 2 * Math.PI * r
+  const sweepFrac = KNOB_SWEEP / 360
+  // Track and value arcs both start at the 7:30 position (135° past 3 o'clock).
+  const arcStart = `rotate(135 ${c} ${c})`
+  const pointerAngle = 135 + (value / 100) * KNOB_SWEEP
+
+  const nudge = (e: React.KeyboardEvent, delta: number) => {
+    e.preventDefault()
+    onChange(Math.max(0, Math.min(100, value + delta)))
+  }
+
+  return (
+    <div className="vs-knob" title={hint}>
+      <svg
+        width="48" height="48" viewBox="0 0 48 48"
+        role="slider" tabIndex={0} aria-label={label}
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}
+        aria-valuetext={format(value)}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          e.currentTarget.setPointerCapture(e.pointerId)
+          drag.current = { startY: e.clientY, startValue: value }
+        }}
+        onPointerMove={(e) => {
+          if (!drag.current) return
+          const delta = (drag.current.startY - e.clientY) * (100 / 200)
+          onChange(Math.max(0, Math.min(100, Math.round(drag.current.startValue + delta))))
+        }}
+        onPointerUp={() => { drag.current = null }}
+        onPointerCancel={() => { drag.current = null }}
+        onDoubleClick={() => onChange(0)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') nudge(e, 1)
+          else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') nudge(e, -1)
+          else if (e.key === 'PageUp') nudge(e, 10)
+          else if (e.key === 'PageDown') nudge(e, -10)
+          else if (e.key === 'Home') nudge(e, -value)
+          else if (e.key === 'End') nudge(e, 100 - value)
+        }}
+      >
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#1E1E3A" strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={`${circ * sweepFrac} ${circ}`} transform={arcStart}
+        />
+        {value > 0 && (
+          <circle cx={c} cy={c} r={r} fill="none" stroke={`url(#pk-${id})`} strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={`${circ * sweepFrac * (value / 100)} ${circ}`} transform={arcStart}
+          />
+        )}
+        <line x1={c + 7} y1={c} x2={c + 13} y2={c} stroke="#C4B5FD" strokeWidth="2.5"
+          strokeLinecap="round" transform={`rotate(${pointerAngle} ${c} ${c})`}
+        />
+        <defs>
+          <linearGradient id={`pk-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8B5CF6" />
+            <stop offset="100%" stopColor="#EC4899" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span className="vs-knob-label">{label}</span>
+      <span className="vs-knob-val">{format(value)}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Fine-tune panel — adjust RVC params, render a short 12 s preview, A/B compare
 // ---------------------------------------------------------------------------
 export interface TuneParams {
@@ -1158,59 +1237,31 @@ export function ResultStep({
               <span className="vs-polish-title">Polish</span>
               {warmthRendering && <span className="vs-polish-spin" />}
             </div>
-            <div className="vs-polish-row">
-              <label className="vs-polish-label" htmlFor="vs-warmth">
-                Warmth <span className="vs-polish-hint">— adds body/warmth to the vocal</span>
-              </label>
-              <input
-                id="vs-warmth"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
+            <div className="vs-knob-row">
+              <PolishKnob
+                id="warmth"
+                label="Warmth"
+                hint="Adds body/warmth to the vocal — drag up/down, double-click to reset"
                 value={warmth}
-                onChange={(e) => setWarmth(Number(e.target.value))}
-                className="vs-polish-slider"
+                onChange={setWarmth}
+                format={(v) => (v === 0 ? 'Off' : `+${((v / 100) * WARMTH_MAX_DB).toFixed(1)} dB`)}
               />
-              <span className="vs-polish-val">
-                {warmth === 0 ? 'Off' : `+${((warmth / 100) * WARMTH_MAX_DB).toFixed(1)} dB`}
-              </span>
-            </div>
-            <div className="vs-polish-row">
-              <label className="vs-polish-label" htmlFor="vs-reverb">
-                Reverb <span className="vs-polish-hint">— adds space/room to the vocal</span>
-              </label>
-              <input
-                id="vs-reverb"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
+              <PolishKnob
+                id="reverb"
+                label="Reverb"
+                hint="Adds space/room to the vocal — drag up/down, double-click to reset"
                 value={reverb}
-                onChange={(e) => setReverb(Number(e.target.value))}
-                className="vs-polish-slider"
+                onChange={setReverb}
+                format={(v) => (v === 0 ? 'Off' : `${Math.round((v / 100) * REVERB_MAX_WET * 100)}% wet`)}
               />
-              <span className="vs-polish-val">
-                {reverb === 0 ? 'Off' : `${Math.round((reverb / 100) * REVERB_MAX_WET * 100)}% wet`}
-              </span>
-            </div>
-            <div className="vs-polish-row">
-              <label className="vs-polish-label" htmlFor="vs-echo">
-                Echo <span className="vs-polish-hint">— adds repeats/echo to the vocal</span>
-              </label>
-              <input
-                id="vs-echo"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
+              <PolishKnob
+                id="echo"
+                label="Echo"
+                hint="Adds repeats/echo to the vocal — drag up/down, double-click to reset"
                 value={echo}
-                onChange={(e) => setEcho(Number(e.target.value))}
-                className="vs-polish-slider"
+                onChange={setEcho}
+                format={(v) => (v === 0 ? 'Off' : `${Math.round((v / 100) * ECHO_MAX_WET * 100)}% wet`)}
               />
-              <span className="vs-polish-val">
-                {echo === 0 ? 'Off' : `${Math.round((echo / 100) * ECHO_MAX_WET * 100)}% wet`}
-              </span>
             </div>
             <div className="vs-polish-foot">Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
           </div>
@@ -1376,28 +1427,28 @@ export function ResultStep({
           font-size: 12px; font-weight: 700; color: #C4B5FD; letter-spacing: 0.3px;
           text-transform: uppercase;
         }
-        .vs-polish-val {
-          display: inline-flex; align-items: center; gap: 6px;
-          font-size: 12px; font-weight: 600; color: #8B5CF6;
-        }
         .vs-polish-spin {
           width: 9px; height: 9px; border-radius: 50%;
           border: 1.5px solid rgba(139,92,246,.3); border-top-color: #8B5CF6;
           animation: vsPolishSpin 0.7s linear infinite;
         }
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
-        .vs-polish-row { display: flex; align-items: center; gap: 12px; }
-        .vs-polish-label { font-size: 12px; color: #C4C4E0; white-space: nowrap; }
-        .vs-polish-hint { color: #5A5A80; }
-        .vs-polish-slider {
-          flex: 1; min-width: 120px; height: 4px; cursor: pointer;
-          accent-color: #8B5CF6;
+        .vs-knob-row {
+          display: flex; align-items: flex-start; justify-content: center; gap: 32px;
         }
-        .vs-polish-foot { font-size: 11px; color: #5A5A80; margin-top: 8px; }
-        @media (max-width: 560px) {
-          .vs-polish-row { flex-direction: column; align-items: stretch; gap: 7px; }
-          .vs-polish-slider { width: 100%; }
+        .vs-knob {
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
         }
+        .vs-knob svg {
+          cursor: ns-resize; touch-action: none; border-radius: 50%;
+        }
+        .vs-knob svg:focus-visible { outline: 2px solid #8B5CF6; outline-offset: 2px; }
+        .vs-knob-label { font-size: 12px; color: #C4C4E0; }
+        .vs-knob-val {
+          font-size: 11px; font-weight: 600; color: #8B5CF6;
+          font-variant-numeric: tabular-nums;
+        }
+        .vs-polish-foot { font-size: 11px; color: #5A5A80; margin-top: 8px; text-align: center; }
         .vs-regen-row {
           display: flex; align-items: center; justify-content: space-between;
           padding: 10px 14px; background: #0E0E20; border: 1px solid #1E1E3A;
