@@ -97,10 +97,13 @@ export function DashboardPage() {
         else setVoiceClonesCount(count ?? 0)
       })
 
+    // Only playable swaps: rows whose durable file is gone (persist soft-failed
+    // or expired by the 90-day cleanup) are excluded from both count and list.
     supabase
       .from('voice_swaps')
       .select('id, song_name, voice_used, quality_score, created_at', { count: 'exact' })
       .eq('user_id', uid)
+      .not('result_path', 'is', null)
       .order('created_at', { ascending: false })
       .limit(4)
       .then(({ data: s, count, error }) => {
@@ -243,7 +246,7 @@ export function DashboardPage() {
         {/* Quick stats row */}
         <div className="db-stats">
           {[
-            { label: 'Voice Swaps', value: voiceSwapsCount === null ? '—' : voiceSwapsCount.toLocaleString('en-US'), icon: '🔄' },
+            { label: 'Saved Tracks', value: voiceSwapsCount === null ? '—' : voiceSwapsCount.toLocaleString('en-US'), icon: '🔄' },
             { label: 'Voice Clones', value: voiceClonesCount === null ? '—' : voiceClonesCount.toLocaleString('en-US'), icon: '🧬' },
             { label: 'Credits Left', value: creditsRemaining === null ? '…' : creditsRemaining.toLocaleString('en-US'), icon: '⚡' },
           ].map((s) => (

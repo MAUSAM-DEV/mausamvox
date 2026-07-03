@@ -268,11 +268,12 @@ export function VoiceSwapPage() {
           else if (error) console.error('credits fetch failed', error)
         })
 
-      // Recent swaps
+      // Recent swaps — only playable ones (durable file still present)
       supabase
         .from('voice_swaps')
         .select('id, song_name, voice_used, quality_score, result_url, result_path, created_at')
         .eq('user_id', uid)
+        .not('result_path', 'is', null)
         .order('created_at', { ascending: false })
         .limit(4)
         .then(({ data: s }) => { setSwaps(s ?? []); setSwapsLoading(false) })
