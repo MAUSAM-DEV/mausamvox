@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-07-04
+
+- Ship real legal pages and kill all six dead footer links (honesty-audit backlog item 1). New static `/privacy` and `/terms` pages using the founder-provided Privacy Policy and Terms of Service text verbatim, rendered on a shared `LegalPage` server-component shell (`src/components/legal/LegalPage.tsx`) — dark theme, 720px readable column, logo header linking home, mini-footer cross-linking Privacy/Terms/Home. Both routes are public (middleware matcher untouched) and build as static (~767 B each). `Footer.tsx`: Privacy and Terms now link to the real pages; Support, API Docs, Discord and Twitter were removed entirely rather than left as `href="#"` anchors — each can return when its destination actually exists. (commit: 3027ffa)
+
 ## 2026-07-03
 
 - Investigated the ~7-min voice-swap pipeline speed. Key findings, from the cog source (zsxkib/AICoverGen) + live Replicate prediction metrics: the suspected per-job 120 MB model re-download is a minor cost (~10–30s, cold instances only — warm instances already cache it, which is what exposed the wrong-voice cache-key bug fixed in `184b06f`); the real RVC-step hog is that the cog is a full song-cover pipeline running three MDX-Net separation passes (each doubled by denoise) on our already-isolated vocal before converting — predict_times are bimodal (~52–70s cache-hit re-runs vs ~137–217s fresh tracks) because it also caches preprocessing per song hash. Also found: we never zero the cog's reverb defaults, so every converted vocal ships with ~20% wet baked-in reverb. Demucs 2-stem mode evaluated and rejected (htdemucs two-stems is post-processing — no compute saved — and it breaks the 4-stem consumers); deployment keep-warm evaluated and deferred (cost vs. cold-start-only savings). Recommended next lever: swap to a bare RVC-only cog after a quality A/B. Full ranking recorded in PROJECT_STATUS §6. (investigation — code commit for the cache-key fix only: 184b06f)
