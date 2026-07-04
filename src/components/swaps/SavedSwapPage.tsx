@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
+import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 
 // Read-only view of one saved swap: the final polished mix persisted at save
 // time. Deliberately NOT re-editable — stems and effect/fine-tune settings
@@ -35,6 +36,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
   const [duration, setDuration] = useState<number | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [karaokeOpen, setKaraokeOpen] = useState(false)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -200,10 +202,24 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <button className="sw-btn-solid" onClick={handleDownload} disabled={downloading}>
                   {downloading ? 'Preparing…' : '⬇ Download MP3'}
                 </button>
+                {!karaokeOpen && (
+                  <button className="sw-btn-ghost" onClick={() => setKaraokeOpen(true)}>
+                    🎤 Sing along
+                  </button>
+                )}
                 <button className="sw-btn-danger" onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
+
+              {karaokeOpen && (
+                <KaraokePanel
+                  backingUrls={[playerSrc]}
+                  trackName={swap.song_name}
+                  backingLabel="your saved track — a duet with your cloned voice"
+                  onToast={showToast}
+                />
+              )}
 
               <p className="sw-note-fine">
                 This is the finished track exactly as it was saved (effects included).
@@ -304,6 +320,14 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
           transform: translateY(-1px);
         }
         .sw-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
+        .sw-btn-ghost {
+          padding: 11px 22px; border-radius: 9px;
+          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .sw-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
         .sw-btn-danger {
           padding: 11px 22px; border-radius: 9px;
           border: 1px solid rgba(239,68,68,.3); background: transparent;

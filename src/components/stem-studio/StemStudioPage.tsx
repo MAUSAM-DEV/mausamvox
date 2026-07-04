@@ -6,6 +6,7 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { VSidebar } from '@/components/voice-swap/VSidebar'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
+import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 
 const STEM_SPLIT_COST = 50 // same price the Voice Swap flow charges for this exact operation
 
@@ -57,6 +58,7 @@ export function StemStudioPage() {
   const [stems, setStems] = useState<Stems | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [karaokeOpen, setKaraokeOpen] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState({ visible: false, message: '' })
@@ -226,6 +228,7 @@ export function StemStudioPage() {
     setStems(null)
     setFileName('')
     setErrorMsg('')
+    setKaraokeOpen(false)
   }
 
   const baseName = fileName.replace(/\.[^.]+$/, '')
@@ -326,6 +329,22 @@ export function StemStudioPage() {
                     </div>
                   ))}
                 </div>
+
+                {!karaokeOpen ? (
+                  <div className="ss-karaoke-cta">
+                    <button className="ss-btn-ghost" onClick={() => setKaraokeOpen(true)}>
+                      🎤 Sing over it
+                    </button>
+                    <span className="ss-karaoke-hint">Karaoke over the instrumental — no vocals</span>
+                  </div>
+                ) : (
+                  <KaraokePanel
+                    backingUrls={[stems.bass, stems.drums, stems.other].filter(Boolean)}
+                    trackName={baseName}
+                    backingLabel="the instrumental (no vocals)"
+                    onToast={showToast}
+                  />
+                )}
 
                 <p className="ss-note">
                   Download links stay fresh while this page is open. Want the vocals swapped
@@ -478,6 +497,11 @@ export function StemStudioPage() {
           transition: all 0.18s; white-space: nowrap;
         }
         .ss-dl-btn:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .ss-karaoke-cta {
+          display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+          margin-top: 16px;
+        }
+        .ss-karaoke-hint { font-size: 11px; color: #5A5A80; }
 
         @media (max-width: 900px) {
           .ss-shell {
