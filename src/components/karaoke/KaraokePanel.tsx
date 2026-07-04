@@ -31,8 +31,9 @@ interface KaraokePanelProps {
 type PrepState = 'preparing' | 'ready' | 'error'
 type RecState = 'idle' | 'recording' | 'done'
 
-// Sum decoded buffers into one stereo 44.1 kHz buffer (mono inputs feed both channels).
-async function sumBuffers(bufs: AudioBuffer[]): Promise<AudioBuffer> {
+// Sum decoded buffers into one stereo 44.1 kHz buffer (mono inputs feed both
+// channels). Exported for PerformanceMode, which builds the same instrumental.
+export async function sumBuffers(bufs: AudioBuffer[]): Promise<AudioBuffer> {
   const SR = 44100
   const duration = Math.max(...bufs.map((b) => b.duration))
   const ctx = new OfflineAudioContext(2, Math.ceil(duration * SR), SR)

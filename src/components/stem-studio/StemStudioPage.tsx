@@ -7,6 +7,7 @@ import { VSidebar } from '@/components/voice-swap/VSidebar'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
+import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
 
 const STEM_SPLIT_COST = 50 // same price the Voice Swap flow charges for this exact operation
 
@@ -59,6 +60,7 @@ export function StemStudioPage() {
   const [dragOver, setDragOver] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [karaokeOpen, setKaraokeOpen] = useState(false)
+  const [performOpen, setPerformOpen] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState({ visible: false, message: '' })
@@ -334,6 +336,9 @@ export function StemStudioPage() {
                     <button className="ss-btn-ghost" onClick={() => setKaraokeOpen(true)}>
                       🎤 Sing over it
                     </button>
+                    <button className="ss-btn-ghost" onClick={() => setPerformOpen(true)}>
+                      🔊 Perform live
+                    </button>
                     <span className="ss-karaoke-hint">Karaoke over the instrumental — no vocals</span>
                   </div>
                 ) : (
@@ -356,6 +361,15 @@ export function StemStudioPage() {
       </div>
 
       <VToast visible={toast.visible} message={toast.message} />
+
+      {performOpen && stems && (
+        <PerformanceMode
+          trackName={baseName}
+          sourceNote="Instrumental backing — no vocals"
+          stemUrls={[stems.bass, stems.drums, stems.other].filter(Boolean)}
+          onClose={() => setPerformOpen(false)}
+        />
+      )}
 
       <style suppressHydrationWarning>{`
         body { background: #05050F; }
