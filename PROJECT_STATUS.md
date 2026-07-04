@@ -8,6 +8,22 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
+## ⚠️ START HERE NEXT SESSION — pending acceptance tests (2026-07-05)
+
+Three deploys from 2026-07-05 are **live on Vercel but NOT yet acceptance-tested**. The founder will test everything in one pass and bring results next session. Nothing new should build on these until they pass.
+
+1. **Bare-RVC engine switch + pre-warm ping (`56eaf29`)** — the highest-stakes one:
+   - One fresh full swap: listen to the result (voice identity, mono vocal sitting in the stereo mix, dry-vocal level — bare cog ran ~2 dB hotter in the A/B; Polish knobs can tame it).
+   - Vercel logs: `[stem-split] warm-ping fired` present; `[voice-convert] TIMING` shows queue ≈ 0 and compute ~20–40s (vs old ~140–220s).
+   - One fine-tune preview (seconds if pool still warm; a cold-pool preview minutes later is a known accepted limitation).
+   - Two back-to-back Regenerates → must get **distinct prediction ids** (no-seed dedup check).
+   - Duet swap if convenient.
+   - **ROLLBACK if the engine fails:** set `RVC_ENGINE=cover` in Vercel env + redeploy → byte-identical old zsxkib pipeline, no code revert needed.
+2. **Saved Tracks + sidebar wiring (`4348b83`, `971b8b1`, `417ef59`)** — sidebar "My Voices" → Voice Lab; "Saved Tracks" → `/swaps` (full list, count matches dashboard stat, rows open the detail page); dashboard "View all →"; empty state if applicable.
+3. **Performance Mode (`c1391f9`, `74db470`)** — desktop: Stem Studio "🔊 Perform live" (instrumental, no vocal; play/pause/seek/restart/Escape-exit) and saved-swap "Perform live" (instant start, vocal included as labeled). **Mobile (real phone + speaker):** screen stays awake while playing; audio + title/controls survive lock screen; honest paused state after call/alarm interruptions; older-phone memory on the Stem Studio path (decoded WAV ~40 MB — fallback plan is MP3-encoding the mix).
+
+---
+
 ## 1. Tech Stack
 
 | Layer | Choice |
