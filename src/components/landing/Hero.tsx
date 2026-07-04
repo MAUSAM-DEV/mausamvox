@@ -292,7 +292,8 @@ export function Hero() {
             Start Free — No Card Needed
           </Link>
 
-          <button
+          <a
+            href="#features"
             style={{
               padding: '14px 34px',
               borderRadius: '10px',
@@ -307,6 +308,7 @@ export function Hero() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              textDecoration: 'none',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'rgba(139,92,246,.5)'
@@ -321,10 +323,10 @@ export function Hero() {
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M10 8l6 4-6 4V8z" fill="currentColor" />
+              <path d="M8 11l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Watch Demo
-          </button>
+            See How It Works
+          </a>
         </div>
 
         {/* Trust row */}
