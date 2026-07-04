@@ -123,8 +123,11 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
         </div>
 
         <div className="vlrp-foot">
+          {/* No retrain flow exists — the honest way to improve a voice today is
+              training a new clone from a better recording. */}
           <div className="vlrp-note">
-            Retrain any voice to improve it with new audio
+            Tip: to improve a voice, train a new clone — a <b>quiet room</b> and{' '}
+            <b>no backing music</b> make the biggest difference
           </div>
         </div>
       </div>
