@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
+import { VToast } from '@/components/voice-swap/VToast'
 
 const TOOLS = [
   {
@@ -75,6 +76,15 @@ export function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
+  // Same VToast pattern as the other pages — used to surface delete failures.
+  const [toast, setToast] = useState({ visible: false, message: '' })
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const showToast = useCallback((message: string, ms = 3200) => {
+    clearTimeout(toastTimerRef.current)
+    setToast({ visible: true, message })
+    toastTimerRef.current = setTimeout(() => setToast((p) => ({ ...p, visible: false })), ms)
+  }, [])
+  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
   // Captured on mount so the focus/visibility refetch can re-query without
   // re-resolving the session each time.
   const userIdRef = useRef<string | null>(null)
@@ -174,7 +184,12 @@ export function DashboardPage() {
         // (and list) come from the DB rather than a local decrement.
         setRecentSwaps((prev) => prev.filter((s) => s.id !== id))
         void refetchCounts()
+      } else {
+        const body = await res.json().catch(() => null)
+        showToast(`Delete failed — ${body?.error ?? `server error (${res.status})`}`)
       }
+    } catch {
+      showToast('Delete failed — network error. Check your connection and try again.')
     } finally {
       setDeletingId(null)
     }
@@ -338,6 +353,8 @@ export function DashboardPage() {
           </div>
         </section>
       </main>
+
+      <VToast visible={toast.visible} message={toast.message} />
 
       <style suppressHydrationWarning>{`
         /* ── topbar ── */
