@@ -320,7 +320,10 @@ export function DashboardPage() {
         <section className="db-section">
           <div className="db-sec-hdr">
             <h2 className="db-sec-title">Recent Swaps</h2>
-            <Link href="/voice-swap" className="db-sec-more">New swap →</Link>
+            <span style={{ display: 'flex', gap: '18px' }}>
+              <Link href="/swaps" className="db-sec-more">View all →</Link>
+              <Link href="/voice-swap" className="db-sec-more">New swap →</Link>
+            </span>
           </div>
           <div className="db-recent">
             {swapsLoading ? (
