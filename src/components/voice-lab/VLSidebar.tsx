@@ -18,7 +18,9 @@ const TOOLS = [
 // whose right panel is the full voices list (view/open/delete).
 const LIBRARY: { emoji: string; label: string; href: string | null }[] = [
   { emoji: '🎙️', label: 'My Voices', href: '/voice-lab' },
-  { emoji: '📁', label: 'Projects', href: null },
+  // "Saved Tracks" (not "Projects" — they're finished outputs, not editable
+  // projects; stems/settings aren't stored). Matches the dashboard's naming.
+  { emoji: '📁', label: 'Saved Tracks', href: '/swaps' },
   { emoji: '🛒', label: 'Marketplace', href: null },
 ]
 
