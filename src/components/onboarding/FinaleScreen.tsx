@@ -5,27 +5,29 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Persona } from './OnboardingPage'
 
+// Every line and chip here must describe something the app really delivers
+// today — this screen used to claim a demo clone, a share feature, and
+// entitlements that never existed.
 const FINALE_SUB: Record<Persona, string> = {
   artist:
-    'That was a 30-second instant clone. Imagine what a full Studio Clone sounds like.',
+    'Next: train a clone of your voice, then hear yourself sing any song.',
   producer:
     "Next: clone your own artist's voice and use it on every beat you make.",
   creator:
-    'One-tap share to Reels, Shorts and WhatsApp is now unlocked on your account.',
+    'Swap the voice on a track, download the MP3, and post it anywhere.',
 }
 
 const UNLOCKS = [
   { value: '500', label: 'free credits added' },
-  { value: '1',   label: 'free voice swap' },
-  { value: '1',   label: 'express clone' },
+  { value: '2',   label: 'free previews per track' },
+  { value: '3',   label: 'creator tools unlocked' },
 ]
 
 interface FinaleScreenProps {
   persona: Persona
-  onToast: (m: string) => void
 }
 
-export function FinaleScreen({ persona, onToast }: FinaleScreenProps) {
+export function FinaleScreen({ persona }: FinaleScreenProps) {
   const router = useRouter()
   const [userName, setUserName] = useState('')
 
@@ -60,18 +62,14 @@ export function FinaleScreen({ persona, onToast }: FinaleScreenProps) {
           ))}
         </div>
 
+        {/* Single CTA — the old "Share my first track" button faked a share
+            feature (toast only) for a track that doesn't exist yet. */}
         <div className="ob-btn-row">
           <button
             className="ob-btn-big"
             onClick={() => router.push('/voice-swap')}
           >
             Enter MausamVox
-          </button>
-          <button
-            className="ob-btn-quiet"
-            onClick={() => onToast('Opening share card for Reels…')}
-          >
-            📱 Share my first track
           </button>
         </div>
       </div>

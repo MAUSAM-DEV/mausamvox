@@ -251,7 +251,8 @@ export function VLSidebar() {
           align-items: center;
           gap: 10px;
           padding: 6px 2px;
-          cursor: pointer;
+          /* Display-only (no click handler) — don't advertise clickability */
+          cursor: default;
         }
 
         @media (max-width: 900px) {

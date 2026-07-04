@@ -89,7 +89,7 @@ export function OnboardingPage() {
             />
           )}
           {screen === 4 && (
-            <FinaleScreen key="sc4" persona={persona} onToast={showToast} />
+            <FinaleScreen key="sc4" persona={persona} />
           )}
         </div>
 
