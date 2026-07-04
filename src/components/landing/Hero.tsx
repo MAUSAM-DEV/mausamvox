@@ -73,12 +73,13 @@ function WaveCanvas() {
   )
 }
 
+// Only claims that are true TODAY. Removed as over-claims (honesty audit):
+// "7-day money back" + "Prorated upgrades" (no billing exists), "Quality score
+// on every output" (feature removed), "Live support 24/7" (no support channel).
 const trustItems = [
-  '7-day money back',
   'Free trial — no card',
-  'Prorated upgrades',
-  'Quality score on every output',
-  'Live support 24/7',
+  '2 free previews per track',
+  'Your voice stays private',
 ]
 
 export function Hero() {

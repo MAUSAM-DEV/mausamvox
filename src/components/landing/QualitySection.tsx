@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useReveal } from './useReveal'
 
-const scoreBars = [
-  { label: 'Voice Match',    pct: 94, id: 'b1' },
-  { label: 'Pitch Accuracy', pct: 87, id: 'b2' },
-  { label: 'Naturalness',    pct: 78, id: 'b3' },
+// Mock of the REAL Fine-tune/Polish controls (not measurements) — the old
+// "quality confidence score" card was removed with the fake-score feature.
+const controlBars = [
+  { label: 'Voice Strength', pct: 70, id: 'b1' },
+  { label: 'Warmth',         pct: 40, id: 'b2' },
+  { label: 'Reverb',         pct: 25, id: 'b3' },
 ]
 
 export function QualitySection() {
@@ -59,17 +61,18 @@ export function QualitySection() {
               marginBottom: '16px',
             }}
           >
-            You see the score<br />before you download.
+            You hear it<br />before you download.
           </h2>
           <p style={{ fontSize: '16px', color: '#606088', maxWidth: '420px', lineHeight: 1.75 }}>
-            Every output gets a quality confidence score before it reaches you. Not happy with it?
-            Regenerate for free — no credit penalty within the 10-minute window.
+            Preview your swap and A/B it against the original before you commit.
+            Not happy? Fine-tune the voice settings, polish the vocal, and regenerate —
+            every take is your call.
           </p>
           <div style={{ marginTop: '36px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {[
-              'Score shown before every download',
-              'Free regeneration if score is below 60',
+              'Free previews — first 2 on every track',
               'A/B player — compare original vs swapped',
+              'Fine-tune your voice settings and regenerate anytime',
             ].map((item) => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', color: '#C8C8E8' }}>
                 <span
@@ -121,22 +124,22 @@ export function QualitySection() {
               }}
             />
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#606088', marginBottom: '12px' }}>
-              Quality Confidence Score
+              Fine-tune &amp; Polish
             </div>
             <div
               className="grad-text"
               style={{
                 fontFamily: 'var(--font-grotesk), "Space Grotesk", sans-serif',
-                fontSize: '72px',
+                fontSize: '40px',
                 fontWeight: 700,
-                letterSpacing: '-3px',
+                letterSpacing: '-1.5px',
                 lineHeight: 1,
               }}
             >
-              82
+              Your sound, your call
             </div>
 
-            {scoreBars.map((bar, i) => (
+            {controlBars.map((bar, i) => (
               <div key={bar.id} style={{ marginTop: i === 0 ? '20px' : '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#606088', marginBottom: '6px' }}>
                   <span>{bar.label}</span>
@@ -157,7 +160,7 @@ export function QualitySection() {
             ))}
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '20px' }}>
-              {['✓ Ready to download', '✓ High fidelity'].map((chip) => (
+              {['✓ 12-second preview', '✓ A/B compare'].map((chip) => (
                 <span
                   key={chip}
                   style={{
@@ -193,8 +196,8 @@ export function QualitySection() {
                 <path d="M4 4v5h5M20 20v-5h-5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
                 <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              Score below 60?{' '}
-              <strong style={{ color: '#8B5CF6', fontWeight: 600 }}>Regenerate free</strong> within 10 min
+              Not happy with a take?{' '}
+              <strong style={{ color: '#8B5CF6', fontWeight: 600 }}>Adjust and regenerate</strong> anytime
             </div>
           </div>
         </div>
