@@ -1,6 +1,6 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-07-04 · Branch: `main` · Status: Active development (pre-launch)_
+_Last updated: 2026-07-05 · Branch: `main` · Status: Active development (pre-launch)_
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 
@@ -56,6 +56,8 @@ Next.js App Router monolith. `src/middleware.ts` refreshes Supabase sessions on 
 | Duet split confirm | ✅ Working | Declared-duet uploads no longer auto-run the 250cr gender-split; the amber "Run Duet Split before continuing" gate shows and the user must click "Split duet · 250 cr · Premium" to proceed |
 | Dashboard counts | ✅ Working | Saved Tracks (ex "Voice Swaps") + Voice Clones counts refetch on window focus / tab visibility (no longer stale after create/delete elsewhere); delete refetches authoritatively instead of optimistic local −1. Swap count/list (dashboard + voice-swap history) now filter `result_path` not-null (`b3edba7`) — only playable swaps count; unplayable phantom rows (persist soft-fail or 90-day expiry) are excluded, and the 2 existing phantoms were deleted from prod. Stat relabeled "Saved Tracks" since it counts saved versions (every full swap / fine-tune apply is a row — e.g. one tuning session = 14 rows of one song), not unique songs |
 | Sidebar "My Voices" badge | ✅ Working | VSidebar + VLSidebar now show a live `voice_clones` count (was hardcoded `'3'`) |
+| Sidebar Library links | ✅ Working | "My Voices" links to `/voice-lab` (whose right panel is the full voices list) with the live count badge (`4348b83`); "Projects" renamed **"Saved Tracks"** and links to `/swaps` (`971b8b1`). Marketplace + Choir/Instruments/Song Studio remain dim+Soon (unbuilt) |
+| Saved Tracks index (`/swaps`) | ✅ Working | Lists ALL playable saved swaps (dashboard query minus `limit(4)` — same authenticated SELECT, no new grants), newest first; rows open `/swaps/[swapId]`; honest empty state; auth-gated by the existing `/swaps/:path*` middleware matcher (`971b8b1`). Dashboard Recent Swaps header gained "View all →" (`417ef59`) |
 | Sidebar user row | ✅ Working | VSidebar + VLSidebar show the real name/initial (same derivation as the dashboard header: metadata name, else email prefix) and the real `users.plan` ("Free/Starter/Pro/Studio Plan") — was hardcoded "Mausam / Pro Plan" (`68d7478`) |
 | Onboarding journey | ✅ Working | Persona → magic moment → action → finale screens. Magic-moment screen no longer fakes a demo player (`95956a6`): the result card is a static, explicitly-badged "Preview" (no play button/duration/score); fake "Try another style" button removed. Finale screen greets the real user (`139229a`) — same name derivation as the dashboard header (metadata name, else email prefix); plain "You're in." until loaded — was hardcoded "You're in, Mausam." for every account |
 | Landing page | ✅ Working | Full marketing site |
