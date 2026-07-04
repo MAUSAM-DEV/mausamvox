@@ -5,10 +5,9 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
+import { BARE_RVC_VERSION, COVER_RVC_VERSION, rvcEngine } from '@/lib/rvc-engine'
 
 export const maxDuration = 30
-
-const RVC_VERSION = '0a9c7c558af4c0f20667c1bd1260ce32a2879944a0b9e44e1398660c077b1550'
 
 // Preview pricing: the first 2 previews of a given track are free, the 3rd+
 // costs 50 credits. Gated server-side via the consume_preview RPC.
@@ -134,20 +133,21 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (clone?.model_path) {
-        // Route Replicate through our proxy so the last URL segment is a clean,
-        // short filename. The RVC container derives its local filename from
-        // url.split('/')[-1] without stripping query strings — passing a signed
-        // Supabase URL directly produces "uuid.zip?token=<JWT>" (300+ chars),
-        // hitting Errno 36 (name too long).
+        // Route Replicate through our proxy so the model URL never expires
+        // (the proxy signs fresh on every fetch) and the last URL segment is a
+        // clean, short filename. Both engines need this, for different reasons:
         //
-        // The filename doubles as the container's MODEL CACHE KEY: the cog
-        // extracts the zip to a folder named after it and skips the download if
-        // that folder already exists on the (shared, warm) instance. A constant
-        // name like "model.zip" made every voice share one cache entry — two
-        // voices converted back-to-back on the same instance would silently
-        // reuse the first voice's weights. So the name must be unique per voice
-        // AND per model file (hash of model_path, so a retrain that writes a
-        // new path also busts the cache).
+        // cover cog: derives its local filename from url.split('/')[-1] WITHOUT
+        // stripping query strings — a signed Supabase URL produces
+        // "uuid.zip?token=<JWT>" (300+ chars), hitting Errno 36. The filename
+        // also doubles as its MODEL CACHE KEY (it skips the download when the
+        // folder exists on a warm instance), so the name must be unique per
+        // voice AND per model file — hash of model_path, so a retrain that
+        // writes a new path also busts the cache. Never a constant name.
+        //
+        // bare cog: parses the filename safely (urlparse + query strip) and
+        // re-downloads every run (overwrite=True) — no cache-key hazard; the
+        // proxy's fresh signing is what it needs.
         const modelTag = createHash('sha1').update(clone.model_path).digest('hex').slice(0, 8)
         const origin = new URL(req.url).origin
         effectiveModelUrl = `${origin}/api/voice-model/${voiceId}/${voiceId}-${modelTag}.zip`
@@ -254,11 +254,36 @@ export async function POST(req: NextRequest) {
     // shift, identical to the prior behaviour.
     const pitchChangeAll = Math.round(clamp(pitchShift, -24, 24))
 
-    let prediction
-    try {
-      prediction = await replicate.predictions.create({
-        version: RVC_VERSION,
-        input: {
+    // WAV output on both engines so the converted vocal isn't re-compressed:
+    // the vocal already took one lossy encode at Demucs separation, and an mp3
+    // here would be a SECOND lossy generation the instrumental never suffers.
+    // Downstream (mixStems, Fine-tune preview) decodes WAV identically.
+    // Tradeoff: WAV is ~10x larger → slower vocal fetch in the browser mix.
+    //
+    // bare (default): pseudoram/rvc-v2 runs ONLY the RVC conversion (~20-40s vs
+    // the cover cog's ~140-220s spent re-separating our already-isolated vocal;
+    // A/B'd for quality, PROJECT_STATUS §6). Param mapping is 1:1 for the four
+    // Fine-tune knobs; pitch is plain semitones; no reverb stage exists (the
+    // Polish layer owns reverb now); mono output (mixStems upmixes fine). The
+    // cog has no seed param — fine, because effectiveVocalsUrl is re-signed per
+    // request, so identical resubmits (Regenerate) never dedup on Replicate.
+    // The cog re-downloads the model zip every run (overwrite=True), so the
+    // proxy URL's fresh signing is what matters; its filename parsing strips
+    // query strings correctly (no Errno-36 class bug there).
+    const input = rvcEngine() === 'bare'
+      ? {
+          input_audio: effectiveVocalsUrl,
+          custom_rvc_model_download_url: effectiveModelUrl,
+          pitch_change: pitchChangeAll,
+          index_rate: indexRate,
+          filter_radius: filterRadiusVal,
+          rms_mix_rate: rmsMixRateVal,
+          f0_method: 'rmvpe',
+          crepe_hop_length: 128,
+          protect: protectVal,
+          output_format: 'wav',
+        }
+      : {
           song_input: effectiveVocalsUrl,
           rvc_model: 'CUSTOM',
           custom_rvc_model_download_url: effectiveModelUrl,
@@ -270,16 +295,17 @@ export async function POST(req: NextRequest) {
           pitch_detection_algorithm: 'rmvpe',
           crepe_hop_length: 128,
           protect: protectVal,
-          // WAV (not mp3) so the converted vocal isn't re-compressed: the vocal
-          // already took one lossy encode at Demucs separation, and an mp3 here
-          // would be a SECOND lossy generation the instrumental never suffers.
-          // Downstream (mixStems, Fine-tune preview) decodes WAV identically.
-          // Tradeoff: WAV is ~10x larger → slower vocal fetch in the browser mix.
           output_format: 'wav',
-          // Random seed on every call so Replicate can't return a cached
-          // prediction when the same vocalsUrl + model are resubmitted (Regenerate).
+          // Random seed so Replicate can't return a cached prediction when the
+          // same vocalsUrl + model are resubmitted (Regenerate).
           seed: Math.floor(Math.random() * 2147483647),
-        },
+        }
+
+    let prediction
+    try {
+      prediction = await replicate.predictions.create({
+        version: rvcEngine() === 'bare' ? BARE_RVC_VERSION : COVER_RVC_VERSION,
+        input,
       })
     } catch (createErr) {
       // The job never started — refund the preview charge and roll back the

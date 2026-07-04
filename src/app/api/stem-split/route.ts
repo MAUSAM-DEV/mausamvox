@@ -3,6 +3,7 @@ import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
+import { BARE_RVC_VERSION, rvcEngine } from '@/lib/rvc-engine'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
 // on success it now also buffers ALL FOUR stems from Replicate into Supabase
@@ -138,6 +139,28 @@ export async function POST(req: NextRequest) {
     })
 
     console.log(`[stem-split] started prediction ${prediction.id} (status=${prediction.status})`)
+
+    // ── 3. Pre-warm the bare-RVC pool (PROJECT_STATUS §6) ─────────────
+    // Its shared pool scales down within ~18 min of idle and a cold boot takes
+    // up to ~5 min, but a wake leaves it warm for the next request. The
+    // ~3 min of Demucs+karaoke ahead of the RVC step is exactly that runway,
+    // so one tiny built-in-voice prediction here (~2-3s compute, ~$0.001)
+    // means voice-convert usually hits a warm pool. Only the create call is
+    // awaited (fast HTTP POST; an un-awaited promise can be frozen with the
+    // lambda) and any failure is swallowed — the split must never suffer.
+    if (rvcEngine() === 'bare') {
+      try {
+        const origin = new URL(req.url).origin
+        const ping = await replicate.predictions.create({
+          version: BARE_RVC_VERSION,
+          input: { input_audio: `${origin}/warm-ping.wav`, pitch_change: 0, output_format: 'mp3' },
+        })
+        console.log(`[stem-split] warm-ping fired (${ping.id})`)
+      } catch (pingErr) {
+        console.warn('[stem-split] warm-ping failed (split unaffected):', pingErr instanceof Error ? pingErr.message : String(pingErr))
+      }
+    }
+
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
