@@ -2,7 +2,12 @@
 
 import { LogoFull } from '@/components/ui/Logo'
 
-const footerLinks = ['Privacy', 'Terms', 'Support', 'API Docs', 'Discord', 'Twitter']
+// Only links that actually exist — Support / API Docs / Discord / Twitter were
+// removed as dead '#' placeholders; re-add each when its destination is real.
+const footerLinks = [
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
+]
 
 export function Footer() {
   return (
@@ -27,8 +32,8 @@ export function Footer() {
       <div style={{ display: 'flex', gap: '24px' }}>
         {footerLinks.map((link) => (
           <a
-            key={link}
-            href="#"
+            key={link.label}
+            href={link.href}
             style={{
               fontSize: '12px',
               color: '#606088',
@@ -38,7 +43,7 @@ export function Footer() {
             onMouseEnter={(e) => { e.currentTarget.style.color = '#F0F0FF' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = '#606088' }}
           >
-            {link}
+            {link.label}
           </a>
         ))}
       </div>
