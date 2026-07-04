@@ -60,7 +60,6 @@ type RecentSwap = {
   id: string
   song_name: string
   voice_used: string
-  quality_score: number | null
   created_at: string
 }
 
@@ -112,7 +111,7 @@ export function DashboardPage() {
     // or expired by the 90-day cleanup) are excluded from both count and list.
     supabase
       .from('voice_swaps')
-      .select('id, song_name, voice_used, quality_score, created_at', { count: 'exact' })
+      .select('id, song_name, voice_used, created_at', { count: 'exact' })
       .eq('user_id', uid)
       .not('result_path', 'is', null)
       .order('created_at', { ascending: false })
@@ -324,12 +323,7 @@ export function DashboardPage() {
                     <div className="db-row-name">{item.song_name}</div>
                     <div className="db-row-meta">{item.voice_used}</div>
                   </div>
-                  {item.quality_score !== null && (
-                    <span className={`db-score ${item.quality_score >= 80 ? 'db-score--hi' : 'db-score--mid'}`}>
-                      {item.quality_score}
-                    </span>
-                  )}
-                  <Link href="/voice-swap" className="db-row-open">Open</Link>
+                  <Link href={`/swaps/${item.id}`} className="db-row-open">Open</Link>
                   <button
                     className="db-row-del"
                     onClick={() => handleDeleteSwap(item.id)}
@@ -517,12 +511,6 @@ export function DashboardPage() {
         .db-row-info { flex: 1; min-width: 0; }
         .db-row-name { font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .db-row-meta { font-size: 11px; color: #5A5A80; }
-        .db-score {
-          font-size: 12px; font-weight: 700;
-          padding: 3px 9px; border-radius: 99px; flex-shrink: 0;
-        }
-        .db-score--hi { color: #34D399; background: rgba(52,211,153,.1); }
-        .db-score--mid { color: #F59E0B; background: rgba(245,158,11,.1); }
         .db-row-open {
           font-size: 12px; font-weight: 600; color: #8B5CF6;
           text-decoration: none; flex-shrink: 0;
