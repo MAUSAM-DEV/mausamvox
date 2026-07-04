@@ -17,7 +17,8 @@ type CloneType = 'express' | 'studio'
 
 export function VoiceLabPage() {
   const [step, setStep] = useState<Step>(1)
-  // Studio is the real, working tier; Express (zero-shot) is coming soon.
+  // Both tiers run the same real training pipeline; Express uses a shorter
+  // recording and fewer epochs (decided server-side) for a ~15-min turnaround.
   const [cloneType, setCloneType] = useState<CloneType>('studio')
 
   // My Voices — real rows from voice_clones, fetched on mount and
@@ -235,7 +236,7 @@ export function VoiceLabPage() {
                 {cloneType === 'studio' ? (
                   <span>Studio clone uses <b style={{ color: '#8B5CF6' }}>1 of 3</b> monthly slots on your Pro plan</span>
                 ) : (
-                  <span>Express clones are <b style={{ color: '#8B5CF6' }}>unlimited</b> on your Pro plan</span>
+                  <span>Express clone — <b style={{ color: '#8B5CF6' }}>same real training</b>, shorter recording, ready in ~15 minutes</span>
                 )}
               </div>
               <div className="vl-ab-btns">

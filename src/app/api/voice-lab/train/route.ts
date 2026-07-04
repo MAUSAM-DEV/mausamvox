@@ -15,8 +15,12 @@ export const maxDuration = 60
 // is exactly what /api/voice-convert consumes as custom_rvc_model_download_url.
 const TRAIN_RVC_VERSION = '0397d5e28c9b54665e1e5d29d5cf4f722a7b89ec20e9dbf31487235305b1a101'
 
-// Sensible Studio-tier defaults. epoch is overridable per request for tuning.
-const DEFAULT_EPOCH = 50
+// Epochs are decided HERE from the clone's type — never from the request body,
+// so the browser can't buy Studio-depth training on an Express clone (or vice
+// versa). Express trades fidelity for turnaround: ~15–20 epochs on a short
+// sample finishes in roughly 15 minutes vs ~45 for Studio's 50.
+const STUDIO_EPOCH = 50
+const EXPRESS_EPOCH = 18
 const SAMPLE_RATE = '48k'
 const RVC_MODEL_VERSION = 'v2'
 const F0_METHOD = 'rmvpe_gpu'
@@ -156,7 +160,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 2. Parse body ────────────────────────────────────────────────────────
-    let body: { voiceCloneId?: string; epoch?: number }
+    let body: { voiceCloneId?: string }
     try {
       body = await req.json()
     } catch {
@@ -167,16 +171,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'voiceCloneId is required' }, { status: 400 })
     }
 
-    // Clamp epoch to a sane range; fall back to the default if not a number.
-    const epoch =
-      typeof body.epoch === 'number' && Number.isFinite(body.epoch)
-        ? Math.min(1000, Math.max(1, Math.round(body.epoch)))
-        : DEFAULT_EPOCH
-
     // ── 3. Load the clone, verify ownership, ensure the dataset exists ────────
     const { data: clone, error: cloneError } = await supabaseAdmin
       .from('voice_clones')
-      .select('id, user_id, status, dataset_zip_url, training_prediction_id')
+      .select('id, user_id, status, type, dataset_zip_url, training_prediction_id')
       .eq('id', voiceCloneId)
       .eq('user_id', user.id)
       .single()
@@ -202,6 +200,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 4. Start the Replicate training prediction ───────────────────────────
+    const epoch = clone.type === 'express' ? EXPRESS_EPOCH : STUDIO_EPOCH
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
     const prediction = await replicate.predictions.create({
       version: TRAIN_RVC_VERSION,

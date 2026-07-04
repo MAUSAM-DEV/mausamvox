@@ -63,13 +63,17 @@ export async function POST(req: NextRequest) {
     const type = cloneType === 'studio' ? 'studio' : 'express'
     console.log('[voice-lab/create-clone] inserting voice_clone for user', user.id)
 
+    // Both tiers start 'pending' and go through real training (express just
+    // trains with fewer epochs — see /api/voice-lab/train). The old express
+    // path that marked rows instantly 'ready' with no model produced voices
+    // that couldn't actually convert anything.
     const { data: row, error: insertError } = await supabaseAdmin
       .from('voice_clones')
       .insert({
         user_id: user.id,
         name: name.trim(),
         type,
-        status: type === 'studio' ? 'pending' : 'ready',
+        status: 'pending',
         sample_path: path,
         created_at: new Date().toISOString(),
       })

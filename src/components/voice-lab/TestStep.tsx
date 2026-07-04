@@ -132,13 +132,6 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
         <div className="vlte-h">{voiceName} is ready!</div>
         <p className="vlte-p">
           {isExpress ? 'Express Clone' : 'Studio Clone'} saved · Now available in Voice Swap
-          {isExpress && (
-            <>
-              {' '}<span className="vlte-note">
-                (full model training coming soon — currently uses your sample for voice reference)
-              </span>
-            </>
-          )}
         </p>
 
         <div className="vlte-test-row">
@@ -238,7 +231,6 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           margin-bottom: 6px; position: relative;
         }
         .vlte-p { font-size: 13px; color: #5A5A80; margin-bottom: 24px; position: relative; line-height: 1.6; }
-        .vlte-note { font-size: 11px; color: #3A3A60; font-style: italic; }
         .vlte-test-row {
           display: flex; align-items: center; gap: 12px;
           max-width: 440px; margin: 0 auto 24px;

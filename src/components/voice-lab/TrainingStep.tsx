@@ -30,6 +30,9 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
   const failed = phase === 'failed'
   const activeIdx = activeStageIndex(phase)
   const inProgress = phase === 'preparing' || phase === 'queued' || phase === 'training' || phase === 'finalizing'
+  const tierLabel = cloneType === 'studio' ? 'Studio Clone' : 'Express Clone'
+  // Honest ETAs: Studio trains 50 epochs (~45 min), Express ~18 (~15 min).
+  const etaLabel = cloneType === 'studio' ? 'about 45 minutes' : 'about 15 minutes'
 
   // A more specific sub-line for the long training phase.
   const subline =
@@ -43,13 +46,13 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
     <>
       <div className="vltr-stage">
         <div className={`vltr-orb${failed ? ' vltr-orb--err' : ''}`} />
-        <div className="vltr-tier">Studio Clone</div>
+        <div className="vltr-tier">{tierLabel}</div>
         <div className="vltr-title">
           {failed
             ? 'Training hit a snag'
             : voiceName
             ? `Training "${voiceName}"`
-            : 'Training Your Studio Clone'}
+            : `Training Your ${tierLabel}`}
         </div>
         <div className="vltr-sub">{failed ? 'Your sample is safe — nothing was lost.' : subline}</div>
 
@@ -79,7 +82,7 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
             )}
 
             <p className="vltr-tq-note">
-              This usually takes a few minutes. <b>You can leave this page and come back</b> —
+              This usually takes {etaLabel}. <b>You can leave this page and come back</b> —
               we&apos;ll pick up where it left off.
             </p>
           </div>
