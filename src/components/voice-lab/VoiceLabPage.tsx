@@ -190,7 +190,7 @@ export function VoiceLabPage() {
   return (
     <>
       <div className="vl-shell">
-        <VLSidebar onToast={showToast} />
+        <VLSidebar />
 
         <div className="vl-centre">
           <VLTopbar step={step} onGoStep={goStep} />

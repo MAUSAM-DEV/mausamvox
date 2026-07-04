@@ -238,7 +238,6 @@ export function StemStudioPage() {
     <>
       <div className="ss-shell">
         <VSidebar
-          onToast={showToast}
           creditsRemaining={creditsRemaining}
           creditsTotal={creditsTotal}
           plan={plan}

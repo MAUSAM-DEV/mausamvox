@@ -21,7 +21,6 @@ const LIBRARY = [
 ]
 
 interface VSidebarProps {
-  onToast: (msg: string) => void
   creditsRemaining: number | null
   creditsTotal: number | null
   // Real plan from users.plan (free | starter | pro | studio), owned by the
@@ -41,7 +40,7 @@ function planLabel(plan: string | null) {
   return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
 }
 
-export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan, activeTool = 'Voice Swap' }: VSidebarProps) {
+export function VSidebar({ creditsRemaining, creditsTotal, plan, activeTool = 'Voice Swap' }: VSidebarProps) {
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
@@ -99,13 +98,11 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan, active
                 <span className="vs-sb-lbl">{item.label}</span>
               </Link>
             ) : (
-              <div
-                key={item.label}
-                className="vs-sb-link"
-                onClick={() => onToast(item.label + ' — coming soon')}
-              >
+              /* Unbuilt tool — dim + "Soon" (dashboard pattern), not a fake live link */
+              <div key={item.label} className="vs-sb-link vs-sb-link--soon" aria-disabled="true">
                 <span className="vs-sb-ico">{item.emoji}</span>
                 <span className="vs-sb-lbl">{item.label}</span>
+                <span className="vs-sb-badge vs-sb-badge--soon">Soon</span>
               </div>
             )
           )}
@@ -116,10 +113,12 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan, active
               ? (voiceClonesCount === null ? '' : String(voiceClonesCount))
               : item.badge
             return (
-              <div key={item.label} className="vs-sb-link" onClick={() => onToast(item.label + ' — coming soon')}>
+              /* No library pages exist yet — dim + "Soon"; My Voices keeps its live count */
+              <div key={item.label} className="vs-sb-link vs-sb-link--soon" aria-disabled="true">
                 <span className="vs-sb-ico">{item.emoji}</span>
                 <span className="vs-sb-lbl">{item.label}</span>
                 {badge && <span className="vs-sb-badge">{badge}</span>}
+                <span className="vs-sb-badge vs-sb-badge--soon">Soon</span>
               </div>
             )
           })}
@@ -251,6 +250,15 @@ export function VSidebar({ onToast, creditsRemaining, creditsTotal, plan, active
           font-weight: 700;
           padding: 1px 7px;
           border-radius: 99px;
+        }
+        .vs-sb-link--soon { opacity: 0.5; cursor: default; }
+        .vs-sb-link--soon:hover { background: transparent; color: #7878A0; }
+        .vs-sb-badge--soon {
+          background: rgba(255,255,255,.05);
+          color: #5A5A80;
+          font-size: 9px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
         }
         .vs-sb-foot {
           border-top: 1px solid #1E1E3A;

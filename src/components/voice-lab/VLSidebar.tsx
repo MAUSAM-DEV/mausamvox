@@ -20,10 +20,6 @@ const LIBRARY = [
   { emoji: '🛒', label: 'Marketplace', badge: '' },
 ]
 
-interface VLSidebarProps {
-  onToast: (msg: string) => void
-}
-
 function fmtN(n: number) {
   return n.toLocaleString('en-US')
 }
@@ -33,7 +29,7 @@ function planLabel(plan: string | null) {
   return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
 }
 
-export function VLSidebar({ onToast }: VLSidebarProps) {
+export function VLSidebar() {
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
   // Real plan from users.plan (free | starter | pro | studio) — was hardcoded
@@ -106,13 +102,11 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
                 <span className="vls-lbl">{item.label}</span>
               </Link>
             ) : (
-              <div
-                key={item.label}
-                className="vls-link"
-                onClick={() => onToast(item.label + ' — coming soon')}
-              >
+              /* Unbuilt tool — dim + "Soon" (dashboard pattern), not a fake live link */
+              <div key={item.label} className="vls-link vls-link--soon" aria-disabled="true">
                 <span className="vls-ico">{item.emoji}</span>
                 <span className="vls-lbl">{item.label}</span>
+                <span className="vls-badge vls-badge--soon">Soon</span>
               </div>
             )
           )}
@@ -123,10 +117,12 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
               ? (voiceClonesCount === null ? '' : String(voiceClonesCount))
               : item.badge
             return (
-              <div key={item.label} className="vls-link" onClick={() => onToast(item.label + ' — coming soon')}>
+              /* No library pages exist yet — dim + "Soon"; My Voices keeps its live count */
+              <div key={item.label} className="vls-link vls-link--soon" aria-disabled="true">
                 <span className="vls-ico">{item.emoji}</span>
                 <span className="vls-lbl">{item.label}</span>
                 {badge && <span className="vls-badge">{badge}</span>}
+                <span className="vls-badge vls-badge--soon">Soon</span>
               </div>
             )
           })}
@@ -228,6 +224,15 @@ export function VLSidebar({ onToast }: VLSidebarProps) {
           font-weight: 700;
           padding: 1px 7px;
           border-radius: 99px;
+        }
+        .vls-link--soon { opacity: 0.5; cursor: default; }
+        .vls-link--soon:hover { background: transparent; color: #7878A0; }
+        .vls-badge--soon {
+          background: rgba(255,255,255,.05);
+          color: #5A5A80;
+          font-size: 9px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
         }
         .vls-foot {
           border-top: 1px solid #1E1E3A;
