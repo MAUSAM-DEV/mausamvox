@@ -80,13 +80,24 @@ export function DashboardPage() {
   // re-resolving the session each time.
   const userIdRef = useRef<string | null>(null)
 
-  // Live-refetch the dashboard counts (and the Recent Swaps list, same query) so
-  // revisiting the dashboard reflects swaps/clones created or deleted elsewhere.
+  // Live-refetch the dashboard numbers — counts, the Recent Swaps list (same
+  // query), and Credits Left — so revisiting the dashboard reflects activity
+  // elsewhere (swaps/clones created or deleted, credits spent on other pages).
   // Stable identity (no deps) so the focus/visibility listeners stay attached.
   const refetchCounts = useCallback(async () => {
     const uid = userIdRef.current
     if (!uid) return
     const supabase = createClient()
+
+    supabase
+      .from('users')
+      .select('credits_remaining')
+      .eq('id', uid)
+      .single()
+      .then(({ data: row, error }) => {
+        if (row) setCreditsRemaining(row.credits_remaining)
+        else if (error) console.error('credits fetch failed', error)
+      })
 
     supabase
       .from('voice_clones')
@@ -126,24 +137,14 @@ export function DashboardPage() {
       setUserInitial((display[0] ?? 'M').toUpperCase())
       userIdRef.current = u.id
 
-      supabase
-        .from('users')
-        .select('credits_remaining')
-        .eq('id', u.id)
-        .single()
-        .then(({ data: row, error }) => {
-          if (row) setCreditsRemaining(row.credits_remaining)
-          else if (error) console.error('credits fetch failed', error)
-        })
-
-      // Initial counts + Recent Swaps load.
+      // Initial load: counts + Recent Swaps + Credits Left (all in refetchCounts).
       void refetchCounts()
     })
   }, [refetchCounts])
 
-  // Refetch counts whenever the dashboard regains focus or the tab becomes
-  // visible again, so numbers stay live after creating/deleting swaps or clones
-  // on another page or tab — without polling.
+  // Refetch counts + credits whenever the dashboard regains focus or the tab
+  // becomes visible again, so numbers stay live after creating/deleting swaps
+  // or clones (or spending credits) on another page or tab — without polling.
   useEffect(() => {
     const onFocus = () => { void refetchCounts() }
     const onVisible = () => { if (document.visibilityState === 'visible') void refetchCounts() }
@@ -219,9 +220,15 @@ export function DashboardPage() {
               <Link href="/dashboard" className="db-drop-item" onClick={() => setDropOpen(false)}>
                 Dashboard
               </Link>
-              <a href="#" className="db-drop-item" onClick={() => setDropOpen(false)}>
+              {/* Settings isn't built yet — shown disabled with the app's usual
+                  "Soon" marker instead of a dead link. */}
+              <span
+                className="db-drop-item"
+                style={{ opacity: 0.45, pointerEvents: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
                 Settings
-              </a>
+                <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#5A5A80' }}>Soon</span>
+              </span>
               <div className="db-drop-sep" />
               <button className="db-drop-item db-drop-out" onClick={handleSignOut}>
                 Sign Out

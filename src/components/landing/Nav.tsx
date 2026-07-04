@@ -162,9 +162,15 @@ export function Nav() {
                     >
                       Voice Swap
                     </Link>
-                    <a href="#" className="nav-drop-item" onClick={() => setDropOpen(false)}>
+                    {/* Settings isn't built yet — shown disabled with the app's
+                        usual "Soon" marker instead of a dead link. */}
+                    <span
+                      className="nav-drop-item"
+                      style={{ opacity: 0.45, pointerEvents: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
                       Settings
-                    </a>
+                      <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#5A5A80' }}>Soon</span>
+                    </span>
                     <div className="nav-drop-sep" />
                     <button className="nav-drop-item nav-drop-out" onClick={handleSignOut}>
                       Sign Out
