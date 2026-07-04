@@ -14,10 +14,12 @@ const TOOLS = [
   { emoji: '🎵', label: 'Song Studio', href: '#' },
 ]
 
-const LIBRARY = [
-  { emoji: '🎙️', label: 'My Voices', badge: '' },
-  { emoji: '📁', label: 'Projects', badge: '' },
-  { emoji: '🛒', label: 'Marketplace', badge: '' },
+// href: null = unbuilt, rendered dim + "Soon". My Voices links to Voice Lab,
+// whose right panel is the full voices list (view/open/delete).
+const LIBRARY: { emoji: string; label: string; href: string | null }[] = [
+  { emoji: '🎙️', label: 'My Voices', href: '/voice-lab' },
+  { emoji: '📁', label: 'Projects', href: null },
+  { emoji: '🛒', label: 'Marketplace', href: null },
 ]
 
 interface VSidebarProps {
@@ -111,13 +113,18 @@ export function VSidebar({ creditsRemaining, creditsTotal, plan, activeTool = 'V
           {LIBRARY.map((item) => {
             const badge = item.label === 'My Voices'
               ? (voiceClonesCount === null ? '' : String(voiceClonesCount))
-              : item.badge
-            return (
-              /* No library pages exist yet — dim + "Soon"; My Voices keeps its live count */
-              <div key={item.label} className="vs-sb-link vs-sb-link--soon" aria-disabled="true">
+              : ''
+            return item.href ? (
+              <Link key={item.label} href={item.href} className="vs-sb-link">
                 <span className="vs-sb-ico">{item.emoji}</span>
                 <span className="vs-sb-lbl">{item.label}</span>
                 {badge && <span className="vs-sb-badge">{badge}</span>}
+              </Link>
+            ) : (
+              /* Unbuilt — dim + "Soon" (dashboard pattern) */
+              <div key={item.label} className="vs-sb-link vs-sb-link--soon" aria-disabled="true">
+                <span className="vs-sb-ico">{item.emoji}</span>
+                <span className="vs-sb-lbl">{item.label}</span>
                 <span className="vs-sb-badge vs-sb-badge--soon">Soon</span>
               </div>
             )
