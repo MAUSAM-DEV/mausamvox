@@ -8,6 +8,7 @@ import { LogoFull } from '@/components/ui/Logo'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
+import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
 
 // Read-only view of one saved swap: the final polished mix persisted at save
 // time. Deliberately NOT re-editable — stems and effect/fine-tune settings
@@ -37,6 +38,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
   const [downloading, setDownloading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [karaokeOpen, setKaraokeOpen] = useState(false)
+  const [performOpen, setPerformOpen] = useState(false)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -207,6 +209,9 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                     🎤 Sing along
                   </button>
                 )}
+                <button className="sw-btn-ghost" onClick={() => setPerformOpen(true)}>
+                  🔊 Perform live
+                </button>
                 <button className="sw-btn-danger" onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
@@ -229,6 +234,15 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
           )}
         </main>
       </div>
+
+      {performOpen && swap && (
+        <PerformanceMode
+          trackName={swap.song_name}
+          sourceNote="Full track — includes the recorded vocal (a duet with your clone)"
+          srcUrl={playerSrc}
+          onClose={() => setPerformOpen(false)}
+        />
+      )}
 
       <VToast visible={toast.visible} message={toast.message} />
 
