@@ -25,10 +25,12 @@ export const maxDuration = 30
 //                                        deletions), sets edited = true
 //
 // Engine: vaibhavs10/incredibly-fast-whisper (Whisper large-v3) with
-// timestamp: 'chunk' — phrase-level lines are exactly the granularity the
-// overlay highlights, and its native word timestamps (no per-language
-// alignment model) keep a word-level upgrade path open for every language,
-// unlike WhisperX's aligner (no Tamil/Bengali/Punjabi/Marathi).
+// timestamp: 'word' — one word per chunk. We regroup the words into
+// phrase-level display lines (groupWordsIntoLines) exactly like before AND
+// nest each word's timing under its line, so a single transcription serves
+// both today's line display and the (deferred) word-level highlighter. Its
+// native word timestamps need no per-language alignment model, unlike
+// WhisperX's aligner (no Tamil/Bengali/Punjabi/Marathi).
 //
 // track_lyrics access follows the voice_swaps pattern: no RLS, service_role
 // admin client, ownership enforced in app code via .eq('user_id', …).
@@ -52,27 +54,82 @@ const LANGUAGE_MAP: Record<string, string> = {
   english: 'english',
 }
 
-export type LyricLine = { start: number; end: number; text: string }
+// One transcribed word with its timing. Nested inside each line for the
+// (deferred) word-level highlighting renderer; the line-level fields below
+// are unchanged, so old rows (no `words`) and the current renderer keep
+// working exactly as today.
+export type WordTiming = { text: string; start: number; end: number }
+export type LyricLine = { start: number; end: number; text: string; words?: WordTiming[] }
 
 function validStemPath(p: unknown): p is string {
   return typeof p === 'string' && p.length > 0 && p.length < 512 && !p.includes('..')
 }
 
-// incredibly-fast-whisper output: { text, chunks: [{ text, timestamp: [start, end] }] }.
-// The final chunk's end is occasionally null — fall back to start + 3s.
-function parseChunks(output: unknown): LyricLine[] {
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+// incredibly-fast-whisper with timestamp: 'word' → { text, chunks: [{ text,
+// timestamp: [start, end] }] } — SAME shape as 'chunk' mode, but one WORD per
+// chunk. A word's end is occasionally null (last word / a boundary) — fall
+// back to a short 0.4s so per-word highlighting still advances.
+function parseWords(output: unknown): WordTiming[] {
   const chunks = (output as { chunks?: Array<{ text?: unknown; timestamp?: unknown }> } | null)?.chunks
   if (!Array.isArray(chunks)) return []
-  const lines: LyricLine[] = []
+  const words: WordTiming[] = []
   for (const c of chunks) {
     const text = typeof c?.text === 'string' ? c.text.trim() : ''
     const ts = Array.isArray(c?.timestamp) ? c.timestamp : []
     const start = typeof ts[0] === 'number' && isFinite(ts[0]) ? ts[0] : null
     if (!text || start === null) continue
-    const end = typeof ts[1] === 'number' && isFinite(ts[1]) && ts[1] > start ? ts[1] : start + 3
-    lines.push({ start: Math.round(start * 100) / 100, end: Math.round(end * 100) / 100, text })
+    const end = typeof ts[1] === 'number' && isFinite(ts[1]) && ts[1] > start ? ts[1] : start + 0.4
+    words.push({ text, start: round2(start), end: round2(end) })
   }
-  lines.sort((a, b) => a.start - b.start)
+  words.sort((a, b) => a.start - b.start)
+  return words
+}
+
+// Group per-word timings back into the phrase-level display lines we render
+// today. Word mode drops Whisper's own phrase segmentation, so we rebuild it
+// heuristically: break on a silence gap, a hard cap on words/duration, or
+// sentence-final punctuation. Each line keeps the joined word text (so it
+// matches what we display and stays editable) PLUS the nested `words`.
+const NEW_LINE_GAP_SECONDS = 0.8
+const MAX_WORDS_PER_LINE = 9
+const MAX_LINE_SECONDS = 8
+const SENTENCE_END = /[.!?।॥]$/
+
+function groupWordsIntoLines(words: WordTiming[]): LyricLine[] {
+  const lines: LyricLine[] = []
+  let cur: WordTiming[] = []
+  const flush = () => {
+    if (cur.length === 0) return
+    const text = cur.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim()
+    if (text) {
+      lines.push({
+        start: cur[0].start,
+        end: cur[cur.length - 1].end,
+        text,
+        words: cur.map((w) => ({ ...w })),
+      })
+    }
+    cur = []
+  }
+  for (const w of words) {
+    if (cur.length > 0) {
+      const prev = cur[cur.length - 1]
+      const gap = w.start - prev.end
+      const lineDuration = w.end - cur[0].start
+      if (
+        gap > NEW_LINE_GAP_SECONDS ||
+        cur.length >= MAX_WORDS_PER_LINE ||
+        lineDuration > MAX_LINE_SECONDS ||
+        SENTENCE_END.test(prev.text)
+      ) {
+        flush()
+      }
+    }
+    cur.push(w)
+  }
+  flush()
   return lines
 }
 
@@ -131,7 +188,10 @@ export async function POST(req: NextRequest) {
       // song still comes out (part-)translated. The UI copy owns that honesty.
       task: 'transcribe',
       language,
-      timestamp: 'chunk', // phrase-level lines; 'word' kept for a future word-karaoke pass
+      // Word-level timestamps: we regroup them into phrase lines server-side
+      // (groupWordsIntoLines) AND nest each word under its line for the
+      // word-highlighting renderer. One call, one charge, serves both.
+      timestamp: 'word',
       batch_size: 24,
     },
   })
@@ -172,28 +232,34 @@ export async function GET(req: NextRequest) {
   }
 
   logReplicateTiming('lyrics', prediction)
-  let lines = parseChunks(prediction.output)
-  if (lines.length === 0) {
-    // Honest failure: instrumental-only stems or hallucination filtering can
-    // leave nothing usable. Nothing is stored and nothing is charged.
-    return NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
-  }
+  const noLyrics = () => NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
+
+  let words = parseWords(prediction.output)
+  // Honest failure: instrumental-only stems or hallucination filtering can
+  // leave nothing usable. Nothing is stored and nothing is charged.
+  if (words.length === 0) return noLyrics()
 
   const rawLang = req.nextUrl.searchParams.get('language') ?? 'auto'
   const language = LANGUAGE_MAP[rawLang] !== undefined ? rawLang : 'auto'
 
   // Romanized Hindi: transcribed with language=hindi (Devanagari out), then
-  // transliterated to Latin before storing — the stored lines ARE the
-  // romanized ones, so caching/editing/display need no script awareness.
+  // transliterated to Latin PER WORD before grouping — so romanize.ts's
+  // whole-word corrections apply to each word, the nested word texts are the
+  // romanized ones, and each line's text stays the join of its words. The
+  // stored lines ARE romanized, so caching/editing/display need no script
+  // awareness.
   if (language === 'hindi-rom') {
     const { romanizeDevanagari } = await import('@/lib/romanize')
-    lines = lines
-      .map((l) => ({ ...l, text: romanizeDevanagari(l.text) }))
-      .filter((l) => l.text.length > 0) // a line that was ONLY danda marks romanizes to ''
-    if (lines.length === 0) {
-      return NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
-    }
+    words = words
+      .map((w) => ({ ...w, text: romanizeDevanagari(w.text) }))
+      .filter((w) => w.text.length > 0) // a word that was ONLY danda marks romanizes to ''
+    if (words.length === 0) return noLyrics()
   }
+
+  // Regroup words into phrase lines; each line carries its nested `words`.
+  const lines = groupWordsIntoLines(words)
+  if (lines.length === 0) return noLyrics()
+
   const force = req.nextUrl.searchParams.get('force') === '1'
   const engine = `vaibhavs10/incredibly-fast-whisper:${WHISPER_VERSION.slice(0, 8)}`
 
@@ -257,6 +323,9 @@ export async function GET(req: NextRequest) {
 }
 
 // ── PATCH: user edits — text fixes and line deletions, timestamps kept ──────
+// Only { start, end, text } is stored back, so an edit intentionally drops the
+// nested per-word timings for the whole row (the edited text no longer matches
+// them) — that line reverts to whole-line highlighting. Expected behaviour.
 export async function PATCH(req: NextRequest) {
   if (!adminConfigured) return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
 
