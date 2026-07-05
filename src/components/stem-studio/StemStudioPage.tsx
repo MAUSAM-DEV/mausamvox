@@ -347,6 +347,7 @@ export function StemStudioPage() {
                     backingUrls={[stems.bass, stems.drums, stems.other].filter(Boolean)}
                     trackName={baseName}
                     backingLabel="the instrumental (no vocals)"
+                    lyricsSourceKey={stems.vocalsPath ?? null}
                     onToast={showToast}
                   />
                 )}

@@ -238,6 +238,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                   backingUrls={[playerSrc]}
                   trackName={swap.song_name}
                   backingLabel="your saved track — a duet with your cloned voice"
+                  lyricsSourceKey={swap.vocal_stem_path ?? null}
                   onToast={showToast}
                 />
               )}

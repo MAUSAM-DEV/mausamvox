@@ -4,10 +4,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatTime, pickRecorderMimeType, extFromMimeType } from '@/components/voice-lab/audioUtils'
 import { encodeMp3, encodeWav } from '@/components/voice-swap/audioClip'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
+import { LyricsPane } from './LyricsPane'
 
-// Karaoke v1: sing over a backing track and download your take — deliberately
-// NOT a lyrics-syncing karaoke experience (no lyrics data exists in the app;
-// the UI says so). Everything runs client-side: the backing mix, the mic
+// Karaoke v1.5: sing over a backing track and download your take, now WITH
+// the shared synced-lyrics pane (LyricsPane — same load/generate/edit/
+// regenerate experience as Performance Mode). While recording, the pane
+// follows the hidden backing element's clock; lines are deliberately NOT
+// tappable here because seeking the backing mid-take would silently misalign
+// the recording. Recording itself runs client-side: the backing mix, the mic
 // recording (same MediaRecorder + mime negotiation as Voice Lab), and the
 // final duet mix (decode → offline WebAudio sum → MP3, the mixStems pattern).
 //
@@ -25,6 +29,9 @@ interface KaraokePanelProps {
   // Short description of what the backing is, e.g. "the instrumental" or
   // "your saved track" — used in the copy.
   backingLabel: string
+  // Durable vocal-stem path (track_lyrics.source_key) for the lyrics pane.
+  // Null/absent = no lyrics UI (legacy swaps, manual-stems uploads).
+  lyricsSourceKey?: string | null
   onToast: (msg: string) => void
 }
 
@@ -46,10 +53,13 @@ export async function sumBuffers(bufs: AudioBuffer[]): Promise<AudioBuffer> {
   return ctx.startRendering()
 }
 
-export function KaraokePanel({ backingUrls, trackName, backingLabel, onToast }: KaraokePanelProps) {
+export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourceKey, onToast }: KaraokePanelProps) {
   const [prep, setPrep] = useState<PrepState>('preparing')
   const [recState, setRecState] = useState<RecState>('idle')
   const [seconds, setSeconds] = useState(0)
+  // Backing playback position — drives the lyrics pane while recording (the
+  // hidden element only plays during a take; idle/done leave it at rest).
+  const [backTime, setBackTime] = useState(0)
   const [takeUrl, setTakeUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState<'' | 'take' | 'duet'>('')
 
@@ -256,12 +266,16 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, onToast }: 
     <div className="kp-card">
       <div className="kp-head">
         <span className="kp-title">🎤 Sing over it</span>
-        <span className="kp-tag">v1 — no lyrics display yet</span>
       </div>
       <p className="kp-sub">
-        Sing over {backingLabel} and download your take — lyrics display coming later.
+        Sing over {backingLabel} and download your take.
       </p>
       <p className="kp-hint">🎧 Use headphones — otherwise your mic also records the backing track from your speakers.</p>
+
+      {/* Synced lyrics: generate/edit before you record, follow along during
+          the take. No onSeek — jumping the backing mid-take would misalign
+          the recording. */}
+      <LyricsPane sourceKey={lyricsSourceKey} time={backTime} compact />
 
       {prep === 'preparing' && <div className="kp-note">Preparing the backing track…</div>}
       {prep === 'error' && <div className="kp-note kp-note--err">Couldn&rsquo;t load the backing track — try re-opening this panel.</div>}
@@ -269,7 +283,13 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, onToast }: 
       {prep === 'ready' && (
         <>
           {/* Hidden element drives backing playback while recording. */}
-          <audio ref={audioRef} src={backingReadyUrl ?? undefined} preload="auto" onEnded={stopRecording} />
+          <audio
+            ref={audioRef}
+            src={backingReadyUrl ?? undefined}
+            preload="auto"
+            onEnded={stopRecording}
+            onTimeUpdate={(e) => setBackTime(e.currentTarget.currentTime)}
+          />
 
           {recState === 'idle' && (
             <>
