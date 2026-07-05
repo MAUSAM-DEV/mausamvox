@@ -282,6 +282,31 @@ async function mixStems(
   for (const buf of validMusic) addSource(buf, 0.8)              // music: never warmed
 
   const rendered = await offline.startRendering()
+
+  // −1 dB safety headroom: polish gain (the warmth low-shelf especially) can
+  // push the summed mix past full scale, and encodeWav/encodeMp3 hard-clamp
+  // anything over ±1.0 into audible clipping. A single post-render scale,
+  // applied only when the peak actually exceeds −1 dBFS, is transparent —
+  // pure gain, no pumping, no tone change — and covers both the preview
+  // player and the saved file (which is re-encoded from this same render).
+  const HEADROOM = 0.8913 // 10^(-1/20) ≈ −1 dBFS
+  let peak = 0
+  for (let c = 0; c < rendered.numberOfChannels; c++) {
+    const data = rendered.getChannelData(c)
+    for (let i = 0; i < data.length; i++) {
+      const a = Math.abs(data[i])
+      if (a > peak) peak = a
+    }
+  }
+  if (peak > HEADROOM) {
+    const scale = HEADROOM / peak
+    for (let c = 0; c < rendered.numberOfChannels; c++) {
+      const data = rendered.getChannelData(c)
+      for (let i = 0; i < data.length; i++) data[i] *= scale
+    }
+    console.log(`[mixStems] peak ${peak.toFixed(3)} over −1 dBFS — scaled by ${scale.toFixed(3)} to avoid encode clipping`)
+  }
+
   return encodeWav(rendered)
 }
 
