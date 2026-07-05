@@ -3,7 +3,7 @@ import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
-import { BARE_RVC_VERSION, rvcEngine } from '@/lib/rvc-engine'
+import { fireWarmPing } from '@/lib/rvc-engine'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
 // on success it now also buffers ALL FOUR stems from Replicate into Supabase
@@ -141,25 +141,11 @@ export async function POST(req: NextRequest) {
     console.log(`[stem-split] started prediction ${prediction.id} (status=${prediction.status})`)
 
     // ── 3. Pre-warm the bare-RVC pool (PROJECT_STATUS §6) ─────────────
-    // Its shared pool scales down within ~18 min of idle and a cold boot takes
-    // up to ~5 min, but a wake leaves it warm for the next request. The
-    // ~3 min of Demucs+karaoke ahead of the RVC step is exactly that runway,
-    // so one tiny built-in-voice prediction here (~2-3s compute, ~$0.001)
-    // means voice-convert usually hits a warm pool. Only the create call is
-    // awaited (fast HTTP POST; an un-awaited promise can be frozen with the
-    // lambda) and any failure is swallowed — the split must never suffer.
-    if (rvcEngine() === 'bare') {
-      try {
-        const origin = new URL(req.url).origin
-        const ping = await replicate.predictions.create({
-          version: BARE_RVC_VERSION,
-          input: { input_audio: `${origin}/warm-ping.wav`, pitch_change: 0, output_format: 'mp3' },
-        })
-        console.log(`[stem-split] warm-ping fired (${ping.id})`)
-      } catch (pingErr) {
-        console.warn('[stem-split] warm-ping failed (split unaffected):', pingErr instanceof Error ? pingErr.message : String(pingErr))
-      }
-    }
+    // First of two pings per swap: this one wakes the pool while Demucs runs.
+    // The GET success handler below re-pings when the stems land, because the
+    // 2026-07-05 acceptance swap showed the pool re-chills in under 7 minutes
+    // — Demucs (~3-4 min) plus user think-time already exceeded that window.
+    await fireWarmPing(new URL(req.url).origin, 'stem-split')
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {
@@ -209,6 +195,12 @@ export async function GET(req: NextRequest) {
       // fresh URLs after the Replicate URLs expire. Soft-fallback per stem: on
       // failure we return the ephemeral URL and omit that stem's path.
       const persisted = await persistAllStems(id, stems)
+      // Second warm ping of the swap: restart the bare-RVC pool's idle clock at
+      // the moment the stems land — the user typically converts within a few
+      // minutes of here, and the pool re-chills faster than the POST-time ping
+      // alone can cover (observed <7 min on 2026-07-05). The client polls stop
+      // at 'succeeded', so this fires once per split.
+      await fireWarmPing(new URL(req.url).origin, 'stem-split')
       return NextResponse.json({
         status: 'succeeded',
         ...stems,

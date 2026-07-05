@@ -726,6 +726,14 @@ export function ResultStep({
   const pendingPlayRef = useRef(false)
   const seekingRef = useRef(false)
 
+  // Pre-warm the bare-RVC pool the moment the result screen appears: a
+  // regenerate or fine-tune "Apply to Full Track" from here starts minutes
+  // from now, past the pool's observed re-chill window (<7 min, 2026-07-05).
+  // Fire-and-forget — the server no-ops on the cover engine and rate-limits.
+  useEffect(() => {
+    fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {})
+  }, [])
+
   // Debounce the warmth slider → debouncedWarmth is what actually drives a re-mix.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedWarmth(warmth), 280)
