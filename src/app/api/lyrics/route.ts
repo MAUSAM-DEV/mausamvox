@@ -38,8 +38,16 @@ const WHISPER_VERSION = '3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb25
 const LYRICS_COST = 25
 
 // UI hint values → the cog's language enum ('None' = auto-detect).
+// 'hindi-rom' and 'hindi-deva' both transcribe with language=hindi; the -rom
+// variant then transliterates the Devanagari output to Latin server-side
+// before storing (src/lib/romanize.ts). The stored track_lyrics.language is
+// the UI hint value itself, so each row records which variant (language +
+// script) it was generated with. 'hindi' is the legacy pre-romanization value
+// (kept for old rows' labels; no longer offered by the UI).
 const LANGUAGE_MAP: Record<string, string> = {
   auto: 'None',
+  'hindi-rom': 'hindi',
+  'hindi-deva': 'hindi',
   hindi: 'hindi',
   english: 'english',
 }
@@ -164,14 +172,28 @@ export async function GET(req: NextRequest) {
   }
 
   logReplicateTiming('lyrics', prediction)
-  const lines = parseChunks(prediction.output)
+  let lines = parseChunks(prediction.output)
   if (lines.length === 0) {
     // Honest failure: instrumental-only stems or hallucination filtering can
     // leave nothing usable. Nothing is stored and nothing is charged.
     return NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
   }
 
-  const language = req.nextUrl.searchParams.get('language') ?? 'auto'
+  const rawLang = req.nextUrl.searchParams.get('language') ?? 'auto'
+  const language = LANGUAGE_MAP[rawLang] !== undefined ? rawLang : 'auto'
+
+  // Romanized Hindi: transcribed with language=hindi (Devanagari out), then
+  // transliterated to Latin before storing — the stored lines ARE the
+  // romanized ones, so caching/editing/display need no script awareness.
+  if (language === 'hindi-rom') {
+    const { romanizeDevanagari } = await import('@/lib/romanize')
+    lines = lines
+      .map((l) => ({ ...l, text: romanizeDevanagari(l.text) }))
+      .filter((l) => l.text.length > 0) // a line that was ONLY danda marks romanizes to ''
+    if (lines.length === 0) {
+      return NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
+    }
+  }
   const force = req.nextUrl.searchParams.get('force') === '1'
   const engine = `vaibhavs10/incredibly-fast-whisper:${WHISPER_VERSION.slice(0, 8)}`
 

@@ -44,18 +44,23 @@ interface PerformanceModeProps {
 
 type LyricLine = { start: number; end: number; text: string }
 
-type LangHint = 'auto' | 'hindi' | 'english'
+type LangHint = 'auto' | 'hindi-rom' | 'hindi-deva' | 'english'
 
+// Romanized is the default Hindi choice: Hindi songs are transcribed in
+// Devanagari and transliterated to Latin server-side (/api/lyrics).
 const LANG_OPTIONS: Array<{ value: LangHint; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },
-  { value: 'hindi', label: 'Hindi' },
+  { value: 'hindi-rom', label: 'Hindi (romanized)' },
+  { value: 'hindi-deva', label: 'Hindi (Devanagari)' },
   { value: 'english', label: 'English' },
 ]
 
 // Display labels for track_lyrics.language (what the STORED row was generated
-// with) — includes legacy values so old rows still label honestly.
+// with) — includes the legacy 'hindi' value so old rows still label honestly.
 const LANG_LABELS: Record<string, string> = {
   auto: 'Auto-detected',
+  'hindi-rom': 'Hindi (romanized)',
+  'hindi-deva': 'Hindi (Devanagari)',
   hindi: 'Hindi',
   english: 'English',
 }
@@ -63,7 +68,7 @@ const LANG_LABELS: Record<string, string> = {
 // Honest guidance: the language hint sets Whisper's DECODE language, so
 // "English" on a Hindi song translates — it does not romanize.
 const LANG_GUIDE =
-  'Pick the language the song is SUNG in. Choosing English for a Hindi song will translate the lyrics, not write them in English letters.'
+  'Pick the language the song is SUNG in. Choosing English for a Hindi song will translate the lyrics, not write them in English letters — for that, pick Hindi (romanized).'
 
 // What the pane renders: real lines plus ♪ markers for long instrumental
 // gaps (intros, solos) so the highlight always has somewhere honest to sit.
