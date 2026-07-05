@@ -76,6 +76,112 @@ function fmt(secs: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// ---------------------------------------------------------------------------
+// Lyrics edit modal — sung-vocal transcription WILL have errors, so every
+// line's text is editable and junk lines (humming heard as words, misheard
+// ad-libs) are deletable. Timestamps are deliberately NOT editable here:
+// they come from the audio and hand-tweaking them without a waveform is
+// guesswork. Saves via PATCH /api/lyrics (ownership-checked, sets edited).
+// ---------------------------------------------------------------------------
+function LyricsEditModal({
+  lines, stemPath, onCancel, onSaved,
+}: {
+  lines: LyricLine[]
+  stemPath: string
+  onCancel: () => void
+  onSaved: (lines: LyricLine[]) => void
+}) {
+  const [draft, setDraft] = useState<LyricLine[]>(() => lines.map((l) => ({ ...l })))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Escape closes the MODAL, not the whole overlay — capture phase beats the
+  // overlay's document-level bubble listener.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onCancel()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onCancel])
+
+  function setText(i: number, text: string) {
+    setDraft((d) => d.map((l, j) => (j === i ? { ...l, text } : l)))
+  }
+  function removeLine(i: number) {
+    setDraft((d) => d.filter((_, j) => j !== i))
+  }
+
+  async function save() {
+    if (saving) return
+    // Empty texts count as deletions; at least one real line must remain.
+    const cleaned = draft
+      .map((l) => ({ ...l, text: l.text.trim() }))
+      .filter((l) => l.text.length > 0)
+    if (cleaned.length === 0) {
+      setError('At least one line is needed — delete the lyrics entirely by just not using them.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/lyrics', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stemPath, lines: cleaned }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `Save failed (${res.status})`)
+      onSaved(cleaned)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="pm-edit-overlay" role="dialog" aria-label="Edit lyrics">
+      <div className="pm-edit-card">
+        <div className="pm-edit-head">
+          <span className="pm-edit-title">Edit lyrics</span>
+          <span className="pm-edit-sub">Fix words or delete junk lines. Timings stay as transcribed.</span>
+        </div>
+        <div className="pm-edit-list">
+          {draft.map((l, i) => (
+            <div key={`${l.start}-${i}`} className="pm-edit-row">
+              <span className="pm-edit-time">{fmt(l.start)}</span>
+              <input
+                className="pm-edit-input"
+                value={l.text}
+                maxLength={500}
+                onChange={(e) => setText(i, e.target.value)}
+              />
+              <button
+                className="pm-edit-del"
+                onClick={() => removeLine(i)}
+                aria-label={`Delete line at ${fmt(l.start)}`}
+                title="Delete line"
+              >
+                🗑
+              </button>
+            </div>
+          ))}
+        </div>
+        {error && <div className="pm-edit-err">{error}</div>}
+        <div className="pm-edit-actions">
+          <button className="pm-edit-cancel" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button className="pm-edit-save" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyricsSourceKey, onClose }: PerformanceModeProps) {
   const [prep, setPrep] = useState<'preparing' | 'ready' | 'error'>(srcUrl ? 'ready' : 'preparing')
   const [playSrc, setPlaySrc] = useState<string | null>(srcUrl ?? null)
@@ -438,6 +544,15 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         )}
       </div>
 
+      {editOpen && lyricsSourceKey && (
+        <LyricsEditModal
+          lines={lyrics}
+          stemPath={lyricsSourceKey}
+          onCancel={() => setEditOpen(false)}
+          onSaved={(newLines) => { setLyrics(newLines); setEditOpen(false) }}
+        />
+      )}
+
       <style suppressHydrationWarning>{`
         .pm-overlay {
           position: fixed; inset: 0; z-index: 500;
@@ -574,6 +689,65 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
           transition: color 0.2s;
         }
         .pm-edit-btn:hover { color: #8B5CF6; }
+        .pm-edit-overlay {
+          position: fixed; inset: 0; z-index: 600;
+          background: rgba(5,5,15,.82);
+          display: flex; align-items: center; justify-content: center;
+          padding: 20px;
+        }
+        .pm-edit-card {
+          width: 100%; max-width: 560px; max-height: 80vh;
+          display: flex; flex-direction: column;
+          background: #09091A; border: 1px solid #2A2A4A; border-radius: 16px;
+          padding: 20px;
+        }
+        .pm-edit-head { margin-bottom: 14px; }
+        .pm-edit-title {
+          display: block;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 17px; font-weight: 700; color: #F0F0FF; margin-bottom: 2px;
+        }
+        .pm-edit-sub { font-size: 11px; color: #5A5A80; }
+        .pm-edit-list {
+          flex: 1; overflow-y: auto; min-height: 0;
+          display: flex; flex-direction: column; gap: 6px;
+          padding-right: 4px;
+        }
+        .pm-edit-row { display: flex; align-items: center; gap: 8px; }
+        .pm-edit-time {
+          font-size: 11px; font-weight: 600; color: #5A5A80;
+          font-variant-numeric: tabular-nums; width: 38px; flex-shrink: 0;
+          text-align: right;
+        }
+        .pm-edit-input {
+          flex: 1; min-width: 0;
+          padding: 8px 10px; border-radius: 8px;
+          border: 1px solid #1E1E3A; background: #0E0E20; color: #F0F0FF;
+          font-size: 13px;
+        }
+        .pm-edit-input:focus { outline: none; border-color: #8B5CF6; }
+        .pm-edit-del {
+          border: none; background: transparent; cursor: pointer;
+          font-size: 14px; opacity: 0.55; transition: opacity 0.2s;
+          flex-shrink: 0;
+        }
+        .pm-edit-del:hover { opacity: 1; }
+        .pm-edit-err { font-size: 12px; color: #F87171; margin-top: 10px; }
+        .pm-edit-actions {
+          display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;
+        }
+        .pm-edit-cancel {
+          padding: 10px 18px; border-radius: 9px;
+          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .pm-edit-cancel:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .pm-edit-save {
+          padding: 10px 18px; border-radius: 9px; border: none; cursor: pointer;
+          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          color: #fff; font-size: 13px; font-weight: 600;
+        }
+        .pm-edit-save:disabled, .pm-edit-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </div>
   )
