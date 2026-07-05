@@ -442,10 +442,13 @@ export function VoiceSwapPage() {
   async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string, instrumentalPath?: string) {
     if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return }
     try {
+      // vocalStemPath links the saved swap back to its Demucs vocal stem — the
+      // lyrics key (track_lyrics.source_key) used by Performance Mode on
+      // /swaps/[id]. Absent for legacy cached results / manual-stems uploads.
       const res = await fetch('/api/voice-swaps/persist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath, instrumentalPath }),
+        body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath, instrumentalPath, vocalStemPath: stemResult?.vocalsPath }),
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))

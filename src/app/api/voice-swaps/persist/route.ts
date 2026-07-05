@@ -56,13 +56,15 @@ export async function POST(req: NextRequest) {
   // full track. result_url still holds the Replicate vocal URL as a fallback.
   // instrumentalPath (optional): sibling MUSIC-ONLY mix for Performance Mode's
   // "Music only" backing — best-effort, stored as voice_swaps.instrumental_path.
-  let body: { predictionId?: string; songName?: string; voiceUsed?: string; mixedPath?: string; instrumentalPath?: string }
+  // vocalStemPath (optional): the durable Demucs vocal-stem path this swap was
+  // built from — the lyrics key Performance Mode uses on /swaps/[id].
+  let body: { predictionId?: string; songName?: string; voiceUsed?: string; mixedPath?: string; instrumentalPath?: string; vocalStemPath?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { predictionId, songName, voiceUsed, mixedPath, instrumentalPath } = body
+  const { predictionId, songName, voiceUsed, mixedPath, instrumentalPath, vocalStemPath } = body
   if (!predictionId) return NextResponse.json({ error: 'predictionId is required' }, { status: 400 })
   if (!songName)     return NextResponse.json({ error: 'songName is required' }, { status: 400 })
   if (!voiceUsed)    return NextResponse.json({ error: 'voiceUsed is required' }, { status: 400 })
@@ -178,38 +180,32 @@ export async function POST(req: NextRequest) {
   // ── Insert the voice_swaps row (always, with or without result_path) ──────
   // ON CONFLICT on replicate_prediction_id is our idempotency guard — a second
   // call for the same predictionId is silently dropped.
-  let { error: insertError } = await supabaseAdmin
-    .from('voice_swaps')
-    .insert({
-      id: swapId,
-      user_id: user.id,
-      song_name: songName,
-      voice_used: voiceUsed,
-      quality_score: null,
-      result_url: resultUrl,
-      result_path: resultPath,
-      instrumental_path: instrPath,
-      replicate_prediction_id: predictionId,
-    })
-
-  // Deploy-before-migrate safety: if the instrumental_path column doesn't
-  // exist yet (migration 20260705000000 not applied), PostgREST rejects the
-  // whole insert (PGRST204 "column not found"). Retry once without it so a
-  // swap is NEVER lost to a schema lag — just saved without the instrumental.
-  if (insertError && /instrumental_path/.test(insertError.message)) {
-    console.error('[voice-swaps/persist] instrumental_path column missing — run migration 20260705000000. Retrying insert without it.')
-    ;({ error: insertError } = await supabaseAdmin
-      .from('voice_swaps')
-      .insert({
-        id: swapId,
-        user_id: user.id,
-        song_name: songName,
-        voice_used: voiceUsed,
-        quality_score: null,
-        result_url: resultUrl,
-        result_path: resultPath,
-        replicate_prediction_id: predictionId,
-      }))
+  //
+  // Deploy-before-migrate safety: instrumental_path (migration 20260705000000)
+  // and vocal_stem_path (20260705000001) are OPTIONAL columns — if one doesn't
+  // exist yet, PostgREST rejects the whole insert (PGRST204 "column not
+  // found"). Strip whichever column the error names and retry, so a swap is
+  // NEVER lost to schema lag — just saved without that extra field.
+  const row: Record<string, unknown> = {
+    id: swapId,
+    user_id: user.id,
+    song_name: songName,
+    voice_used: voiceUsed,
+    quality_score: null,
+    result_url: resultUrl,
+    result_path: resultPath,
+    instrumental_path: instrPath,
+    vocal_stem_path: vocalStemPath && !vocalStemPath.includes('..') ? vocalStemPath : null,
+    replicate_prediction_id: predictionId,
+  }
+  const OPTIONAL_COLUMNS = ['instrumental_path', 'vocal_stem_path']
+  let insertError = (await supabaseAdmin.from('voice_swaps').insert(row)).error
+  for (let attempt = 0; insertError && attempt < OPTIONAL_COLUMNS.length; attempt++) {
+    const missing = OPTIONAL_COLUMNS.find((c) => c in row && insertError!.message.includes(c))
+    if (!missing) break
+    console.error(`[voice-swaps/persist] ${missing} column missing — run the pending migration. Retrying insert without it.`)
+    delete row[missing]
+    insertError = (await supabaseAdmin.from('voice_swaps').insert(row)).error
   }
 
   if (insertError) {
