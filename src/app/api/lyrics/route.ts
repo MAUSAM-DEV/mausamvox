@@ -9,13 +9,18 @@ export const maxDuration = 30
 
 // Timed-lyrics transcription for Performance Mode (v1, single-color).
 //
-// POST  { stemPath, language? }        → { cached: true, lyrics } if a row
+// POST  { stemPath, language?, force? } → { cached: true, lyrics } if a row
 //                                        already exists for this user+stem,
-//                                        else { predictionId } (client polls)
+//                                        else { predictionId } (client polls).
+//                                        force: true skips the cache check —
+//                                        the regenerate flow deliberately
+//                                        re-transcribes an already-stored track.
 // GET   ?stemPath=…                    → stored lyrics, or 404
-// GET   ?id=…&stemPath=…&language=…    → poll; on success parses the chunks,
-//                                        stores the row, charges credits,
-//                                        returns { status, lyrics }
+// GET   ?id=…&stemPath=…&language=…[&force=1]
+//                                      → poll; on success parses the chunks,
+//                                        stores the row (force = REPLACES the
+//                                        existing row in place, wiping edits),
+//                                        charges credits, returns { status, lyrics }
 // PATCH { stemPath, lines }            → user edit (text fixes / line
 //                                        deletions), sets edited = true
 //
@@ -87,14 +92,18 @@ export async function POST(req: NextRequest) {
   const user = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  let body: { stemPath?: unknown; language?: unknown }
+  let body: { stemPath?: unknown; language?: unknown; force?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }) }
   if (!validStemPath(body.stemPath)) return NextResponse.json({ error: 'stemPath is required' }, { status: 400 })
   const language = LANGUAGE_MAP[typeof body.language === 'string' ? body.language : 'auto'] ?? 'None'
 
   // Cached? Second Performance Mode open of the same track is instant + free.
-  const existing = await fetchExisting(user.id, body.stemPath)
-  if (existing) return NextResponse.json({ cached: true, lyrics: existing.lines, edited: existing.edited })
+  // Regenerate (force) skips this on purpose — the user confirmed a paid
+  // re-transcription that will replace the stored row.
+  if (body.force !== true) {
+    const existing = await fetchExisting(user.id, body.stemPath)
+    if (existing) return NextResponse.json({ cached: true, lyrics: existing.lines, language: existing.language, edited: existing.edited })
+  }
 
   const { data: signed, error: signErr } = await supabaseAdmin.storage
     .from('audio-uploads')
@@ -108,6 +117,10 @@ export async function POST(req: NextRequest) {
     version: WHISPER_VERSION,
     input: {
       audio: signed.signedUrl,
+      // Pinned: the cog also offers task 'translate' — never use it. NOTE this
+      // pin can't stop translation when the language hint mismatches the sung
+      // language: hint = Whisper's DECODE language, so 'english' on a Hindi
+      // song still comes out (part-)translated. The UI copy owns that honesty.
       task: 'transcribe',
       language,
       timestamp: 'chunk', // phrase-level lines; 'word' kept for a future word-karaoke pass
@@ -159,24 +172,39 @@ export async function GET(req: NextRequest) {
   }
 
   const language = req.nextUrl.searchParams.get('language') ?? 'auto'
-  const { error: insertError } = await supabaseAdmin
-    .from('track_lyrics')
-    .insert({
-      user_id: user.id,
-      source_key: stemPath,
-      language,
-      engine: `vaibhavs10/incredibly-fast-whisper:${WHISPER_VERSION.slice(0, 8)}`,
-      lines,
-    })
+  const force = req.nextUrl.searchParams.get('force') === '1'
+  const engine = `vaibhavs10/incredibly-fast-whisper:${WHISPER_VERSION.slice(0, 8)}`
 
-  if (insertError) {
-    // Unique violation → a concurrent poll already stored (and charged) it.
-    if (insertError.code === '23505') {
-      const existing = await fetchExisting(user.id, stemPath)
-      return NextResponse.json({ status: 'succeeded', lyrics: existing?.lines ?? lines })
+  if (force) {
+    // Regenerate: REPLACE the stored row in place — same (user_id, source_key)
+    // key, upsert = INSERT … ON CONFLICT DO UPDATE, covered by the table's
+    // existing insert+update grants (no new migration). Prior edits are
+    // overwritten and `edited` resets — the client's confirm dialog warned
+    // about exactly this. Charged again below like a fresh run.
+    const { error: upsertError } = await supabaseAdmin
+      .from('track_lyrics')
+      .upsert(
+        { user_id: user.id, source_key: stemPath, language, engine, lines, edited: false },
+        { onConflict: 'user_id,source_key' },
+      )
+    if (upsertError) {
+      console.error('[lyrics] regenerate upsert failed:', upsertError.message)
+      return NextResponse.json({ error: `Could not store lyrics: ${upsertError.message}` }, { status: 500 })
     }
-    console.error('[lyrics] insert failed:', insertError.message)
-    return NextResponse.json({ error: `Could not store lyrics: ${insertError.message}` }, { status: 500 })
+  } else {
+    const { error: insertError } = await supabaseAdmin
+      .from('track_lyrics')
+      .insert({ user_id: user.id, source_key: stemPath, language, engine, lines })
+
+    if (insertError) {
+      // Unique violation → a concurrent poll already stored (and charged) it.
+      if (insertError.code === '23505') {
+        const existing = await fetchExisting(user.id, stemPath)
+        return NextResponse.json({ status: 'succeeded', lyrics: existing?.lines ?? lines })
+      }
+      console.error('[lyrics] insert failed:', insertError.message)
+      return NextResponse.json({ error: `Could not store lyrics: ${insertError.message}` }, { status: 500 })
+    }
   }
 
   // Charge AFTER a successful insert (the race loser above never charges) and
@@ -202,7 +230,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[lyrics] stored ${lines.length} lines for ${stemPath}`)
+  console.log(`[lyrics] ${force ? 'regenerated (row replaced)' : 'stored'} ${lines.length} lines for ${stemPath}`)
   return NextResponse.json({ status: 'succeeded', lyrics: lines })
 }
 

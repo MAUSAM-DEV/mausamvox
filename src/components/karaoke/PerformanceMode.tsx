@@ -44,6 +44,27 @@ interface PerformanceModeProps {
 
 type LyricLine = { start: number; end: number; text: string }
 
+type LangHint = 'auto' | 'hindi' | 'english'
+
+const LANG_OPTIONS: Array<{ value: LangHint; label: string }> = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'hindi', label: 'Hindi' },
+  { value: 'english', label: 'English' },
+]
+
+// Display labels for track_lyrics.language (what the STORED row was generated
+// with) — includes legacy values so old rows still label honestly.
+const LANG_LABELS: Record<string, string> = {
+  auto: 'Auto-detected',
+  hindi: 'Hindi',
+  english: 'English',
+}
+
+// Honest guidance: the language hint sets Whisper's DECODE language, so
+// "English" on a Hindi song translates — it does not romanize.
+const LANG_GUIDE =
+  'Pick the language the song is SUNG in. Choosing English for a Hindi song will translate the lyrics, not write them in English letters.'
+
 // What the pane renders: real lines plus ♪ markers for long instrumental
 // gaps (intros, solos) so the highlight always has somewhere honest to sit.
 type DisplayItem = { kind: 'line' | 'gap'; start: number; end: number; text: string }
@@ -202,8 +223,14 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
   )
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [lyricsError, setLyricsError] = useState('')
-  const [langHint, setLangHint] = useState<'auto' | 'hindi' | 'english'>('auto')
+  const [langHint, setLangHint] = useState<LangHint>('auto')
   const [editOpen, setEditOpen] = useState(false)
+  // Regenerate: confirm dialog + a non-blocking failure notice (a failed
+  // regenerate keeps the stored lyrics — the pane stays usable).
+  const [regenOpen, setRegenOpen] = useState(false)
+  const [regenNotice, setRegenNotice] = useState('')
+  // Which variant the STORED lyrics were generated with (track_lyrics.language).
+  const [lyricsLang, setLyricsLang] = useState<string | null>(null)
   const lyricsAbortRef = useRef(false)
 
   // Auto-scroll plumbing: pause while the user is manually scrolling the pane
@@ -236,6 +263,7 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         if (res.ok) {
           const data = await res.json()
           setLyrics(Array.isArray(data.lyrics) ? data.lyrics : [])
+          setLyricsLang(typeof data.language === 'string' ? data.language : null)
           setLyricsState(Array.isArray(data.lyrics) && data.lyrics.length > 0 ? 'ready' : 'offer')
         } else {
           setLyricsState('offer') // 404 (none yet) or any error — offer, don't block
@@ -246,20 +274,26 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function generateLyrics() {
+  // force = regenerate: skips the server cache and REPLACES the stored row
+  // (the confirm dialog has already warned that current lyrics + edits go).
+  async function generateLyrics(force = false) {
     if (!lyricsSourceKey || lyricsState === 'generating') return
+    const prevLyrics = lyrics
+    setRegenOpen(false)
+    setRegenNotice('')
     setLyricsState('generating')
     setLyricsError('')
     try {
       const startRes = await fetch('/api/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stemPath: lyricsSourceKey, language: langHint }),
+        body: JSON.stringify({ stemPath: lyricsSourceKey, language: langHint, force }),
       })
       const start = await startRes.json()
       if (!startRes.ok) throw new Error(start.error ?? `Failed to start (${startRes.status})`)
       if (start.cached && Array.isArray(start.lyrics)) {
         setLyrics(start.lyrics)
+        setLyricsLang(typeof start.language === 'string' ? start.language : null)
         setLyricsState('ready')
         return
       }
@@ -271,12 +305,13 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         await new Promise((r) => setTimeout(r, 3000))
         if (lyricsAbortRef.current) return
         const pollRes = await fetch(
-          `/api/lyrics?id=${encodeURIComponent(predictionId)}&stemPath=${encodeURIComponent(lyricsSourceKey)}&language=${langHint}`,
+          `/api/lyrics?id=${encodeURIComponent(predictionId)}&stemPath=${encodeURIComponent(lyricsSourceKey)}&language=${langHint}${force ? '&force=1' : ''}`,
         )
         const poll = await pollRes.json()
         if (!pollRes.ok) throw new Error(poll.error ?? `Poll failed (${pollRes.status})`)
         if (poll.status === 'succeeded' && Array.isArray(poll.lyrics)) {
           setLyrics(poll.lyrics)
+          setLyricsLang(langHint)
           setLyricsState('ready')
           return
         }
@@ -287,7 +322,16 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
       throw new Error('Transcription timed out — please try again')
     } catch (err) {
       if (lyricsAbortRef.current) return
-      setLyricsError(err instanceof Error ? err.message : 'Something went wrong')
+      const msg = err instanceof Error ? err.message : 'Something went wrong'
+      if (force && prevLyrics.length > 0) {
+        // Failed regenerate: nothing was replaced or charged server-side —
+        // fall back to the still-stored lyrics instead of an error dead-end.
+        setLyrics(prevLyrics)
+        setRegenNotice(`Regenerate failed — kept the existing lyrics. (${msg})`)
+        setLyricsState('ready')
+        return
+      }
+      setLyricsError(msg)
       setLyricsState('error')
     }
   }
@@ -453,15 +497,14 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
               <select
                 className="pm-lang"
                 value={langHint}
-                onChange={(e) => setLangHint(e.target.value as 'auto' | 'hindi' | 'english')}
+                onChange={(e) => setLangHint(e.target.value as LangHint)}
                 aria-label="Lyrics language hint"
               >
-                <option value="auto">Auto-detect</option>
-                <option value="hindi">Hindi</option>
-                <option value="english">English</option>
+                {LANG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <button className="pm-gen" onClick={generateLyrics}>Generate lyrics · 25 cr</button>
+              <button className="pm-gen" onClick={() => generateLyrics()}>Generate lyrics · 25 cr</button>
             </div>
+            <p className="pm-offer-note pm-offer-note--lang">{LANG_GUIDE}</p>
             <p className="pm-offer-note">
               Lyrics are auto-transcribed from the vocal by AI. Expect some mistakes —
               singing is hard to transcribe, mixed-language songs come out inconsistently,
@@ -475,7 +518,7 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         {lyricsState === 'error' && (
           <div className="pm-offer">
             <p className="pm-offer-note pm-offer-note--err">{lyricsError || 'Transcription failed.'}</p>
-            <button className="pm-gen" onClick={generateLyrics}>Try again · 25 cr</button>
+            <button className="pm-gen" onClick={() => generateLyrics()}>Try again · 25 cr</button>
           </div>
         )}
         {lyricsState === 'ready' && displayItems.length > 0 && (
@@ -497,9 +540,15 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
                 </button>
               ))}
             </div>
+            {regenNotice && <div className="pm-regen-notice">{regenNotice}</div>}
             <div className="pm-lyrics-foot">
-              <span>Auto-transcribed — may contain mistakes</span>
-              <button className="pm-edit-btn" onClick={() => setEditOpen(true)}>✎ Edit lyrics</button>
+              <span>
+                Auto-transcribed{lyricsLang && LANG_LABELS[lyricsLang] ? ` · ${LANG_LABELS[lyricsLang]}` : ''} — may contain mistakes
+              </span>
+              <span className="pm-foot-actions">
+                <button className="pm-edit-btn" onClick={() => setRegenOpen(true)}>↻ Regenerate</button>
+                <button className="pm-edit-btn" onClick={() => setEditOpen(true)}>✎ Edit lyrics</button>
+              </span>
             </div>
           </>
         )}
@@ -551,6 +600,33 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
           onCancel={() => setEditOpen(false)}
           onSaved={(newLines) => { setLyrics(newLines); setEditOpen(false) }}
         />
+      )}
+
+      {regenOpen && (
+        <div className="pm-edit-overlay" role="dialog" aria-label="Regenerate lyrics">
+          <div className="pm-edit-card pm-regen-card">
+            <div className="pm-edit-head">
+              <span className="pm-edit-title">Regenerate lyrics?</span>
+              <span className="pm-edit-sub">
+                This replaces the current lyrics for this track — any edits you made will be lost.
+                Costs 25 credits again when it succeeds.
+              </span>
+            </div>
+            <select
+              className="pm-lang pm-regen-lang"
+              value={langHint}
+              onChange={(e) => setLangHint(e.target.value as LangHint)}
+              aria-label="Lyrics language hint"
+            >
+              {LANG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="pm-offer-note pm-offer-note--lang">{LANG_GUIDE}</p>
+            <div className="pm-edit-actions">
+              <button className="pm-edit-cancel" onClick={() => setRegenOpen(false)}>Cancel</button>
+              <button className="pm-edit-save" onClick={() => generateLyrics(true)}>↻ Regenerate · 25 cr</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style suppressHydrationWarning>{`
@@ -682,7 +758,17 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         .pm-lyrics-foot {
           width: 100%; display: flex; justify-content: space-between; align-items: center;
           font-size: 11px; color: #5A5A80; margin-bottom: 20px; padding: 0 4px;
+          gap: 10px;
         }
+        .pm-foot-actions { display: flex; gap: 14px; flex-shrink: 0; }
+        .pm-regen-notice {
+          width: 100%; font-size: 11px; color: #FBBF24;
+          margin: 2px 0 6px; padding: 0 4px; text-align: left;
+        }
+        .pm-offer-note--lang { color: #9C9CC4; margin-bottom: 6px; }
+        .pm-regen-card { max-width: 440px; }
+        .pm-regen-lang { width: 100%; margin-bottom: 10px; }
+        .pm-regen-card .pm-offer-note--lang { text-align: left; max-width: none; }
         .pm-edit-btn {
           border: none; background: transparent; cursor: pointer;
           font-size: 11px; font-weight: 600; color: #7878A0;
