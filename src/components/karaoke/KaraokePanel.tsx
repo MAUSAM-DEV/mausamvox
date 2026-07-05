@@ -275,7 +275,7 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
       {/* Synced lyrics: generate/edit before you record, follow along during
           the take. No onSeek — jumping the backing mid-take would misalign
           the recording. */}
-      <LyricsPane sourceKey={lyricsSourceKey} time={backTime} compact />
+      <LyricsPane sourceKey={lyricsSourceKey} time={backTime} compact audioRef={audioRef} playing={recState === 'recording'} />
 
       {prep === 'preparing' && <div className="kp-note">Preparing the backing track…</div>}
       {prep === 'error' && <div className="kp-note kp-note--err">Couldn&rsquo;t load the backing track — try re-opening this panel.</div>}

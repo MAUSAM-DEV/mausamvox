@@ -196,7 +196,7 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         <p className="pm-note">{sourceNote}</p>
         <p className="pm-honest">Plays out loud — nothing is recorded.</p>
 
-        <LyricsPane sourceKey={lyricsSourceKey} time={time} onSeek={seekToSeconds} />
+        <LyricsPane sourceKey={lyricsSourceKey} time={time} onSeek={seekToSeconds} audioRef={audioRef} playing={playing} />
 
         {prep === 'preparing' && <div className="pm-status">Preparing the backing track…</div>}
         {prep === 'error' && <div className="pm-status pm-status--err">Couldn&rsquo;t load the backing track — close and try again.</div>}

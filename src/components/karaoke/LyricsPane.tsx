@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, memo, type RefObject } from 'react'
 
 // Shared synced-lyrics pane — the whole lyrics feature in one component:
 // load-if-stored, "Generate lyrics · 25 cr" offer with the language choice +
@@ -22,9 +22,16 @@ interface LyricsPaneProps {
   // Card context (KaraokePanel): smaller type + shorter pane than the
   // full-screen Performance Mode overlay.
   compact?: boolean
+  // Word-level highlighting (step 2): the host's <audio> element and whether
+  // it is currently playing. When both are provided AND the current line has
+  // per-word timings, each word lights up as it's sung — driven by rAF reading
+  // audioRef.currentTime, never per-frame React state. Absent = line-only.
+  audioRef?: RefObject<HTMLAudioElement | null>
+  playing?: boolean
 }
 
-export type LyricLine = { start: number; end: number; text: string }
+export type WordTiming = { text: string; start: number; end: number }
+export type LyricLine = { start: number; end: number; text: string; words?: WordTiming[] }
 
 type LangHint = 'auto' | 'hindi-rom' | 'hindi-deva' | 'english'
 
@@ -54,7 +61,8 @@ const LANG_GUIDE =
 
 // What the pane renders: real lines plus ♪ markers for long instrumental
 // gaps (intros, solos) so the highlight always has somewhere honest to sit.
-type DisplayItem = { kind: 'line' | 'gap'; start: number; end: number; text: string }
+// `words` rides along on line items (absent on gaps, old rows, edited lines).
+type DisplayItem = { kind: 'line' | 'gap'; start: number; end: number; text: string; words?: WordTiming[] }
 
 // Gaps longer than this get a ♪ marker; while sitting on that marker, the last
 // COUNTDOWN_SECONDS turn it into a 3-2-1 "come in" countdown for the singer.
@@ -68,7 +76,7 @@ function buildDisplayList(lines: LyricLine[]): DisplayItem[] {
     if (l.start - prevEnd > GAP_MARKER_SECONDS) {
       items.push({ kind: 'gap', start: prevEnd, end: l.start, text: '♪' })
     }
-    items.push({ kind: 'line', start: l.start, end: l.end, text: l.text })
+    items.push({ kind: 'line', start: l.start, end: l.end, text: l.text, words: l.words })
     prevEnd = Math.max(prevEnd, l.end)
   }
   return items
@@ -122,8 +130,11 @@ function LyricsEditModal({
   async function save() {
     if (saving) return
     // Empty texts count as deletions; at least one real line must remain.
-    const cleaned = draft
-      .map((l) => ({ ...l, text: l.text.trim() }))
+    // Drop any per-word timings — the edited text no longer matches them, so
+    // the whole row reverts to line-level highlighting (mirrors what the PATCH
+    // route stores: only start/end/text).
+    const cleaned: LyricLine[] = draft
+      .map((l) => ({ start: l.start, end: l.end, text: l.text.trim() }))
       .filter((l) => l.text.length > 0)
     if (cleaned.length === 0) {
       setError('At least one line is needed — delete the lyrics entirely by just not using them.')
@@ -186,7 +197,24 @@ function LyricsEditModal({
   )
 }
 
-export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps) {
+// The current line rendered as per-word spans. Memoized on `words` so it does
+// NOT re-render on the parent's ~4/s time-tick — that would reset the spans'
+// className and wipe the classes the rAF loop imperatively sets. It only
+// re-renders when the current line (its `words` array) actually changes, at
+// which point the parent's rAF effect re-queries the spans and re-binds. The
+// loop finds the spans by querying the current line's DOM node (`.lyr-word`),
+// which is robust to seek direction — no shared ref array to get out of order.
+const WordLine = memo(function WordLine({ words }: { words: WordTiming[] }) {
+  return (
+    <>
+      {words.map((w, i) => (
+        <span key={i} className="lyr-word">{i > 0 ? ' ' : ''}{w.text}</span>
+      ))}
+    </>
+  )
+})
+
+export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing }: LyricsPaneProps) {
   // 'unavailable' = no source key (legacy swap / manual stems) — feature absent.
   // 'offer' = no stored lyrics yet; show the generate button + honesty copy.
   const [lyricsState, setLyricsState] = useState<'unavailable' | 'checking' | 'offer' | 'generating' | 'ready' | 'error'>(
@@ -214,7 +242,19 @@ export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const progScrollTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  const displayItems = lyricsState === 'ready' ? buildDisplayList(lyrics) : []
+  // Word-highlighting plumbing (step 2): the rAF handle + the last active-word
+  // index (so we only touch the DOM when the active word changes, not every
+  // frame). The spans themselves are queried from the current line's DOM node.
+  const rafRef = useRef<number>()
+  const lastActiveWordRef = useRef(-2)
+
+  // Memoized so `words` arrays keep a stable identity across time-tick
+  // re-renders (WordLine's memo depends on it) — rebuilt only when the lyrics
+  // themselves change.
+  const displayItems = useMemo(
+    () => (lyricsState === 'ready' ? buildDisplayList(lyrics) : []),
+    [lyricsState, lyrics],
+  )
   // Current item = last one whose start we've passed. Done = anything before
   // it. Between a line's end and the next start (short gaps) the finished line
   // stays current — steadier to read than flicker-clearing the highlight.
@@ -319,6 +359,57 @@ export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [currentIdx, lyricsState])
 
+  // ── Word-level highlighting (step 2) ───────────────────────────────────────
+  // Within the CURRENT line only, light each word as it's sung. Driven by rAF
+  // reading audioRef.currentTime — no per-frame setState; classes are toggled
+  // imperatively on the memoized WordLine spans. Re-runs (and cleans up its
+  // frame) on line change, play/pause, or lyrics change; falls back to nothing
+  // for lines without `words` (old rows, edited lines), which keep whole-line
+  // highlighting via the CSS on the button.
+  useEffect(() => {
+    if (lyricsState !== 'ready') return
+    const item = displayItems[currentIdx]
+    const words = item && item.kind === 'line' ? item.words : undefined
+    if (!words || words.length === 0) return
+    const audio = audioRef?.current ?? null
+
+    // Query the current line's word spans once per line (after commit, so they
+    // exist). Robust to seek direction — no cross-render ref bookkeeping.
+    const button = lineRefs.current[currentIdx]
+    const spans = button ? Array.from(button.querySelectorAll<HTMLElement>('.lyr-word')) : []
+    if (spans.length === 0) return
+
+    lastActiveWordRef.current = -2
+    const paint = (t: number) => {
+      let active = -1
+      for (let i = 0; i < words.length; i++) {
+        if (words[i].start <= t) active = i
+        else break
+      }
+      if (active === lastActiveWordRef.current) return // nothing changed this frame
+      lastActiveWordRef.current = active
+      for (let i = 0; i < spans.length; i++) {
+        spans[i].classList.toggle('lyr-word--sung', i < active)
+        spans[i].classList.toggle('lyr-word--active', i === active)
+      }
+    }
+
+    // One immediate paint so a paused / just-scrolled-to line shows the right
+    // word without waiting for the loop (and so paused state stays correct).
+    paint(audio ? audio.currentTime : time)
+
+    if (!playing || !audio) return
+    const tick = () => {
+      paint(audio.currentTime)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = undefined }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIdx, lyricsState, playing, displayItems])
+
   function onPaneScroll() {
     if (programmaticScrollRef.current) return
     userScrollingRef.current = true
@@ -384,6 +475,13 @@ export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps
                   counting = true
                 }
               }
+              // Per-word render ONLY for the current line, only when it has
+              // word timings and the host wired an audio element. Everything
+              // else (past/upcoming lines, gaps, old rows, edited lines) keeps
+              // whole-line rendering + the existing CSS highlight.
+              const useWords =
+                isCurrent && item.kind === 'line' &&
+                Array.isArray(item.words) && item.words.length > 0 && !!audioRef
               return (
                 <button
                   key={`${item.start}-${i}`}
@@ -393,13 +491,14 @@ export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps
                     item.kind === 'gap' ? 'lyr-line--gap' : '',
                     counting ? 'lyr-line--count' : '',
                     i < currentIdx ? 'lyr-line--done' : isCurrent ? 'lyr-line--current' : '',
+                    useWords ? 'lyr-line--words' : '',
                     onSeek ? 'lyr-line--seekable' : '',
                   ].filter(Boolean).join(' ')}
                   onClick={onSeek ? () => onSeek(Math.max(0, item.start)) : undefined}
                   title={onSeek ? 'Tap to jump here' : undefined}
                   disabled={!onSeek}
                 >
-                  {text}
+                  {useWords ? <WordLine words={item.words!} /> : text}
                 </button>
               )
             })}
@@ -518,6 +617,26 @@ export function LyricsPane({ sourceKey, time, onSeek, compact }: LyricsPaneProps
         }
         .lyr-line--gap { font-size: 14px; letter-spacing: 6px; color: #5A5A80; }
         .lyr-line--gap.lyr-line--current { color: #8B5CF6; }
+        /* Current line rendered as per-word spans: turn OFF the gradient text
+           fill (declared after the gradient rule so it wins at equal
+           specificity) — the child word spans set their own colours. Keep the
+           scale + glow so the active line still reads as the focal line. */
+        .lyr-line--current.lyr-line--words {
+          background: none;
+          -webkit-text-fill-color: initial;
+          color: #6E6E98;
+        }
+        .lyr-word {
+          display: inline-block;
+          color: #6E6E98; /* not-yet-sung word in the current line */
+          -webkit-text-fill-color: currentColor; /* defeat any inherited gradient transparency */
+          transition: color 0.12s ease, transform 0.12s ease, text-shadow 0.12s ease;
+        }
+        .lyr-word--sung { color: #F0F0FF; } /* already sung, still lit */
+        .lyr-word--active {
+          color: #F472B6; transform: scale(1.14);
+          text-shadow: 0 0 20px rgba(244,114,182,.6);
+        } /* the word being sung — the focal point */
         /* Come-in countdown (3-2-1) on the current gap marker — big, pink,
            pulsing once a second so it doesn't read as a lyric. */
         .lyr-line--count {
