@@ -23,12 +23,13 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    // Fetch result_path before deleting so we can clean up storage afterward.
+    // Fetch the storage paths before deleting so we can clean up afterward.
     // user_id filter is the ownership gate — service role bypasses RLS but we
-    // enforce ownership explicitly on every query.
+    // enforce ownership explicitly on every query. select('*') tolerates
+    // migration timing on instrumental_path (see the proxy route).
     const { data: swapRow } = await supabaseAdmin
       .from('voice_swaps')
-      .select('result_path')
+      .select('*')
       .eq('id', swapId)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -46,16 +47,18 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
 
-    // Best-effort: remove the persisted MP3. Log on failure but don't error the
+    // Best-effort: remove the persisted MP3(s) — the full mix and, when one was
+    // stored, the music-only instrumental. Log on failure but don't error the
     // response — the row is already gone and the caller should treat it as success.
-    if (swapRow?.result_path) {
+    const paths = [swapRow?.result_path, swapRow?.instrumental_path].filter(Boolean) as string[]
+    if (paths.length > 0) {
       const { error: storageError } = await supabaseAdmin.storage
         .from(VOICE_SWAPS_BUCKET)
-        .remove([swapRow.result_path])
+        .remove(paths)
       if (storageError) {
         console.error('[voice-swaps/delete] storage removal failed (row already deleted):', storageError.message)
       } else {
-        console.log('[voice-swaps/delete] storage file removed:', swapRow.result_path)
+        console.log('[voice-swaps/delete] storage files removed:', paths.join(', '))
       }
     }
 

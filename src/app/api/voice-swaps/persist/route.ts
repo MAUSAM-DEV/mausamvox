@@ -54,13 +54,15 @@ export async function POST(req: NextRequest) {
   // FULL mix (clone vocal + instrumental). When present we store THAT as the
   // durable result instead of the bare RVC vocal, so Recent Swaps plays the
   // full track. result_url still holds the Replicate vocal URL as a fallback.
-  let body: { predictionId?: string; songName?: string; voiceUsed?: string; mixedPath?: string }
+  // instrumentalPath (optional): sibling MUSIC-ONLY mix for Performance Mode's
+  // "Music only" backing — best-effort, stored as voice_swaps.instrumental_path.
+  let body: { predictionId?: string; songName?: string; voiceUsed?: string; mixedPath?: string; instrumentalPath?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { predictionId, songName, voiceUsed, mixedPath } = body
+  const { predictionId, songName, voiceUsed, mixedPath, instrumentalPath } = body
   if (!predictionId) return NextResponse.json({ error: 'predictionId is required' }, { status: 400 })
   if (!songName)     return NextResponse.json({ error: 'songName is required' }, { status: 400 })
   if (!voiceUsed)    return NextResponse.json({ error: 'voiceUsed is required' }, { status: 400 })
@@ -138,10 +140,45 @@ export async function POST(req: NextRequest) {
     console.error('[voice-swaps/persist] storage step threw:', err instanceof Error ? err.message : String(err))
   }
 
+  // ── Best-effort: persist the MUSIC-ONLY instrumental alongside ─────────────
+  // Same sign → download → upload dance as the mix above. Any failure leaves
+  // instrPath null: the swap still saves fully, /swaps just won't offer the
+  // "Music only" Performance Mode backing for this row.
+  let instrPath: string | null = null
+  if (instrumentalPath && !instrumentalPath.includes('..')) {
+    try {
+      const { data: signed, error: signErr } = await supabaseAdmin.storage
+        .from('audio-uploads')
+        .createSignedUrl(instrumentalPath, 600)
+      if (signErr || !signed?.signedUrl) {
+        console.error('[voice-swaps/persist] instrumental sign failed:', signErr?.message)
+      } else {
+        const res = await fetch(signed.signedUrl)
+        if (!res.ok) {
+          console.error(`[voice-swaps/persist] instrumental download failed HTTP ${res.status}`)
+        } else {
+          const buf = Buffer.from(await res.arrayBuffer())
+          const path = `${user.id}/${swapId}-instrumental.mp3`
+          const { error: upErr } = await supabaseAdmin.storage
+            .from(VOICE_SWAPS_BUCKET)
+            .upload(path, buf, { contentType: 'audio/mpeg', upsert: false })
+          if (upErr) {
+            console.error('[voice-swaps/persist] instrumental upload failed:', upErr.message)
+          } else {
+            instrPath = path
+            console.log('[voice-swaps/persist] instrumental stored:', path)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[voice-swaps/persist] instrumental step threw:', err instanceof Error ? err.message : String(err))
+    }
+  }
+
   // ── Insert the voice_swaps row (always, with or without result_path) ──────
   // ON CONFLICT on replicate_prediction_id is our idempotency guard — a second
   // call for the same predictionId is silently dropped.
-  const { error: insertError } = await supabaseAdmin
+  let { error: insertError } = await supabaseAdmin
     .from('voice_swaps')
     .insert({
       id: swapId,
@@ -151,8 +188,29 @@ export async function POST(req: NextRequest) {
       quality_score: null,
       result_url: resultUrl,
       result_path: resultPath,
+      instrumental_path: instrPath,
       replicate_prediction_id: predictionId,
     })
+
+  // Deploy-before-migrate safety: if the instrumental_path column doesn't
+  // exist yet (migration 20260705000000 not applied), PostgREST rejects the
+  // whole insert (PGRST204 "column not found"). Retry once without it so a
+  // swap is NEVER lost to a schema lag — just saved without the instrumental.
+  if (insertError && /instrumental_path/.test(insertError.message)) {
+    console.error('[voice-swaps/persist] instrumental_path column missing — run migration 20260705000000. Retrying insert without it.')
+    ;({ error: insertError } = await supabaseAdmin
+      .from('voice_swaps')
+      .insert({
+        id: swapId,
+        user_id: user.id,
+        song_name: songName,
+        voice_used: voiceUsed,
+        quality_score: null,
+        result_url: resultUrl,
+        result_path: resultPath,
+        replicate_prediction_id: predictionId,
+      }))
+  }
 
   if (insertError) {
     // Unique violation → another concurrent request already inserted — return its id.

@@ -21,6 +21,9 @@ type SwapRow = {
   voice_used: string
   created_at: string
   result_path: string | null
+  // Music-only backing for Performance Mode. Null on rows saved before the
+  // instrumental started being stored (2026-07-05) or when its save soft-failed.
+  instrumental_path?: string | null
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -38,7 +41,9 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
   const [downloading, setDownloading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [karaokeOpen, setKaraokeOpen] = useState(false)
-  const [performOpen, setPerformOpen] = useState(false)
+  // Which Performance Mode source is open: the full saved track (vocal
+  // included) or the stored music-only instrumental. Null = closed.
+  const [performSource, setPerformSource] = useState<'full' | 'music' | null>(null)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -59,8 +64,11 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
       const uid = data.user?.id
       if (!uid) return // middleware guarantees a session; belt-and-braces
       supabase
+        // select('*') tolerates migration timing on instrumental_path — naming
+        // it explicitly would 400 the whole query on a deploy that outruns
+        // migration 20260705000000, taking the page down with it.
         .from('voice_swaps')
-        .select('id, song_name, voice_used, created_at, result_path')
+        .select('*')
         .eq('id', swapId)
         .eq('user_id', uid)
         .maybeSingle()
@@ -209,9 +217,14 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                     🎤 Sing along
                   </button>
                 )}
-                <button className="sw-btn-ghost" onClick={() => setPerformOpen(true)}>
+                <button className="sw-btn-ghost" onClick={() => setPerformSource('full')}>
                   🔊 Perform live
                 </button>
+                {swap.instrumental_path && (
+                  <button className="sw-btn-ghost" onClick={() => setPerformSource('music')}>
+                    🎼 Perform live · music only
+                  </button>
+                )}
                 <button className="sw-btn-danger" onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
@@ -228,19 +241,31 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
 
               <p className="sw-note-fine">
                 This is the finished track exactly as it was saved (effects included).
-                Want a different take? <Link href="/voice-swap" style={{ color: '#8B5CF6' }}>Run a new swap</Link>.
+                {!swap.instrumental_path && (
+                  <> A music-only backing isn&rsquo;t stored for this track — it was
+                  saved before we started keeping one. Run a new swap to get it.</>
+                )}
+                {' '}Want a different take? <Link href="/voice-swap" style={{ color: '#8B5CF6' }}>Run a new swap</Link>.
               </p>
             </div>
           )}
         </main>
       </div>
 
-      {performOpen && swap && (
+      {performSource && swap && (
         <PerformanceMode
           trackName={swap.song_name}
-          sourceNote="Full track — includes the recorded vocal (a duet with your clone)"
-          srcUrl={playerSrc}
-          onClose={() => setPerformOpen(false)}
+          sourceNote={
+            performSource === 'music'
+              ? 'Music only — instrumental backing, the recorded vocal is muted'
+              : 'Full track — includes the recorded vocal (a duet with your clone)'
+          }
+          srcUrl={
+            performSource === 'music'
+              ? `/api/voice-swaps/${swapId}/instrumental.mp3`
+              : playerSrc
+          }
+          onClose={() => setPerformSource(null)}
         />
       )}
 

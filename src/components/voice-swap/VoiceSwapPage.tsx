@@ -439,13 +439,13 @@ export function VoiceSwapPage() {
   // Persists the swap result server-side: downloads the Replicate MP3, uploads
   // it to durable Supabase storage, and inserts the voice_swaps row — all within
   // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
-  async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string) {
+  async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string, instrumentalPath?: string) {
     if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return }
     try {
       const res = await fetch('/api/voice-swaps/persist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath }),
+        body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath, instrumentalPath }),
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
@@ -473,12 +473,12 @@ export function VoiceSwapPage() {
   // mixedPath means the mix/upload failed — we still persist, falling back to the
   // vocal-only result so the swap isn't lost from Recent Swaps. No-op when there's
   // no armed context (e.g. a preview, or already handled).
-  function handleFullMixReady(mixedPath: string | null) {
+  function handleFullMixReady(mixedPath: string | null, instrumentalPath?: string | null) {
     const ctx = persistContextRef.current
     if (!ctx) return
     persistContextRef.current = null
     setArmMixUpload(false)
-    persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined)
+    persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
       .catch(() => { /* ignore — swap is still complete */ })
   }
 

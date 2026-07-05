@@ -36,8 +36,10 @@ interface ResultStepProps {
   // When true (a full swap, not a preview), upload the built full-song mix and
   // report its storage path via onFullMixReady so Recent Swaps saves the FULL
   // track. A null path means the mix/upload failed → caller persists the vocal.
+  // instrumentalPath is the sibling MUSIC-ONLY mix (Performance Mode's "Music
+  // only" backing) — best-effort, null whenever its render/upload fails.
   persistMix?: boolean
-  onFullMixReady?: (mixedPath: string | null) => void
+  onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => void
   // Name(s) of the voice model(s) the swap used — shown in the result summary.
   voiceName?: string | null
 }
@@ -58,7 +60,7 @@ const PLAY_MODES: { id: PlayMode; label: string }[] = [
 // same presign → PUT flow the Fine-tune preview uses (bypasses Vercel's body
 // limit — a full-song mix is large). Returns the storage path, or null on any
 // failure so the caller can fall back to persisting the vocal-only result.
-async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
+async function uploadFullMixMp3(wavMixUrl: string, filename = 'swap-full-mix.mp3'): Promise<string | null> {
   try {
     const res = await fetch(wavMixUrl)
     if (!res.ok) return null
@@ -70,7 +72,7 @@ async function uploadFullMixMp3(wavMixUrl: string): Promise<string | null> {
     const presignRes = await fetch('/api/upload-stem/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: 'swap-full-mix.mp3', contentType: 'audio/mpeg' }),
+      body: JSON.stringify({ filename, contentType: 'audio/mpeg' }),
     })
     const presign = await presignRes.json()
     if (!presignRes.ok) return null
@@ -151,8 +153,11 @@ async function mixStems(
     return null
   }
   const validVocals = vocalBufs.filter((b): b is AudioBuffer => b !== null)
-  if (validVocals.length === 0) return null
   const validMusic = musicBufs.filter((b): b is AudioBuffer => b !== null)
+  // An empty vocal list is a legitimate request — the music-only instrumental
+  // render for Performance Mode's "Music only" backing. Only bail when there
+  // is nothing at all to mix.
+  if (validVocals.length === 0 && validMusic.length === 0) return null
 
   const SAMPLE_RATE = 44100
   const duration = Math.max(
@@ -899,7 +904,29 @@ export function ResultStep({
     const t = setTimeout(() => {
       if (persistedRef.current) return
       persistedRef.current = true
-      uploadFullMixMp3(mixedSwappedUrl).then((path) => onFullMixReady?.(path))
+      // Sibling MUSIC-ONLY render for Performance Mode's "Music only" backing:
+      // the same music bed at the same 0.8 gain, no vocals, no polish (polish
+      // only ever touches the vocal path). Strictly best-effort — a null
+      // instrumental never blocks or delays the main save, the row just gets
+      // instrumental_path = null and /swaps falls back to full-track-only.
+      const musicUrls = [
+        stemResult?.instrumentalUrl,
+        stemResult?.bassUrl,
+        stemResult?.drumsUrl,
+        stemResult?.otherUrl,
+      ].filter((u): u is string => Boolean(u))
+      const instrumentalPromise: Promise<string | null> = musicUrls.length === 0
+        ? Promise.resolve(null)
+        : mixStems([], musicUrls)
+            .then((blob) => {
+              if (!blob) return null
+              const url = URL.createObjectURL(blob)
+              return uploadFullMixMp3(url, 'swap-instrumental.mp3')
+                .finally(() => URL.revokeObjectURL(url))
+            })
+            .catch(() => null)
+      Promise.all([uploadFullMixMp3(mixedSwappedUrl), instrumentalPromise])
+        .then(([path, instrumentalPath]) => onFullMixReady?.(path, instrumentalPath))
     }, 1000)
     return () => clearTimeout(t)
   }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo]) // eslint-disable-line react-hooks/exhaustive-deps
