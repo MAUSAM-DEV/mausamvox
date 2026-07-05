@@ -18,8 +18,16 @@ import { sumBuffers } from './KaraokePanel'
 //                instrumental, then played from a WAV object URL. Used for
 //                Stem Studio's bass/drums/other.
 //
-// Deferred (recorded in PROJECT_STATUS): /swaps-row shortcut, persisted
-// per-swap instrumentals (muted-lead backing), playlists, lyrics.
+// Lyrics (v1, single-color): when lyricsSourceKey (the durable vocal-stem
+// path) is provided, the overlay offers on-demand auto-transcription via
+// /api/lyrics and renders an auto-scrolling synced pane — dimmed done lines,
+// highlighted current line, tap-to-seek, ♪ markers for long instrumental
+// gaps, and a per-line edit modal (transcription of singing WILL have
+// errors). Timestamps come from the ORIGINAL vocal stem; RVC preserves
+// timing, so they fit the swapped track too.
+//
+// Deferred (recorded in PROJECT_STATUS): /swaps-row shortcut, playlists,
+// v2 gender-colored lyrics (gender-split stems or diarization).
 
 interface PerformanceModeProps {
   trackName: string
@@ -28,7 +36,31 @@ interface PerformanceModeProps {
   sourceNote: string
   srcUrl?: string | null
   stemUrls?: string[] | null
+  // Durable vocal-stem path (track_lyrics.source_key). Null/absent = the
+  // lyrics feature is simply not offered (legacy swaps, manual-stems uploads).
+  lyricsSourceKey?: string | null
   onClose: () => void
+}
+
+type LyricLine = { start: number; end: number; text: string }
+
+// What the pane renders: real lines plus ♪ markers for long instrumental
+// gaps (intros, solos) so the highlight always has somewhere honest to sit.
+type DisplayItem = { kind: 'line' | 'gap'; start: number; end: number; text: string }
+
+const GAP_MARKER_SECONDS = 8
+
+function buildDisplayList(lines: LyricLine[]): DisplayItem[] {
+  const items: DisplayItem[] = []
+  let prevEnd = 0
+  for (const l of lines) {
+    if (l.start - prevEnd > GAP_MARKER_SECONDS) {
+      items.push({ kind: 'gap', start: prevEnd, end: l.start, text: '♪' })
+    }
+    items.push({ kind: 'line', start: l.start, end: l.end, text: l.text })
+    prevEnd = Math.max(prevEnd, l.end)
+  }
+  return items
 }
 
 // Minimal structural type for the Screen Wake Lock API — not yet in every TS
@@ -44,7 +76,7 @@ function fmt(secs: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, onClose }: PerformanceModeProps) {
+export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyricsSourceKey, onClose }: PerformanceModeProps) {
   const [prep, setPrep] = useState<'preparing' | 'ready' | 'error'>(srcUrl ? 'ready' : 'preparing')
   const [playSrc, setPlaySrc] = useState<string | null>(srcUrl ?? null)
   const [playing, setPlaying] = useState(false)
@@ -55,6 +87,135 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, onClo
   const objectUrlRef = useRef<string | null>(null)
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const playingRef = useRef(false)
+
+  // ── Lyrics state ───────────────────────────────────────────────────────────
+  // 'unavailable' = no source key (legacy swap / manual stems) — feature absent.
+  // 'offer' = no stored lyrics yet; show the generate button + honesty copy.
+  const [lyricsState, setLyricsState] = useState<'unavailable' | 'checking' | 'offer' | 'generating' | 'ready' | 'error'>(
+    lyricsSourceKey ? 'checking' : 'unavailable',
+  )
+  const [lyrics, setLyrics] = useState<LyricLine[]>([])
+  const [lyricsError, setLyricsError] = useState('')
+  const [langHint, setLangHint] = useState<'auto' | 'hindi' | 'english'>('auto')
+  const [editOpen, setEditOpen] = useState(false)
+  const lyricsAbortRef = useRef(false)
+
+  // Auto-scroll plumbing: pause while the user is manually scrolling the pane
+  // (resume ~3s after they stop), and don't treat our own programmatic
+  // scrollIntoView as a manual scroll.
+  const paneRef = useRef<HTMLDivElement | null>(null)
+  const lineRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const userScrollingRef = useRef(false)
+  const programmaticScrollRef = useRef(false)
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const progScrollTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const displayItems = lyricsState === 'ready' ? buildDisplayList(lyrics) : []
+  // Current item = last one whose start we've passed. Done = anything before
+  // it. Between a line's end and the next start (short gaps) the finished line
+  // stays current — steadier to read than flicker-clearing the highlight.
+  let currentIdx = -1
+  for (let i = 0; i < displayItems.length; i++) {
+    if (displayItems[i].start <= time + 0.3) currentIdx = i
+    else break
+  }
+
+  // Load stored lyrics on open; 404 → offer to generate.
+  useEffect(() => {
+    if (!lyricsSourceKey) return
+    lyricsAbortRef.current = false
+    fetch(`/api/lyrics?stemPath=${encodeURIComponent(lyricsSourceKey)}`)
+      .then(async (res) => {
+        if (lyricsAbortRef.current) return
+        if (res.ok) {
+          const data = await res.json()
+          setLyrics(Array.isArray(data.lyrics) ? data.lyrics : [])
+          setLyricsState(Array.isArray(data.lyrics) && data.lyrics.length > 0 ? 'ready' : 'offer')
+        } else {
+          setLyricsState('offer') // 404 (none yet) or any error — offer, don't block
+        }
+      })
+      .catch(() => { if (!lyricsAbortRef.current) setLyricsState('offer') })
+    return () => { lyricsAbortRef.current = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function generateLyrics() {
+    if (!lyricsSourceKey || lyricsState === 'generating') return
+    setLyricsState('generating')
+    setLyricsError('')
+    try {
+      const startRes = await fetch('/api/lyrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stemPath: lyricsSourceKey, language: langHint }),
+      })
+      const start = await startRes.json()
+      if (!startRes.ok) throw new Error(start.error ?? `Failed to start (${startRes.status})`)
+      if (start.cached && Array.isArray(start.lyrics)) {
+        setLyrics(start.lyrics)
+        setLyricsState('ready')
+        return
+      }
+      const predictionId = start.predictionId as string | undefined
+      if (!predictionId) throw new Error('No prediction ID returned')
+
+      // Poll — typically ~10-30s; generous ceiling covers a rare cold boot.
+      for (let attempt = 0; attempt < 100; attempt++) {
+        await new Promise((r) => setTimeout(r, 3000))
+        if (lyricsAbortRef.current) return
+        const pollRes = await fetch(
+          `/api/lyrics?id=${encodeURIComponent(predictionId)}&stemPath=${encodeURIComponent(lyricsSourceKey)}&language=${langHint}`,
+        )
+        const poll = await pollRes.json()
+        if (!pollRes.ok) throw new Error(poll.error ?? `Poll failed (${pollRes.status})`)
+        if (poll.status === 'succeeded' && Array.isArray(poll.lyrics)) {
+          setLyrics(poll.lyrics)
+          setLyricsState('ready')
+          return
+        }
+        if (poll.status === 'failed' || poll.status === 'canceled') {
+          throw new Error(poll.error ?? 'Transcription failed')
+        }
+      }
+      throw new Error('Transcription timed out — please try again')
+    } catch (err) {
+      if (lyricsAbortRef.current) return
+      setLyricsError(err instanceof Error ? err.message : 'Something went wrong')
+      setLyricsState('error')
+    }
+  }
+
+  // Auto-scroll the current line to the pane's center when it changes.
+  useEffect(() => {
+    if (lyricsState !== 'ready' || currentIdx < 0 || userScrollingRef.current) return
+    const el = lineRefs.current[currentIdx]
+    if (!el) return
+    programmaticScrollRef.current = true
+    clearTimeout(progScrollTimerRef.current)
+    // Smooth scrolling fires many scroll events; hold the flag until it settles.
+    progScrollTimerRef.current = setTimeout(() => { programmaticScrollRef.current = false }, 700)
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [currentIdx, lyricsState])
+
+  function onPaneScroll() {
+    if (programmaticScrollRef.current) return
+    userScrollingRef.current = true
+    clearTimeout(resumeTimerRef.current)
+    resumeTimerRef.current = setTimeout(() => { userScrollingRef.current = false }, 3000)
+  }
+
+  useEffect(() => () => {
+    clearTimeout(resumeTimerRef.current)
+    clearTimeout(progScrollTimerRef.current)
+  }, [])
+
+  function seekToLine(item: DisplayItem) {
+    const a = audioRef.current
+    if (!a) return
+    a.currentTime = Math.max(0, item.start)
+    setTime(a.currentTime)
+  }
 
   // ── Backing prep (stems path only; srcUrl streams untouched) ──────────────
   useEffect(() => {
@@ -180,6 +341,63 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, onClo
         <p className="pm-note">{sourceNote}</p>
         <p className="pm-honest">Plays out loud — nothing is recorded.</p>
 
+        {lyricsState === 'offer' && (
+          <div className="pm-offer">
+            <div className="pm-offer-row">
+              <select
+                className="pm-lang"
+                value={langHint}
+                onChange={(e) => setLangHint(e.target.value as 'auto' | 'hindi' | 'english')}
+                aria-label="Lyrics language hint"
+              >
+                <option value="auto">Auto-detect</option>
+                <option value="hindi">Hindi</option>
+                <option value="english">English</option>
+              </select>
+              <button className="pm-gen" onClick={generateLyrics}>Generate lyrics · 25 cr</button>
+            </div>
+            <p className="pm-offer-note">
+              Lyrics are auto-transcribed from the vocal by AI. Expect some mistakes —
+              singing is hard to transcribe, mixed-language songs come out inconsistently,
+              and humming or ad-libs can appear as odd words. You can edit every line afterwards.
+            </p>
+          </div>
+        )}
+        {lyricsState === 'generating' && (
+          <div className="pm-offer"><p className="pm-offer-note">Transcribing the vocal — usually under a minute…</p></div>
+        )}
+        {lyricsState === 'error' && (
+          <div className="pm-offer">
+            <p className="pm-offer-note pm-offer-note--err">{lyricsError || 'Transcription failed.'}</p>
+            <button className="pm-gen" onClick={generateLyrics}>Try again · 25 cr</button>
+          </div>
+        )}
+        {lyricsState === 'ready' && displayItems.length > 0 && (
+          <>
+            <div className="pm-lyrics" ref={paneRef} onScroll={onPaneScroll}>
+              {displayItems.map((item, i) => (
+                <button
+                  key={`${item.start}-${i}`}
+                  ref={(el) => { lineRefs.current[i] = el }}
+                  className={[
+                    'pm-line',
+                    item.kind === 'gap' ? 'pm-line--gap' : '',
+                    i < currentIdx ? 'pm-line--done' : i === currentIdx ? 'pm-line--current' : '',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => seekToLine(item)}
+                  title="Tap to jump here"
+                >
+                  {item.text}
+                </button>
+              ))}
+            </div>
+            <div className="pm-lyrics-foot">
+              <span>Auto-transcribed — may contain mistakes</span>
+              <button className="pm-edit-btn" onClick={() => setEditOpen(true)}>✎ Edit lyrics</button>
+            </div>
+          </>
+        )}
+
         {prep === 'preparing' && <div className="pm-status">Preparing the backing track…</div>}
         {prep === 'error' && <div className="pm-status pm-status--err">Couldn&rsquo;t load the backing track — close and try again.</div>}
 
@@ -296,6 +514,66 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, onClo
           transition: all 0.2s;
         }
         .pm-restart:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .pm-offer { width: 100%; margin: -14px 0 26px; }
+        .pm-offer-row {
+          display: flex; gap: 10px; justify-content: center; align-items: stretch;
+          margin-bottom: 10px;
+        }
+        .pm-lang {
+          padding: 10px 12px; border-radius: 9px;
+          border: 1px solid #2A2A4A; background: #0E0E20; color: #C4C4E0;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .pm-gen {
+          padding: 10px 18px; border-radius: 9px; border: none; cursor: pointer;
+          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; transition: all 0.25s;
+        }
+        .pm-gen:hover { box-shadow: 0 6px 20px rgba(139,92,246,.4); }
+        .pm-offer-note {
+          font-size: 11px; color: #5A5A80; line-height: 1.6; margin: 0;
+          max-width: 400px; margin-left: auto; margin-right: auto;
+        }
+        .pm-offer-note--err { color: #F87171; margin-bottom: 10px; }
+        .pm-lyrics {
+          width: 100%; max-height: min(32vh, 300px);
+          overflow-y: auto; overscroll-behavior: contain;
+          margin: -10px 0 6px; padding: 10px 4px;
+          display: flex; flex-direction: column; gap: 2px;
+          /* soft fade top/bottom so lines glide in and out */
+          -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+          mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+          scrollbar-width: none;
+        }
+        .pm-lyrics::-webkit-scrollbar { display: none; }
+        .pm-line {
+          border: none; background: transparent; cursor: pointer;
+          padding: 5px 8px; border-radius: 8px;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 17px; font-weight: 600; line-height: 1.5;
+          color: #7878A0; /* upcoming */
+          transition: color 0.3s, opacity 0.3s, transform 0.3s;
+          word-break: break-word;
+        }
+        .pm-line:hover { color: #C4C4E0; }
+        .pm-line--done { color: #3A3A5C; opacity: 0.75; }
+        .pm-line--current {
+          color: #F0F0FF; transform: scale(1.04);
+          text-shadow: 0 0 24px rgba(139,92,246,.45);
+        }
+        .pm-line--gap { font-size: 14px; letter-spacing: 6px; color: #5A5A80; }
+        .pm-line--gap.pm-line--current { color: #8B5CF6; text-shadow: none; }
+        .pm-lyrics-foot {
+          width: 100%; display: flex; justify-content: space-between; align-items: center;
+          font-size: 11px; color: #5A5A80; margin-bottom: 20px; padding: 0 4px;
+        }
+        .pm-edit-btn {
+          border: none; background: transparent; cursor: pointer;
+          font-size: 11px; font-weight: 600; color: #7878A0;
+          transition: color 0.2s;
+        }
+        .pm-edit-btn:hover { color: #8B5CF6; }
       `}</style>
     </div>
   )

@@ -18,10 +18,11 @@ type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 
 // One entry per Demucs stem. url is a fresh signed URL from /api/stem-split
 // (durable audio-uploads copy, or the ~1h Replicate URL if persistence
-// soft-failed server-side).
-type Stems = { vocals: string; bass: string; drums: string; other: string }
+// soft-failed server-side). vocalsPath is the vocal's DURABLE storage path —
+// the lyrics key Performance Mode uses; absent if persistence soft-failed.
+type Stems = { vocals: string; bass: string; drums: string; other: string; vocalsPath?: string }
 
-const STEM_ROWS: Array<{ key: keyof Stems; label: string; emoji: string }> = [
+const STEM_ROWS: Array<{ key: 'vocals' | 'bass' | 'drums' | 'other'; label: string; emoji: string }> = [
   { key: 'vocals', label: 'Vocals', emoji: '🎤' },
   { key: 'bass',   label: 'Bass',   emoji: '🎸' },
   { key: 'drums',  label: 'Drums',  emoji: '🥁' },
@@ -191,7 +192,7 @@ export function StemStudioPage() {
         }
         const poll = await pollRes.json()
         if (poll.status === 'succeeded') {
-          result = { vocals: poll.vocals, bass: poll.bass, drums: poll.drums, other: poll.other }
+          result = { vocals: poll.vocals, bass: poll.bass, drums: poll.drums, other: poll.other, vocalsPath: poll.vocalsPath }
           break
         }
         if (poll.status === 'failed' || poll.status === 'canceled') {
@@ -367,6 +368,7 @@ export function StemStudioPage() {
           trackName={baseName}
           sourceNote="Instrumental backing — no vocals"
           stemUrls={[stems.bass, stems.drums, stems.other].filter(Boolean)}
+          lyricsSourceKey={stems.vocalsPath ?? null}
           onClose={() => setPerformOpen(false)}
         />
       )}

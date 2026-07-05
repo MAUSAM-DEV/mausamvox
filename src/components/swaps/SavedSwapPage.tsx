@@ -24,6 +24,9 @@ type SwapRow = {
   // Music-only backing for Performance Mode. Null on rows saved before the
   // instrumental started being stored (2026-07-05) or when its save soft-failed.
   instrumental_path?: string | null
+  // Durable Demucs vocal-stem path — the lyrics key Performance Mode uses.
+  // Null on rows saved before 2026-07-05 (second session) — no lyrics offered.
+  vocal_stem_path?: string | null
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -265,6 +268,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
               ? `/api/voice-swaps/${swapId}/instrumental.mp3`
               : playerSrc
           }
+          lyricsSourceKey={swap.vocal_stem_path ?? null}
           onClose={() => setPerformSource(null)}
         />
       )}
