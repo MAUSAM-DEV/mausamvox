@@ -311,10 +311,18 @@ async function mixStems(
     src.start(0)
   }
 
-  // 1/√N per vocal channel: keeps perceived loudness flat as N increases.
-  const vocalGain = 1 / Math.sqrt(validVocals.length)
-  for (const buf of validVocals) addSource(buf, vocalGain, true) // vocal: warmth-eligible
-  for (const buf of validMusic) addSource(buf, 0.8)              // music: never warmed
+  // Converted-vocal makeup: the separated-then-reconverted vocal sits low
+  // against the reconstructed backing (no mix-bus makeup on the isolated stem),
+  // so lift it a touch. Pure gain on the always-present vocal gainNode — wholly
+  // independent of the Warmth/Bass/Treble EQ nodes (which are still only
+  // inserted when non-zero), so the byte-identical-at-0 Polish guarantee is
+  // untouched. The −1 dBFS headroom limiter below still catches any new peaks.
+  // This is the ONE tuning knob for clone loudness — adjust here.
+  const VOCAL_MAKEUP = 1.3
+  // VOCAL_MAKEUP/√N per vocal channel: keeps perceived loudness flat as N grows.
+  const vocalGain = VOCAL_MAKEUP / Math.sqrt(validVocals.length)
+  for (const buf of validVocals) addSource(buf, vocalGain, true) // vocal: warmth-eligible + makeup
+  for (const buf of validMusic) addSource(buf, 0.8)              // music: never warmed, no makeup
 
   const rendered = await offline.startRendering()
 
