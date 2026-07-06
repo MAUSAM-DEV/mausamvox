@@ -133,6 +133,73 @@ function groupWordsIntoLines(words: WordTiming[]): LyricLine[] {
   return lines
 }
 
+// ── Conservative hum-hallucination filter ───────────────────────────────────
+// Whisper invents repeated gibberish over non-verbal vocal stretches (humming,
+// yodelling, held notes). We drop ONLY the clear machine signature: a run of
+// the same normalized token — or a short A-B n-gram — crammed far denser than
+// anything singable (high tokens/sec). Real repeated hooks (alaap, "la la la",
+// "o o o", "na na na") are sung at a human pace and stay well under the density
+// gate, so they survive. When unsure we KEEP the words; the edit modal is the
+// backstop for whatever this misses (or, rarely, over-removes).
+//
+// Tunables — a run is stripped only when BOTH its repeat count AND its density
+// clear the bar (report these when adjusting):
+const HALLUCINATION_MIN_UNIGRAM_REPEATS = 6 // ≥6 identical tokens in a row
+const HALLUCINATION_MIN_BIGRAM_REPEATS = 4  // ≥4 repeats of an A-B cycle (≥8 tokens)
+const HALLUCINATION_MIN_DENSITY_TPS = 6     // AND ≥6 tokens/sec within that run
+
+// Case- and Latin-diacritic-insensitive token; punctuation stripped. Only the
+// Latin combining-marks block (U+0300–U+036F) is removed, so Devanagari matras
+// stay intact and distinct Hindi syllables are not wrongly merged into a run.
+function normToken(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // Latin combining diacritics (leaves Devanagari matras)
+    .replace(/[\s'".,!?;:()[\]{}<>@#*_+=~`|/\\^%$&–—…।॥-]/g, '') // punctuation + whitespace
+}
+
+function dropHallucinatedWords(words: WordTiming[]): WordTiming[] {
+  if (words.length < HALLUCINATION_MIN_UNIGRAM_REPEATS) return words
+  const norm = words.map((w) => normToken(w.text))
+  const drop = new Array<boolean>(words.length).fill(false)
+
+  // Does the cycle norm[start .. start+k-1] repeat at position `pos`?
+  const cycleAt = (start: number, pos: number, k: number): boolean => {
+    for (let d = 0; d < k; d++) if (norm[pos + d] !== norm[start + d]) return false
+    return true
+  }
+
+  for (const k of [1, 2] as const) {
+    const minRepeats = k === 1 ? HALLUCINATION_MIN_UNIGRAM_REPEATS : HALLUCINATION_MIN_BIGRAM_REPEATS
+    let i = 0
+    while (i + k <= words.length) {
+      // Punctuation-only tokens don't anchor a run.
+      if (norm.slice(i, i + k).some((t) => t === '')) { i += 1; continue }
+      // Extend the cycle as far as it keeps repeating.
+      let end = i + k
+      while (end + k <= words.length && cycleAt(i, end, k)) end += k
+      const runLen = end - i
+      const cycles = runLen / k
+      if (cycles >= minRepeats) {
+        const span = words[end - 1].end - words[i].start
+        const density = span > 0 ? runLen / span : Infinity // crammed/degenerate = definitely garbage
+        if (density >= HALLUCINATION_MIN_DENSITY_TPS) {
+          for (let j = i; j < end; j++) drop[j] = true
+        }
+        i = end // skip past the whole run either way (it's one coherent repeat)
+      } else {
+        i += 1
+      }
+    }
+  }
+
+  const kept = words.filter((_, idx) => !drop[idx])
+  const removed = words.length - kept.length
+  if (removed > 0) console.log(`[lyrics] hum-filter dropped ${removed} repetitive token(s)`)
+  return kept
+}
+
 async function getUser() {
   const sessionClient = await createClient()
   const { data: { user } } = await sessionClient.auth.getUser()
@@ -232,6 +299,15 @@ export async function GET(req: NextRequest) {
   }
 
   logReplicateTiming('lyrics', prediction)
+
+  // Passive probe: if the engine ever starts exposing confidence fields
+  // (no_speech_prob / avg_logprob / compression_ratio), we learn for free.
+  // Logs only — nothing branches on this.
+  const out = prediction.output as { chunks?: Array<Record<string, unknown>> } | null
+  console.log('[lyrics] output keys:', out && typeof out === 'object' ? Object.keys(out).join(',') : typeof out)
+  const firstChunk = Array.isArray(out?.chunks) ? out?.chunks[0] : undefined
+  if (firstChunk && typeof firstChunk === 'object') console.log('[lyrics] chunk keys:', Object.keys(firstChunk).join(','))
+
   const noLyrics = () => NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
 
   let words = parseWords(prediction.output)
@@ -255,6 +331,13 @@ export async function GET(req: NextRequest) {
       .filter((w) => w.text.length > 0) // a word that was ONLY danda marks romanizes to ''
     if (words.length === 0) return noLyrics()
   }
+
+  // Drop the clear Whisper hum-hallucination signature at the WORD level (after
+  // romanization, so it sees the final tokens) BEFORE grouping — removed words
+  // never enter a line buffer, so the stretch falls through to the gap/♪ path
+  // with no empty line objects. If everything is filtered, groupWordsIntoLines
+  // returns [] and we hit the honest no-lyrics path below (nothing stored/charged).
+  words = dropHallucinatedWords(words)
 
   // Regroup words into phrase lines; each line carries its nested `words`.
   const lines = groupWordsIntoLines(words)

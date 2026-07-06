@@ -463,8 +463,10 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
           <p className="lyr-offer-note lyr-offer-note--lang">{LANG_GUIDE}</p>
           <p className="lyr-offer-note">
             Lyrics are auto-transcribed from the vocal by AI. Expect some mistakes —
-            singing is hard to transcribe, mixed-language songs come out inconsistently,
-            and humming or ad-libs can appear as odd words. You can edit every line afterwards.
+            singing is hard to transcribe and mixed-language songs come out inconsistently.
+            We filter out the repetitive gibberish it invents over humming, but a
+            wrong-but-fluent guess can still slip through and a genuinely repeated
+            phrase may rarely be dropped. You can edit every line afterwards.
           </p>
         </div>
       )}
