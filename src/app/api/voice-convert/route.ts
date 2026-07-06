@@ -4,7 +4,7 @@ import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
-import { logReplicateTiming } from '@/lib/replicate-timing'
+import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { BARE_RVC_VERSION, COVER_RVC_VERSION, rvcEngine } from '@/lib/rvc-engine'
 
 export const maxDuration = 30
@@ -346,6 +346,7 @@ export async function GET(req: NextRequest) {
 
     if (prediction.status === 'succeeded') {
       logReplicateTiming('voice-convert', prediction)
+      logReplicateStageTiming('rvc', prediction)
       const convertedVocalsUrl = toUrlString(prediction.output)
       if (!convertedVocalsUrl) {
         return NextResponse.json(

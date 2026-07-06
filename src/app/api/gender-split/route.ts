@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { logStageTiming } from '@/lib/replicate-timing'
 
 // Gender-split is a PREMIUM feature. Cost is a placeholder — change here only.
 const GENDER_SPLIT_COST = 250
@@ -438,6 +439,9 @@ export async function GET(req: NextRequest) {
       // the job was created (queue + compute combined).
       const mvsepTotal = elapsedMs > 0 ? `${(elapsedMs / 1000).toFixed(1)}s` : 'n/a'
       console.log(`[gender-split] TIMING job=${createHash} mvsep-total(wall-clock)=${mvsepTotal} (MVSEP gives no cold-start/compute split)`)
+      // Unified [timing] line: MVSEP exposes no cold-start/compute split, so ms is
+      // wall-clock and cold is n/a. Only emitted on real MVSEP runs (duet swaps).
+      if (elapsedMs > 0) logStageTiming('mvsep', elapsedMs, { cold: 'n/a' })
 
       // Copy to durable Supabase URLs (soft-fallback to MVSEP URLs on failure).
       // Paths are '' on soft-fallback — the client only stores non-empty ones.

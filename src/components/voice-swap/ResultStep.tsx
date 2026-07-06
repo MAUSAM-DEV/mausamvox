@@ -889,6 +889,9 @@ export function ResultStep({
 
     let cancelled = false
     setFullMixState('mixing')
+    // Instrumentation only (browser console): wall-clock of the in-browser
+    // mix/master (both reference + swapped renders). Grep devtools for [timing].
+    const mixStart = performance.now()
     Promise.all([
       // Original (reference) mix is never warmed — only the swapped vocal is.
       mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
@@ -896,6 +899,7 @@ export function ResultStep({
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return
+        console.log(`[timing] stage=mix ms=${Math.round(performance.now() - mixStart)}`)
         if (!origBlob || !swapBlob) {
           setFullMixState('error')
           // Drop to Vocals-only so playback keeps working AND the error note
@@ -995,8 +999,14 @@ export function ResultStep({
                 .finally(() => URL.revokeObjectURL(url))
             })
             .catch(() => null)
+      // Instrumentation only (browser console): wall-clock of the encode +
+      // upload/persist of the saved mix (+ best-effort instrumental).
+      const uploadStart = performance.now()
       Promise.all([uploadFullMixMp3(mixedSwappedUrl), instrumentalPromise])
-        .then(([path, instrumentalPath]) => onFullMixReady?.(path, instrumentalPath))
+        .then(([path, instrumentalPath]) => {
+          console.log(`[timing] stage=upload ms=${Math.round(performance.now() - uploadStart)}`)
+          onFullMixReady?.(path, instrumentalPath)
+        })
     }, 1000)
     return () => clearTimeout(t)
   }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble]) // eslint-disable-line react-hooks/exhaustive-deps

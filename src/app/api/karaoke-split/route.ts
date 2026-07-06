@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { logReplicateTiming } from '@/lib/replicate-timing'
+import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
 
 // GET buffers the lead/backing stems from Replicate into Supabase on success
@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
 
     if (prediction.status === 'succeeded') {
       logReplicateTiming('karaoke-split', prediction)
+      logReplicateStageTiming('karaoke', prediction)
       const output = prediction.output as Record<string, unknown> | null
       const leadVocalsUrl = toUrlString(output?.mdx_vocals)
       const backingVocalsUrl = toUrlString(output?.mdx_instrumental)

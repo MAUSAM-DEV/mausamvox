@@ -870,6 +870,12 @@ export function VoiceSwapPage() {
 
     setProcessingType(type)
     setProcessing(true)
+    // Instrumentation only (browser console): wall-clock of the client-side
+    // conversion phase (F0 detection + the voice-convert round-trip) up to the
+    // converted vocal being ready. Split stages (Demucs/karaoke/MVSEP) are
+    // logged server-side in Vercel; mix + upload are separate client [timing]
+    // lines. Grep devtools for [timing]. Only meaningful for a full swap.
+    const convertStart = performance.now()
     // Clear any prior deferred-persist arming up front so a preview never uploads
     // a mix or persists; full swaps re-arm it on success below.
     persistContextRef.current = null
@@ -996,6 +1002,7 @@ export function VoiceSwapPage() {
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
+        console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full-duet`)
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
@@ -1096,6 +1103,7 @@ export function VoiceSwapPage() {
       setConvertedVocalsUrl(convertedUrl)
       setProcessing(false)
       setStep(3)
+      if (type === 'full') console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full`)
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
 
       // Deduct credits and record swap (non-blocking).

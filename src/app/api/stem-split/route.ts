@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { logReplicateTiming } from '@/lib/replicate-timing'
+import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
 import { fireWarmPing } from '@/lib/rvc-engine'
 
@@ -173,6 +173,7 @@ export async function GET(req: NextRequest) {
 
     if (prediction.status === 'succeeded') {
       logReplicateTiming('stem-split', prediction)
+      logReplicateStageTiming('demucs', prediction)
       // Log raw output shape so Vercel logs can diagnose any future parse issues.
       console.log('[stem-split] raw output type:', typeof prediction.output, Array.isArray(prediction.output) ? 'array' : '')
       console.log('[stem-split] raw output keys:', prediction.output && typeof prediction.output === 'object' ? Object.keys(prediction.output as object) : 'n/a')
