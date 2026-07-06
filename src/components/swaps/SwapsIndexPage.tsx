@@ -17,9 +17,15 @@ type SwapRow = {
   created_at: string
 }
 
+// Front-end paging only — all rows are already fetched; we just cap how many
+// render so the list doesn't force a long scroll.
+const INITIAL_VISIBLE = 5
+const PAGE_STEP = 5
+
 export function SwapsIndexPage() {
   const [swaps, setSwaps] = useState<SwapRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
 
   useEffect(() => {
     const supabase = createClient()
@@ -73,7 +79,7 @@ export function SwapsIndexPage() {
             </div>
           )}
 
-          {!loading && swaps.map((s) => (
+          {!loading && swaps.slice(0, visibleCount).map((s) => (
             <Link key={s.id} href={`/swaps/${s.id}`} className="swl-row">
               <span className="swl-row-ico">🎵</span>
               <span className="swl-row-info">
@@ -85,6 +91,27 @@ export function SwapsIndexPage() {
               <span className="swl-row-open">Open →</span>
             </Link>
           ))}
+
+          {!loading && swaps.length > INITIAL_VISIBLE && (
+            <div className="swl-more-row">
+              {visibleCount < swaps.length && (
+                <button
+                  className="swl-more-btn"
+                  onClick={() => setVisibleCount((c) => Math.min(c + PAGE_STEP, swaps.length))}
+                >
+                  Show more
+                </button>
+              )}
+              {visibleCount > INITIAL_VISIBLE && (
+                <button
+                  className="swl-more-btn"
+                  onClick={() => setVisibleCount(INITIAL_VISIBLE)}
+                >
+                  Show less
+                </button>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
@@ -179,6 +206,18 @@ export function SwapsIndexPage() {
         .swl-row-open {
           font-size: 12px; font-weight: 600; color: #8B5CF6; flex-shrink: 0;
         }
+        .swl-more-row {
+          display: flex; justify-content: center; gap: 10px;
+          margin-top: 14px;
+        }
+        .swl-more-btn {
+          padding: 10px 22px; border-radius: 9px;
+          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .swl-more-btn:hover { border-color: #8B5CF6; color: #8B5CF6; }
         @media (max-width: 640px) {
           .swl-head { padding: 14px 20px; }
           .swl-main { padding-top: 28px; }
