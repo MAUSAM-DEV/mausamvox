@@ -348,15 +348,28 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
   }
 
   // Auto-scroll the current line to the pane's center when it changes.
+  // We scroll the PANE container directly (not el.scrollIntoView) because
+  // scrollIntoView walks every scrollable ancestor up to the document: inside
+  // Performance Mode the page is locked so only the pane moved, but in the
+  // KaraokePanel mount (normal page flow) it scrolled the PAGE to center the
+  // line in the viewport, leaving the pane visually still — the reported bug.
+  // Computing the target scrollTop keeps every scroll confined to the pane, so
+  // both mounts follow the clock identically.
   useEffect(() => {
     if (lyricsState !== 'ready' || currentIdx < 0 || userScrollingRef.current) return
+    const pane = paneRef.current
     const el = lineRefs.current[currentIdx]
-    if (!el) return
+    if (!pane || !el) return
+    const paneRect = pane.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    // Current line's centre, expressed in the pane's scrollable-content coords.
+    const elCentre = (elRect.top - paneRect.top) + pane.scrollTop + el.clientHeight / 2
+    const target = Math.max(0, elCentre - pane.clientHeight / 2)
     programmaticScrollRef.current = true
     clearTimeout(progScrollTimerRef.current)
     // Smooth scrolling fires many scroll events; hold the flag until it settles.
     progScrollTimerRef.current = setTimeout(() => { programmaticScrollRef.current = false }, 700)
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    pane.scrollTo({ top: target, behavior: 'smooth' })
   }, [currentIdx, lyricsState])
 
   // ── Word-level highlighting (step 2) ───────────────────────────────────────
