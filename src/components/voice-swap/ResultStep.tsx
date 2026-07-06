@@ -128,6 +128,28 @@ const ECHO_FEEDBACK = 0.35
 const ECHO_DAMP_HZ = 3500
 const ECHO_MAX_WET = 0.5
 
+// ── Default "Studio" polish preset ──────────────────────────────────────────
+// New swaps START at these values so they come out finished, not bone-dry.
+// This ONLY changes the initial knob values — the byte-identical-at-0 bypass is
+// untouched (a control at 0 still inserts no node; "Raw" zeros all five). Tune
+// the natural-unit constants below; they convert to the knobs' internal units.
+const STUDIO_WARMTH_DB = 4      // +4 dB low-shelf warmth
+const STUDIO_REVERB_WET = 0.15 // 15% wet reverb
+const STUDIO_ECHO_WET = 0      // no echo by default
+const STUDIO_BASS_DB = 0       // flat
+const STUDIO_TREBLE_DB = 0     // flat
+
+// Knob-unit preset values: Warmth/Reverb/Echo knobs are 0..100 → 0..MAX; the
+// Bass/Treble knob value IS dB. Rounded to the knobs' integer step.
+const STUDIO_WARMTH = Math.round((STUDIO_WARMTH_DB / WARMTH_MAX_DB) * 100)   // 40
+const STUDIO_REVERB = Math.round((STUDIO_REVERB_WET / REVERB_MAX_WET) * 100) // 30
+const STUDIO_ECHO = Math.round((STUDIO_ECHO_WET / ECHO_MAX_WET) * 100)       // 0
+const STUDIO_BASS = STUDIO_BASS_DB                                           // 0
+const STUDIO_TREBLE = STUDIO_TREBLE_DB                                       // 0
+
+const STUDIO_PRESET = { warmth: STUDIO_WARMTH, reverb: STUDIO_REVERB, echo: STUDIO_ECHO, bass: STUDIO_BASS, treble: STUDIO_TREBLE }
+const RAW_PRESET = { warmth: 0, reverb: 0, echo: 0, bass: 0, treble: 0 }
+
 async function mixStems(
   vocalsUrls: string[],
   musicUrls: string[],
@@ -755,18 +777,19 @@ export function ResultStep({
   const [mp3Encoding, setMp3Encoding] = useState(false)
 
   // ── Warmth (vocal polish) ────────────────────────────────────────────────
-  // 0..100, default 0 = no change (identical mix to before). Debounced before it
-  // drives a re-render so dragging doesn't re-mix on every pixel. Applies to the
-  // CONVERTED vocal on BOTH the full-song swapped mix and the Vocals-only
+  // 0..100. NEW swaps start at the Studio preset (STUDIO_WARMTH) so they come
+  // out finished, not dry; 0 is still a true bypass (no node). Debounced before
+  // it drives a re-render so dragging doesn't re-mix on every pixel. Applies to
+  // the CONVERTED vocal on BOTH the full-song swapped mix and the Vocals-only
   // playback (and the saved track), so soloing the vocal to judge it matches
   // what Full-song plays and what gets saved.
-  const [warmth, setWarmth] = useState(0)
-  const [debouncedWarmth, setDebouncedWarmth] = useState(0)
+  const [warmth, setWarmth] = useState(STUDIO_WARMTH)
+  const [debouncedWarmth, setDebouncedWarmth] = useState(STUDIO_WARMTH)
   const [warmthRendering, setWarmthRendering] = useState(false)
   // Latest settled warmth, read (not depended-on) by the build effect so a
   // regenerate rebuilds at the current warmth without the effect re-firing on
   // every warmth change.
-  const warmthRef = useRef(0)
+  const warmthRef = useRef(STUDIO_WARMTH)
   warmthRef.current = debouncedWarmth
   // The parent persists the swap exactly once (it nulls its persist context after
   // the first onFullMixReady). So we DEFER that single upload until warmth has
@@ -778,36 +801,43 @@ export function ResultStep({
   const warmthInitRef = useRef(true)
 
   // ── Reverb (vocal polish, chained after warmth) ──────────────────────────
-  // 0..100, default 0 = no change. Same debounce/settle/persist pattern as
-  // warmth — see comments above. Applies to the CONVERTED vocal on BOTH the
-  // full-song swapped mix and the Vocals-only playback (and the saved track).
-  const [reverb, setReverb] = useState(0)
-  const [debouncedReverb, setDebouncedReverb] = useState(0)
-  const reverbRef = useRef(0)
+  // 0..100. NEW swaps start at STUDIO_REVERB (light space); 0 = true bypass.
+  // Same debounce/settle/persist pattern as warmth — see comments above.
+  // Applies to the CONVERTED vocal on BOTH the full-song swapped mix and the
+  // Vocals-only playback (and the saved track).
+  const [reverb, setReverb] = useState(STUDIO_REVERB)
+  const [debouncedReverb, setDebouncedReverb] = useState(STUDIO_REVERB)
+  const reverbRef = useRef(STUDIO_REVERB)
   reverbRef.current = debouncedReverb
 
   // ── Echo (vocal polish, chained after reverb) ────────────────────────────
   // 0..100, default 0 = no change. Same debounce/settle/persist pattern as
   // warmth/reverb — see comments above. Applies to the CONVERTED vocal on BOTH
   // the full-song swapped mix and the Vocals-only playback (and the saved track).
-  const [echo, setEcho] = useState(0)
-  const [debouncedEcho, setDebouncedEcho] = useState(0)
-  const echoRef = useRef(0)
+  const [echo, setEcho] = useState(STUDIO_ECHO)
+  const [debouncedEcho, setDebouncedEcho] = useState(STUDIO_ECHO)
+  const echoRef = useRef(STUDIO_ECHO)
   echoRef.current = debouncedEcho
 
   // ── Bass / Treble (vocal polish tone EQ, chained alongside warmth) ────────
   // BIPOLAR −12..+12 dB, default 0 = no change. Same debounce/settle/persist
   // pattern as warmth/reverb/echo — applied to the CONVERTED vocal on BOTH the
   // full-song swapped mix and the Vocals-only playback (and the saved track).
-  const [bass, setBass] = useState(0)
-  const [debouncedBass, setDebouncedBass] = useState(0)
-  const bassRef = useRef(0)
+  const [bass, setBass] = useState(STUDIO_BASS)
+  const [debouncedBass, setDebouncedBass] = useState(STUDIO_BASS)
+  const bassRef = useRef(STUDIO_BASS)
   bassRef.current = debouncedBass
 
-  const [treble, setTreble] = useState(0)
-  const [debouncedTreble, setDebouncedTreble] = useState(0)
-  const trebleRef = useRef(0)
+  const [treble, setTreble] = useState(STUDIO_TREBLE)
+  const [debouncedTreble, setDebouncedTreble] = useState(STUDIO_TREBLE)
+  const trebleRef = useRef(STUDIO_TREBLE)
   trebleRef.current = debouncedTreble
+
+  // Apply a whole preset in one tap (Studio default / Raw). setState only — the
+  // debounce → re-render → both-tabs + saved-file wiring handles the rest.
+  const applyPreset = (p: { warmth: number; reverb: number; echo: number; bass: number; treble: number }) => {
+    setWarmth(p.warmth); setReverb(p.reverb); setEcho(p.echo); setBass(p.bass); setTreble(p.treble)
+  }
 
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
@@ -1335,6 +1365,10 @@ export function ResultStep({
             <div className="vs-polish-head">
               <span className="vs-polish-title">Polish</span>
               {warmthRendering && <span className="vs-polish-spin" />}
+              <span className="vs-polish-presets">
+                <button className="vs-polish-preset" onClick={() => applyPreset(RAW_PRESET)} title="Zero all polish — the bone-dry converted vocal">Raw</button>
+                <button className="vs-polish-preset" onClick={() => applyPreset(STUDIO_PRESET)} title="Back to the default Studio polish">Reset to defaults</button>
+              </span>
             </div>
             <div className="vs-knob-row">
               <PolishKnob
@@ -1380,7 +1414,7 @@ export function ResultStep({
                 format={(v) => (v === 0 ? 'Off' : `${Math.round((v / 100) * ECHO_MAX_WET * 100)}% wet`)}
               />
             </div>
-            <div className="vs-polish-foot">Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
+            <div className="vs-polish-foot">A default <strong>Studio</strong> polish (warmth + light reverb) is applied so it doesn&rsquo;t sound dry — tap <strong>Raw</strong> for the bone-dry output, or adjust the knobs. Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
           </div>
         )}
 
@@ -1549,6 +1583,13 @@ export function ResultStep({
           animation: vsPolishSpin 0.7s linear infinite;
         }
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
+        .vs-polish-presets { display: flex; gap: 8px; margin-left: auto; }
+        .vs-polish-preset {
+          border: 1px solid #2A2A4A; background: transparent; color: #7878A0;
+          font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
+          cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        }
+        .vs-polish-preset:hover { border-color: #8B5CF6; color: #C4B5FD; }
         .vs-knob-row {
           display: flex; align-items: flex-start; justify-content: center;
           gap: 24px; flex-wrap: wrap;
