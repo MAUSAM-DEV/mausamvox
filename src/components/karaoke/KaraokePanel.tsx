@@ -57,6 +57,11 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
   const [prep, setPrep] = useState<PrepState>('preparing')
   const [recState, setRecState] = useState<RecState>('idle')
   const [seconds, setSeconds] = useState(0)
+  // Minimise/expand — purely visual. The body is display:none'd (not
+  // unmounted) so the hidden backing element, LyricsPane state, and recording
+  // refs all survive; and the control is disabled while recording so an active
+  // take (with its Stop button) can never be folded away.
+  const [collapsed, setCollapsed] = useState(false)
   // Backing playback position — drives the lyrics pane. Fed by BOTH the hidden
   // element (while recording) AND the idle "Backing track" AudioPlayer (while
   // previewing/singing along), so the lyrics follow in either mode.
@@ -284,10 +289,22 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
     <div className="kp-card">
       <div className="kp-head">
         <span className="kp-title">🎤 Sing over it</span>
+        <button
+          type="button"
+          className="kp-min"
+          onClick={() => setCollapsed((c) => !c)}
+          disabled={recState === 'recording'}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand Sing over it' : 'Minimise Sing over it'}
+          title={recState === 'recording' ? 'Stop recording to minimise' : collapsed ? 'Expand' : 'Minimise'}
+        >
+          {collapsed ? '▸' : '▾'}
+        </button>
       </div>
-      <p className="kp-sub">
-        Sing over {backingLabel} and download your take.
-      </p>
+      <div className={`kp-body${collapsed ? ' kp-body--collapsed' : ''}`}>
+        <p className="kp-sub">
+          Sing over {backingLabel} and download your take.
+        </p>
       <p className="kp-hint">🎧 Use headphones — otherwise your mic also records the backing track from your speakers.</p>
 
       {/* Synced lyrics: generate/edit before you record, follow along during
@@ -364,6 +381,7 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
           )}
         </>
       )}
+      </div>
 
       <style suppressHydrationWarning>{`
         .kp-card {
@@ -378,6 +396,18 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 15px; font-weight: 700; color: #F0F0FF;
         }
+        .kp-min {
+          flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
+          border: 1px solid #2A2A4A; background: transparent; color: #7878A0;
+          font-size: 12px; line-height: 1; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.2s;
+        }
+        .kp-min:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .kp-min:disabled { opacity: 0.4; cursor: not-allowed; }
+        /* Collapsed: hide the body (frees the vertical space) but keep it
+           mounted so recording/lyrics/clock are untouched. */
+        .kp-body--collapsed { display: none; }
         .kp-tag {
           font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
           color: #06B6D4; padding: 3px 10px; border-radius: 99px;
