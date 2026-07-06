@@ -78,6 +78,14 @@ interface AudioPlayerProps {
   label?: string
   /** Auto-play immediately when src is mounted */
   autoPlay?: boolean
+  /** Fires with the element's currentTime on every timeupdate (for external
+   *  clocks, e.g. a synced-lyrics pane following this player). */
+  onTimeUpdate?: (currentTime: number) => void
+  /** Fires true on play, false on pause/end. */
+  onPlayingChange?: (playing: boolean) => void
+  /** Exposes the underlying <audio> element (or null on unmount) so a caller
+   *  can read currentTime directly (e.g. a per-word rAF highlighter). */
+  mediaRef?: (el: HTMLAudioElement | null) => void
 }
 
 function fmtTime(t: number): string {
@@ -85,7 +93,7 @@ function fmtTime(t: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function AudioPlayer({ src, label, autoPlay = false }: AudioPlayerProps) {
+export function AudioPlayer({ src, label, autoPlay = false, onTimeUpdate, onPlayingChange, mediaRef }: AudioPlayerProps) {
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -101,6 +109,13 @@ export function AudioPlayer({ src, label, autoPlay = false }: AudioPlayerProps) 
     setDuration(0)
     setAudioError(false)
   }, [src])
+
+  // Expose the underlying element to a caller that wants to read currentTime
+  // directly (the element remounts via key=src, so re-expose on src change).
+  useEffect(() => {
+    mediaRef?.(audioRef.current)
+    return () => mediaRef?.(null)
+  }, [src, mediaRef])
 
   function handleTogglePlay() {
     const a = audioRef.current
@@ -141,10 +156,11 @@ export function AudioPlayer({ src, label, autoPlay = false }: AudioPlayerProps) 
         src={src}
         preload="metadata"
         autoPlay={autoPlay}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPlay={() => { setPlaying(true); onPlayingChange?.(true) }}
+        onPause={() => { setPlaying(false); onPlayingChange?.(false) }}
         onEnded={() => {
           setPlaying(false)
+          onPlayingChange?.(false)
           setProgress(0)
           setCurrentTime(0)
           if (audioRef.current) audioRef.current.currentTime = 0
@@ -154,6 +170,7 @@ export function AudioPlayer({ src, label, autoPlay = false }: AudioPlayerProps) 
           if (!a) return
           setCurrentTime(a.currentTime)
           setProgress(a.duration ? a.currentTime / a.duration : 0)
+          onTimeUpdate?.(a.currentTime)
         }}
         onLoadedMetadata={() => {
           const a = audioRef.current

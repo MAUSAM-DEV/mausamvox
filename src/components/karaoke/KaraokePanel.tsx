@@ -57,11 +57,24 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
   const [prep, setPrep] = useState<PrepState>('preparing')
   const [recState, setRecState] = useState<RecState>('idle')
   const [seconds, setSeconds] = useState(0)
-  // Backing playback position — drives the lyrics pane while recording (the
-  // hidden element only plays during a take; idle/done leave it at rest).
+  // Backing playback position — drives the lyrics pane. Fed by BOTH the hidden
+  // element (while recording) AND the idle "Backing track" AudioPlayer (while
+  // previewing/singing along), so the lyrics follow in either mode.
   const [backTime, setBackTime] = useState(0)
+  // True while the idle backing preview is playing (recording has its own gate
+  // via recState). Either one makes the lyrics pane follow + word-highlight.
+  const [previewPlaying, setPreviewPlaying] = useState(false)
   const [takeUrl, setTakeUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState<'' | 'take' | 'duet'>('')
+
+  // The element LyricsPane's word-highlight rAF reads currentTime from — points
+  // at whichever backing element is actually playing (idle preview player, or
+  // the hidden recording element). The preview player exposes its element here.
+  const previewElRef = useRef<HTMLAudioElement | null>(null)
+  const lyricsClockRef = useRef<HTMLAudioElement | null>(null)
+  const capturePreviewEl = useCallback((el: HTMLAudioElement | null) => {
+    previewElRef.current = el
+  }, [])
 
   const backingBufRef = useRef<AudioBuffer | null>(null)
   const backingUrlRef = useRef<string | null>(null) // object URL for playback
@@ -166,6 +179,11 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
         setRecState('done')
       }
 
+      // Recording plays the backing through the hidden element — point the
+      // lyrics word-clock at it before we flip `playing` on (below). Clear the
+      // preview flag: the idle player unmounts without firing onPause.
+      lyricsClockRef.current = audioRef.current
+      setPreviewPlaying(false)
       setSeconds(0)
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
       setRecState('recording')
@@ -275,7 +293,13 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
       {/* Synced lyrics: generate/edit before you record, follow along during
           the take. No onSeek — jumping the backing mid-take would misalign
           the recording. */}
-      <LyricsPane sourceKey={lyricsSourceKey} time={backTime} compact audioRef={audioRef} playing={recState === 'recording'} />
+      <LyricsPane
+        sourceKey={lyricsSourceKey}
+        time={backTime}
+        compact
+        audioRef={lyricsClockRef}
+        playing={recState === 'recording' || previewPlaying}
+      />
 
       {prep === 'preparing' && <div className="kp-note">Preparing the backing track…</div>}
       {prep === 'error' && <div className="kp-note kp-note--err">Couldn&rsquo;t load the backing track — try re-opening this panel.</div>}
@@ -293,7 +317,18 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
 
           {recState === 'idle' && (
             <>
-              <AudioPlayer src={backingReadyUrl} label="Backing track" />
+              {/* Previewing/singing along here plays THIS element (not the hidden
+                  recording one), so it drives the lyrics clock + word highlight. */}
+              <AudioPlayer
+                src={backingReadyUrl}
+                label="Backing track"
+                mediaRef={capturePreviewEl}
+                onTimeUpdate={setBackTime}
+                onPlayingChange={(p) => {
+                  if (p) lyricsClockRef.current = previewElRef.current
+                  setPreviewPlaying(p)
+                }}
+              />
               <div className="kp-actions">
                 <button className="kp-btn-rec" onClick={startRecording}>● Record my take</button>
               </div>
