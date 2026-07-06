@@ -97,6 +97,15 @@ async function uploadFullMixMp3(wavMixUrl: string, filename = 'swap-full-mix.mp3
 const WARMTH_FREQ_HZ = 200
 const WARMTH_MAX_DB = 10
 
+// Bass / Treble: two BIPOLAR shelving EQs on the CONVERTED VOCAL path only,
+// chained alongside Warmth and BEFORE the Reverb/Echo time effects. Each is a
+// plain −12..+12 dB shelf (the knob value IS the dB). At 0 dB NO filter node is
+// inserted, so the graph stays byte-identical to before these controls existed
+// (same guarantee Warmth has at zero). Bass = low-shelf, Treble = high-shelf.
+const BASS_FREQ_HZ = 100
+const TREBLE_FREQ_HZ = 8000
+const EQ_MAX_DB = 12 // ± range for Bass/Treble
+
 // Reverb: a short synthetic "vocal space" convolution chained AFTER warmth, on
 // the same CONVERTED VOCAL path (music bed untouched). reverb 0..100 maps to
 // 0..REVERB_MAX_WET of wet mix — capped well under 100% since a fully-wet
@@ -122,7 +131,7 @@ const ECHO_MAX_WET = 0.5
 async function mixStems(
   vocalsUrls: string[],
   musicUrls: string[],
-  opts?: { warmth?: number; reverb?: number; echo?: number },
+  opts?: { warmth?: number; reverb?: number; echo?: number; bass?: number; treble?: number },
 ): Promise<Blob | null> {
   const decodeCtx = new AudioContext()
 
@@ -172,6 +181,9 @@ async function mixStems(
   const warmthDb = opts?.warmth
     ? (Math.min(100, Math.max(0, opts.warmth)) / 100) * WARMTH_MAX_DB
     : 0
+  // Bass / Treble shelving gain (dB); the knob value IS the dB. 0 → no filter.
+  const bassDb = opts?.bass ? Math.max(-EQ_MAX_DB, Math.min(EQ_MAX_DB, opts.bass)) : 0
+  const trebleDb = opts?.treble ? Math.max(-EQ_MAX_DB, Math.min(EQ_MAX_DB, opts.treble)) : 0
   // Wet fraction for the vocal path; 0 at default reverb → no convolver.
   const reverbWet = opts?.reverb
     ? (Math.min(100, Math.max(0, opts.reverb)) / 100) * REVERB_MAX_WET
@@ -256,16 +268,34 @@ async function mixStems(
     const src = offline.createBufferSource()
     src.buffer = buf
     src.connect(gainNode)
-    // Warmth low-shelf, then reverb, then echo — all ONLY on the vocal path
-    // (warm=true) and ONLY inserted when their amount is >0, so at
-    // warmth=0/reverb=0/echo=0 the graph is byte-identical to before any of
-    // these controls existed.
+    // Tone EQ (Warmth low-shelf, then Bass low-shelf, then Treble high-shelf),
+    // then reverb, then echo — all ONLY on the vocal path (warm=true) and ONLY
+    // inserted when their amount is non-zero, so at warmth=0/bass=0/treble=0/
+    // reverb=0/echo=0 the graph is byte-identical to before these controls
+    // existed. Linear shelves commute, so the order among the three EQs is
+    // sonically irrelevant; EQ deliberately sits BEFORE the time effects.
     let node: AudioNode = gainNode
     if (warm && warmthDb > 0) {
       const eq = offline.createBiquadFilter()
       eq.type = 'lowshelf'
       eq.frequency.value = WARMTH_FREQ_HZ
       eq.gain.value = warmthDb
+      node.connect(eq)
+      node = eq
+    }
+    if (warm && bassDb !== 0) {
+      const eq = offline.createBiquadFilter()
+      eq.type = 'lowshelf'
+      eq.frequency.value = BASS_FREQ_HZ
+      eq.gain.value = bassDb
+      node.connect(eq)
+      node = eq
+    }
+    if (warm && trebleDb !== 0) {
+      const eq = offline.createBiquadFilter()
+      eq.type = 'highshelf'
+      eq.frequency.value = TREBLE_FREQ_HZ
+      eq.gain.value = trebleDb
       node.connect(eq)
       node = eq
     }
@@ -379,27 +409,41 @@ function PlayerWaveCanvas({ playing }: { playing: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Polish knob — rotary dial for the Warmth/Reverb/Echo controls. Same contract
-// as the sliders it replaced: value + onChange over 0–100 (the audio engine,
-// debounce, and persist wiring are untouched). Drag vertically (~200px = full
-// travel), arrow keys when focused, double-click resets to 0.
+// Polish knob — rotary dial for the Warmth/Reverb/Echo/Bass/Treble controls.
+// value + onChange over [min, max] (default 0–100 keeps Warmth/Reverb/Echo
+// byte-identical). Drag vertically (~200px = full travel), arrow keys when
+// focused, double-click resets to `resetTo`. For a BIPOLAR range (Bass/Treble,
+// −12..+12, resetTo 0) the value arc fills outward from the centre detent; for
+// a unipolar range (resetTo = min) it fills from the left end exactly as before.
 // ---------------------------------------------------------------------------
 const KNOB_SWEEP = 270 // degrees of dial travel; gap centered at the bottom
 
-function PolishKnob({ id, label, hint, value, onChange, format }: {
+function PolishKnob({
+  id, label, hint, value, onChange, format, min = 0, max = 100, step = 1, resetTo = 0,
+}: {
   id: string; label: string; hint: string; value: number
   onChange: (v: number) => void; format: (v: number) => string
+  min?: number; max?: number; step?: number; resetTo?: number
 }) {
   const drag = useRef<{ startY: number; startValue: number } | null>(null)
   const r = 19, c = 24, circ = 2 * Math.PI * r
   const sweepFrac = KNOB_SWEEP / 360
-  // Track and value arcs both start at the 7:30 position (135° past 3 o'clock).
+  const range = max - min
+  const clampV = (v: number) => Math.max(min, Math.min(max, v))
+  const valueFrac = (value - min) / range
+  const zeroFrac = (resetTo - min) / range
+  const startFrac = Math.min(zeroFrac, valueFrac)
+  const arcLen = Math.abs(valueFrac - zeroFrac)
+  // Track and value arcs start at the 7:30 position (135° past 3 o'clock);
+  // the value arc's start is offset to the detent for bipolar ranges.
   const arcStart = `rotate(135 ${c} ${c})`
-  const pointerAngle = 135 + (value / 100) * KNOB_SWEEP
+  const valueArcStart = `rotate(${135 + startFrac * KNOB_SWEEP} ${c} ${c})`
+  const pointerAngle = 135 + valueFrac * KNOB_SWEEP
+  const pageStep = Math.max(step, Math.round(range / 10))
 
   const nudge = (e: React.KeyboardEvent, delta: number) => {
     e.preventDefault()
-    onChange(Math.max(0, Math.min(100, value + delta)))
+    onChange(clampV(value + delta))
   }
 
   return (
@@ -407,7 +451,7 @@ function PolishKnob({ id, label, hint, value, onChange, format }: {
       <svg
         width="48" height="48" viewBox="0 0 48 48"
         role="slider" tabIndex={0} aria-label={label}
-        aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}
+        aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
         aria-valuetext={format(value)}
         onPointerDown={(e) => {
           e.preventDefault()
@@ -416,29 +460,29 @@ function PolishKnob({ id, label, hint, value, onChange, format }: {
         }}
         onPointerMove={(e) => {
           if (!drag.current) return
-          const delta = (drag.current.startY - e.clientY) * (100 / 200)
-          onChange(Math.max(0, Math.min(100, Math.round(drag.current.startValue + delta))))
+          const delta = (drag.current.startY - e.clientY) * (range / 200)
+          onChange(clampV(Math.round(drag.current.startValue + delta)))
         }}
         onPointerUp={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}
-        onDoubleClick={() => onChange(0)}
+        onDoubleClick={() => onChange(resetTo)}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') nudge(e, 1)
-          else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') nudge(e, -1)
-          else if (e.key === 'PageUp') nudge(e, 10)
-          else if (e.key === 'PageDown') nudge(e, -10)
-          else if (e.key === 'Home') nudge(e, -value)
-          else if (e.key === 'End') nudge(e, 100 - value)
+          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') nudge(e, step)
+          else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') nudge(e, -step)
+          else if (e.key === 'PageUp') nudge(e, pageStep)
+          else if (e.key === 'PageDown') nudge(e, -pageStep)
+          else if (e.key === 'Home') nudge(e, min - value)
+          else if (e.key === 'End') nudge(e, max - value)
         }}
       >
         <circle cx={c} cy={c} r={r} fill="none" stroke="#1E1E3A" strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={`${circ * sweepFrac} ${circ}`} transform={arcStart}
         />
-        {value > 0 && (
+        {arcLen > 0 && (
           <circle cx={c} cy={c} r={r} fill="none" stroke={`url(#pk-${id})`} strokeWidth="4"
             strokeLinecap="round"
-            strokeDasharray={`${circ * sweepFrac * (value / 100)} ${circ}`} transform={arcStart}
+            strokeDasharray={`${circ * sweepFrac * arcLen} ${circ}`} transform={valueArcStart}
           />
         )}
         <line x1={c + 7} y1={c} x2={c + 13} y2={c} stroke="#C4B5FD" strokeWidth="2.5"
@@ -743,6 +787,20 @@ export function ResultStep({
   const echoRef = useRef(0)
   echoRef.current = debouncedEcho
 
+  // ── Bass / Treble (vocal polish tone EQ, chained alongside warmth) ────────
+  // BIPOLAR −12..+12 dB, default 0 = no change. Same debounce/settle/persist
+  // pattern as warmth/reverb/echo — applied to the CONVERTED vocal on BOTH the
+  // full-song swapped mix and the Vocals-only playback (and the saved track).
+  const [bass, setBass] = useState(0)
+  const [debouncedBass, setDebouncedBass] = useState(0)
+  const bassRef = useRef(0)
+  bassRef.current = debouncedBass
+
+  const [treble, setTreble] = useState(0)
+  const [debouncedTreble, setDebouncedTreble] = useState(0)
+  const trebleRef = useRef(0)
+  trebleRef.current = debouncedTreble
+
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0) // 0..1
@@ -781,6 +839,18 @@ export function ResultStep({
     const t = setTimeout(() => setDebouncedEcho(echo), 280)
     return () => clearTimeout(t)
   }, [echo])
+
+  // Debounce the bass knob → debouncedBass is what actually drives a re-mix.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedBass(bass), 280)
+    return () => clearTimeout(t)
+  }, [bass])
+
+  // Debounce the treble knob → debouncedTreble is what actually drives a re-mix.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedTreble(treble), 280)
+    return () => clearTimeout(t)
+  }, [treble])
 
   // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
   useEffect(() => {
@@ -822,7 +892,7 @@ export function ResultStep({
     Promise.all([
       // Original (reference) mix is never warmed — only the swapped vocal is.
       mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
-      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current, reverb: reverbRef.current, echo: echoRef.current }),
+      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current, reverb: reverbRef.current, echo: echoRef.current, bass: bassRef.current, treble: trebleRef.current }),
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return
@@ -879,7 +949,7 @@ export function ResultStep({
     ]
     let cancelled = false
     setWarmthRendering(true)
-    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho })
+    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble })
       .then((blob) => {
         if (cancelled || !blob) return
         const url = URL.createObjectURL(blob)
@@ -890,7 +960,7 @@ export function ResultStep({
       .catch(() => {})
       .finally(() => { if (!cancelled) setWarmthRendering(false) })
     return () => { cancelled = true }
-  }, [debouncedWarmth, debouncedReverb, debouncedEcho]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deferred one-shot persist: the parent saves the swap exactly once (it nulls
   // its persist context after the first onFullMixReady). Wait until the swapped
@@ -900,7 +970,7 @@ export function ResultStep({
   useEffect(() => {
     if (!persistMix || persistedRef.current) return
     if (fullMixState !== 'ready' || !mixedSwappedUrl) return
-    if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo) return // still settling
+    if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo || debouncedBass !== bass || debouncedTreble !== treble) return // still settling
     const t = setTimeout(() => {
       if (persistedRef.current) return
       persistedRef.current = true
@@ -929,7 +999,7 @@ export function ResultStep({
         .then(([path, instrumentalPath]) => onFullMixReady?.(path, instrumentalPath))
     }, 1000)
     return () => clearTimeout(t)
-  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
   // same warmth+reverb+echo as the Full-song mix, so soloing the vocal to judge
@@ -949,13 +1019,13 @@ export function ResultStep({
       setMixedSwappedVocalsUrl(null)
       return
     }
-    if (swapVocalUrls.length === 1 && debouncedWarmth === 0 && debouncedReverb === 0 && debouncedEcho === 0) {
+    if (swapVocalUrls.length === 1 && debouncedWarmth === 0 && debouncedReverb === 0 && debouncedEcho === 0 && debouncedBass === 0 && debouncedTreble === 0) {
       setMixedSwappedVocalsUrl(null)
       return
     }
 
     let cancelled = false
-    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho }).then((blob) => {
+    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble }).then((blob) => {
       if (cancelled || !blob) return
       if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
       const url = URL.createObjectURL(blob)
@@ -964,7 +1034,7 @@ export function ResultStep({
     }).catch(() => {})
 
     return () => { cancelled = true }
-  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth, debouncedReverb, debouncedEcho]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revoke all three blob URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -1237,11 +1307,11 @@ export function ResultStep({
         </div>
 
         {/* Polish — free, client-side vocal sweetening on the CONVERTED vocal.
-            Unlike the Fine-tune panel (a paid RVC re-convert), this is a Web Audio
-            EQ (Warmth) + convolution reverb (Reverb, chained after Warmth) +
-            feedback delay (Echo, chained after Reverb) applied on BOTH the
-            Full-song and Vocals-only tabs (and baked into the saved track).
-            Hidden when there's no full mix to colour. */}
+            Unlike the Fine-tune panel (a paid RVC re-convert), this is Web Audio
+            tone EQ (Warmth low-shelf + Bass low-shelf + Treble high-shelf) then
+            convolution reverb (Reverb) then feedback delay (Echo), applied on
+            BOTH the Full-song and Vocals-only tabs (and baked into the saved
+            track). Hidden when there's no full mix to colour. */}
         {fullMixState !== 'no-stems' && (
           <div className="vs-polish">
             <div className="vs-polish-head">
@@ -1256,6 +1326,24 @@ export function ResultStep({
                 value={warmth}
                 onChange={setWarmth}
                 format={(v) => (v === 0 ? 'Off' : `+${((v / 100) * WARMTH_MAX_DB).toFixed(1)} dB`)}
+              />
+              <PolishKnob
+                id="bass"
+                label="Bass"
+                hint="Low-shelf EQ (~100 Hz), −12 to +12 dB — drag up/down, double-click to reset"
+                value={bass}
+                onChange={setBass}
+                min={-EQ_MAX_DB} max={EQ_MAX_DB}
+                format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
+              />
+              <PolishKnob
+                id="treble"
+                label="Treble"
+                hint="High-shelf EQ (~8 kHz), −12 to +12 dB — drag up/down, double-click to reset"
+                value={treble}
+                onChange={setTreble}
+                min={-EQ_MAX_DB} max={EQ_MAX_DB}
+                format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
               />
               <PolishKnob
                 id="reverb"
@@ -1444,7 +1532,8 @@ export function ResultStep({
         }
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
         .vs-knob-row {
-          display: flex; align-items: flex-start; justify-content: center; gap: 32px;
+          display: flex; align-items: flex-start; justify-content: center;
+          gap: 24px; flex-wrap: wrap;
         }
         .vs-knob {
           display: flex; flex-direction: column; align-items: center; gap: 2px;
