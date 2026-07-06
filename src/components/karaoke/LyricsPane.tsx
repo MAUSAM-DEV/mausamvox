@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, memo, type RefObject } from 'react'
+import { useState, useEffect, useRef, useMemo, memo, Fragment, type RefObject } from 'react'
 
 // Shared synced-lyrics pane — the whole lyrics feature in one component:
 // load-if-stored, "Generate lyrics · 25 cr" offer with the language choice +
@@ -208,7 +208,15 @@ const WordLine = memo(function WordLine({ words }: { words: WordTiming[] }) {
   return (
     <>
       {words.map((w, i) => (
-        <span key={i} className="lyr-word">{i > 0 ? ' ' : ''}{w.text}</span>
+        // The space is a sibling text node BETWEEN spans, not inside them: a
+        // leading/trailing space inside an inline-block span is trimmed by CSS
+        // (that's what ran the words together), but whitespace between inline
+        // boxes renders as a normal, wrappable space — and being outside the
+        // spans it never scales/highlights with the active word.
+        <Fragment key={i}>
+          {i > 0 ? ' ' : null}
+          <span className="lyr-word">{w.text}</span>
+        </Fragment>
       ))}
     </>
   )
