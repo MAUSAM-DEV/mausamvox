@@ -40,6 +40,9 @@ interface ResultStepProps {
   // only" backing) — best-effort, null whenever its render/upload fails.
   persistMix?: boolean
   onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => void
+  // Re-save the saved track's audio when polish changes AFTER the first save
+  // (UPDATE the same row — no re-conversion, no credits). Returns success.
+  onPolishResave?: (mixedPath: string) => Promise<boolean> | void
   // Name(s) of the voice model(s) the swap used — shown in the result summary.
   voiceName?: string | null
 }
@@ -757,7 +760,7 @@ export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
   onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, voiceName,
+  persistMix, onFullMixReady, onPolishResave, voiceName,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -839,6 +842,75 @@ export function ResultStep({
     setWarmth(p.warmth); setReverb(p.reverb); setEcho(p.echo); setBass(p.bass); setTreble(p.treble)
   }
 
+  // ── Auto re-persist (the saved track always reflects the CURRENT polish) ────
+  // Signature of the currently-settled polish; the persist effect re-saves only
+  // when this changes from what was last stored (no redundant uploads).
+  const polishSig = `${debouncedWarmth}|${debouncedReverb}|${debouncedEcho}|${debouncedBass}|${debouncedTreble}`
+  const polishSigRef = useRef(polishSig)
+  polishSigRef.current = polishSig
+  const lastSavedSigRef = useRef<string | null>(null) // null = not yet saved
+  const savingRef = useRef(false)                      // an upload is in flight
+  const savedFlashTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const [savedFlash, setSavedFlash] = useState(false)  // brief "Saved ✓" pip
+
+  // Upload the current mix and (re)persist the saved track. First call inserts
+  // the row (+ the polish-independent music-only instrumental, once); later
+  // calls UPDATE the same row — no re-conversion, no credits. Best-effort: a
+  // failure keeps the previously-saved version and does not advance the marker.
+  async function savePolish() {
+    if (savingRef.current) return
+    const sig = polishSigRef.current
+    if (sig === lastSavedSigRef.current) return
+    const mixUrl = mixedSwappedRef.current
+    if (!mixUrl) return
+    const firstSave = lastSavedSigRef.current === null
+    savingRef.current = true
+    let saved = false
+    const uploadStart = performance.now()
+    try {
+      const mixPath = await uploadFullMixMp3(mixUrl)
+      if (!mixPath) {
+        saved = false // upload failed — keep the previous saved version
+      } else if (firstSave) {
+        // Music-only backing (Perform Live / Sing along) — polish-independent,
+        // so built + uploaded ONCE on the first save. Strictly best-effort.
+        let instrumentalPath: string | null | undefined
+        const musicUrls = [
+          stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl,
+        ].filter((u): u is string => Boolean(u))
+        if (musicUrls.length > 0) {
+          try {
+            const blob = await mixStems([], musicUrls)
+            if (blob) {
+              const url = URL.createObjectURL(blob)
+              try { instrumentalPath = await uploadFullMixMp3(url, 'swap-instrumental.mp3') }
+              finally { URL.revokeObjectURL(url) }
+            }
+          } catch { /* best-effort — row just won't offer the music-only backing */ }
+        }
+        console.log(`[timing] stage=upload ms=${Math.round(performance.now() - uploadStart)}`)
+        onFullMixReady?.(mixPath, instrumentalPath) // fire-and-forget INSERT
+        saved = true
+      } else {
+        const ok = await onPolishResave?.(mixPath) // awaited UPDATE
+        console.log(`[timing] stage=upload ms=${Math.round(performance.now() - uploadStart)} resave=1`)
+        saved = ok !== false
+      }
+    } catch {
+      saved = false // best-effort — the previously-saved version stays intact
+    }
+    savingRef.current = false
+    if (saved) {
+      lastSavedSigRef.current = sig
+      setSavedFlash(true)
+      clearTimeout(savedFlashTimerRef.current)
+      savedFlashTimerRef.current = setTimeout(() => setSavedFlash(false), 2200)
+      // Polish changed while we were uploading? Save the newer value now.
+      if (polishSigRef.current !== sig && mixedSwappedRef.current) void savePolish()
+    }
+    // On failure: no immediate retry (avoid hammering) — the next settled change re-runs the effect.
+  }
+
   // Real playback state — driven only by the <audio> element's events
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0) // 0..1
@@ -893,8 +965,13 @@ export function ResultStep({
   // Build BOTH full-song mixes in parallel as soon as the URLs are ready.
   useEffect(() => {
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
-    // New swap / regenerate → re-arm the deferred one-shot persist.
+    // New swap / regenerate (a NEW converted vocal, new prediction id) → re-arm
+    // persistence from scratch: clear the error-fallback one-shot AND the
+    // auto-persist markers so the fresh vocal is saved as a first-save (new
+    // row + its own instrumental), even if the polish signature is unchanged.
     persistedRef.current = false
+    lastSavedSigRef.current = null
+    savingRef.current = false
 
     // Collect non-empty music stem URLs (the shared instrumental bed)
     const musicUrls = [
@@ -1004,50 +1081,22 @@ export function ResultStep({
     return () => { cancelled = true }
   }, [debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Deferred one-shot persist: the parent saves the swap exactly once (it nulls
-  // its persist context after the first onFullMixReady). Wait until the swapped
-  // mix is ready AND warmth+reverb+echo have all settled (not mid-drag, not
-  // re-rendering), then upload that settled mix a single time so Recent Swaps
-  // matches what was heard.
+  // Auto-persist (Option 2): keep the SAVED track in sync with the CURRENT
+  // polish. Whenever the swapped mix is ready and polish has SETTLED to a value
+  // we haven't stored yet, schedule savePolish after a ~1s quiet period. First
+  // run inserts the row; later settled changes UPDATE it — no re-conversion, no
+  // credits (savePolish handles the dedup/first-vs-resave). persistedRef is set
+  // ONLY by the error/no-stems fallbacks below (a failed full mix can't be
+  // re-polished), so those stay a genuine one-shot.
   useEffect(() => {
     if (!persistMix || persistedRef.current) return
     if (fullMixState !== 'ready' || !mixedSwappedUrl) return
     if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo || debouncedBass !== bass || debouncedTreble !== treble) return // still settling
-    const t = setTimeout(() => {
-      if (persistedRef.current) return
-      persistedRef.current = true
-      // Sibling MUSIC-ONLY render for Performance Mode's "Music only" backing:
-      // the same music bed at the same 0.8 gain, no vocals, no polish (polish
-      // only ever touches the vocal path). Strictly best-effort — a null
-      // instrumental never blocks or delays the main save, the row just gets
-      // instrumental_path = null and /swaps falls back to full-track-only.
-      const musicUrls = [
-        stemResult?.instrumentalUrl,
-        stemResult?.bassUrl,
-        stemResult?.drumsUrl,
-        stemResult?.otherUrl,
-      ].filter((u): u is string => Boolean(u))
-      const instrumentalPromise: Promise<string | null> = musicUrls.length === 0
-        ? Promise.resolve(null)
-        : mixStems([], musicUrls)
-            .then((blob) => {
-              if (!blob) return null
-              const url = URL.createObjectURL(blob)
-              return uploadFullMixMp3(url, 'swap-instrumental.mp3')
-                .finally(() => URL.revokeObjectURL(url))
-            })
-            .catch(() => null)
-      // Instrumentation only (browser console): wall-clock of the encode +
-      // upload/persist of the saved mix (+ best-effort instrumental).
-      const uploadStart = performance.now()
-      Promise.all([uploadFullMixMp3(mixedSwappedUrl), instrumentalPromise])
-        .then(([path, instrumentalPath]) => {
-          console.log(`[timing] stage=upload ms=${Math.round(performance.now() - uploadStart)}`)
-          onFullMixReady?.(path, instrumentalPath)
-        })
-    }, 1000)
+    if (savingRef.current) return               // a save is in flight; its completion re-checks
+    if (polishSig === lastSavedSigRef.current) return // this exact polish is already stored
+    const t = setTimeout(() => { void savePolish() }, 1000)
     return () => clearTimeout(t)
-  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble, polishSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
   // same warmth+reverb+echo as the Full-song mix, so soloing the vocal to judge
@@ -1090,6 +1139,7 @@ export function ResultStep({
       if (mixedOriginalRef.current) URL.revokeObjectURL(mixedOriginalRef.current)
       if (mixedSwappedRef.current) URL.revokeObjectURL(mixedSwappedRef.current)
       if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
+      clearTimeout(savedFlashTimerRef.current)
     }
   }, [])
 
@@ -1365,6 +1415,7 @@ export function ResultStep({
             <div className="vs-polish-head">
               <span className="vs-polish-title">Polish</span>
               {warmthRendering && <span className="vs-polish-spin" />}
+              {savedFlash && <span className="vs-polish-saved">Saved ✓</span>}
               <span className="vs-polish-presets">
                 <button className="vs-polish-preset" onClick={() => applyPreset(RAW_PRESET)} title="Zero all polish — the bone-dry converted vocal">Raw</button>
                 <button className="vs-polish-preset" onClick={() => applyPreset(STUDIO_PRESET)} title="Back to the default Studio polish">Reset to defaults</button>
@@ -1583,6 +1634,11 @@ export function ResultStep({
           animation: vsPolishSpin 0.7s linear infinite;
         }
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
+        .vs-polish-saved {
+          font-size: 10px; font-weight: 700; color: #34D399;
+          letter-spacing: 0.3px; animation: vsSavedFade 0.25s ease;
+        }
+        @keyframes vsSavedFade { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
         .vs-polish-presets { display: flex; gap: 8px; margin-left: auto; }
         .vs-polish-preset {
           border: 1px solid #2A2A4A; background: transparent; color: #7878A0;

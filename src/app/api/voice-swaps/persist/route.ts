@@ -8,6 +8,39 @@ export const maxDuration = 60
 
 const VOICE_SWAPS_BUCKET = 'voice-swaps'
 
+// Sign a source file in audio-uploads, download it, and upload it to the
+// voice-swaps bucket at destPath. Used by the re-save path (polish changed) to
+// refresh a stored swap's audio without any Replicate/credit involvement.
+// Best-effort: returns false on any failure (caller keeps the previous file).
+async function copyToVoiceSwaps(srcAudioUploadsPath: string, destPath: string): Promise<boolean> {
+  try {
+    const { data: signed, error: signErr } = await supabaseAdmin.storage
+      .from('audio-uploads')
+      .createSignedUrl(srcAudioUploadsPath, 600)
+    if (signErr || !signed?.signedUrl) {
+      console.error('[voice-swaps/persist] resave sign failed:', signErr?.message)
+      return false
+    }
+    const res = await fetch(signed.signedUrl)
+    if (!res.ok) {
+      console.error(`[voice-swaps/persist] resave download failed HTTP ${res.status}`)
+      return false
+    }
+    const buf = Buffer.from(await res.arrayBuffer())
+    const { error: upErr } = await supabaseAdmin.storage
+      .from(VOICE_SWAPS_BUCKET)
+      .upload(destPath, buf, { contentType: 'audio/mpeg', upsert: false })
+    if (upErr) {
+      console.error('[voice-swaps/persist] resave upload failed:', upErr.message)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('[voice-swaps/persist] resave copy threw:', err instanceof Error ? err.message : String(err))
+    return false
+  }
+}
+
 // Replicate SDK v1 wraps file outputs in a FileOutput object.
 function toUrlString(v: unknown): string {
   if (typeof v === 'string') return v
@@ -69,15 +102,57 @@ export async function POST(req: NextRequest) {
   if (!songName)     return NextResponse.json({ error: 'songName is required' }, { status: 400 })
   if (!voiceUsed)    return NextResponse.json({ error: 'voiceUsed is required' }, { status: 400 })
 
-  // ── Idempotency: return early if this prediction was already persisted ──────
+  // ── Existing row? → RE-SAVE (polish changed) instead of a duplicate insert ──
+  // The swap is already in Recent Swaps; refresh its stored file(s) to the
+  // newly-built mix. NO Replicate fetch, NO credits — pure storage + DB update.
+  // Versioned dest paths so the signed-URL proxy never serves a stale cached
+  // object. Best-effort: a failed upload leaves the previously-saved version
+  // intact, and a superseded object is only removed AFTER the DB points away.
   const { data: existing } = await supabaseAdmin
     .from('voice_swaps')
-    .select('id')
+    .select('id, user_id, result_path, instrumental_path')
     .eq('replicate_prediction_id', predictionId)
     .maybeSingle()
   if (existing?.id) {
-    console.log('[voice-swaps/persist] already persisted, returning existing swap', existing.id)
-    return NextResponse.json({ swapId: existing.id })
+    if (existing.user_id !== user.id) {
+      // Not the caller's swap — treat as a plain idempotency hit, touch nothing.
+      return NextResponse.json({ swapId: existing.id })
+    }
+    const updates: Record<string, unknown> = {}
+    const superseded: string[] = []
+    if (mixedPath && !mixedPath.includes('..')) {
+      const dest = `${user.id}/${existing.id}-p${Date.now()}.mp3`
+      if (await copyToVoiceSwaps(mixedPath, dest)) {
+        updates.result_path = dest
+        if (existing.result_path && existing.result_path !== dest) superseded.push(existing.result_path)
+      }
+    }
+    if (instrumentalPath && !instrumentalPath.includes('..')) {
+      const dest = `${user.id}/${existing.id}-instrumental-p${Date.now()}.mp3`
+      if (await copyToVoiceSwaps(instrumentalPath, dest)) {
+        updates.instrumental_path = dest
+        if (existing.instrumental_path && existing.instrumental_path !== dest) superseded.push(existing.instrumental_path)
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      // Nothing uploaded (no paths given, or all uploads failed) — previous save stands.
+      return NextResponse.json({ swapId: existing.id, resaved: false })
+    }
+    const { error: updErr } = await supabaseAdmin
+      .from('voice_swaps')
+      .update(updates)
+      .eq('id', existing.id)
+      .eq('user_id', user.id)
+    if (updErr) {
+      console.error('[voice-swaps/persist] resave update failed:', updErr.message)
+      return NextResponse.json({ swapId: existing.id, resaved: false })
+    }
+    if (superseded.length > 0) {
+      const { error: rmErr } = await supabaseAdmin.storage.from(VOICE_SWAPS_BUCKET).remove(superseded)
+      if (rmErr) console.warn('[voice-swaps/persist] resave cleanup left orphans:', rmErr.message)
+    }
+    console.log('[voice-swaps/persist] resaved swap', existing.id, '→', Object.keys(updates).join('+'))
+    return NextResponse.json({ swapId: existing.id, resaved: true })
   }
 
   // ── Fetch the Replicate prediction to get the output URL ─────────────────

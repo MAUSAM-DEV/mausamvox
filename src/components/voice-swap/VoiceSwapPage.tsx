@@ -439,8 +439,9 @@ export function VoiceSwapPage() {
   // Persists the swap result server-side: downloads the Replicate MP3, uploads
   // it to durable Supabase storage, and inserts the voice_swaps row — all within
   // the 1-hour Replicate URL window. Non-blocking (callers fire-and-forget).
-  async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string, instrumentalPath?: string) {
-    if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return }
+  async function persistSwap(predictionId: string, songName: string, voiceUsed: string, mixedPath?: string, instrumentalPath?: string, opts?: { silent?: boolean }): Promise<boolean> {
+    if (!userId) { console.warn('[voice-swap] persistSwap: userId null — skipping'); return false }
+    const silent = opts?.silent === true
     try {
       // vocalStemPath links the saved swap back to its Demucs vocal stem — the
       // lyrics key (track_lyrics.source_key) used by Performance Mode on
@@ -452,23 +453,29 @@ export function VoiceSwapPage() {
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
-        showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
-        return
+        // Re-saves are best-effort (the previous version stays intact) — stay quiet.
+        if (!silent) showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
+        return false
       }
       const persisted = await res.json()
-      console.log('[voice-swap] persisted swap', persisted.swapId, persisted.persisted ? `→ storage path saved` : '(result_url only, no durable copy)')
-      // Refresh the Recent Swaps panel with the newly inserted row.
-      const supabase = createClient()
-      const { data: s } = await supabase
-        .from('voice_swaps')
-        .select('id, song_name, voice_used, quality_score, result_url, result_path, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(4)
-      setSwaps(s ?? [])
+      console.log('[voice-swap] persisted swap', persisted.swapId, persisted.resaved ? '(re-saved — polish updated)' : persisted.persisted ? '→ storage path saved' : '(result_url only, no durable copy)')
+      // Refresh the Recent Swaps panel after the FIRST save (a re-save doesn't
+      // change the row's identity or position — skip the needless query).
+      if (!silent) {
+        const supabase = createClient()
+        const { data: s } = await supabase
+          .from('voice_swaps')
+          .select('id, song_name, voice_used, quality_score, result_url, result_path, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(4)
+        setSwaps(s ?? [])
+      }
+      return true
     } catch (err) {
       console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
-      showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
+      if (!silent) showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
+      return false
     }
   }
 
@@ -479,10 +486,23 @@ export function VoiceSwapPage() {
   function handleFullMixReady(mixedPath: string | null, instrumentalPath?: string | null) {
     const ctx = persistContextRef.current
     if (!ctx) return
-    persistContextRef.current = null
-    setArmMixUpload(false)
+    // Do NOT null the context or disarm here anymore: keeping it armed lets
+    // ResultStep re-save (UPDATE) the same row when the user adjusts polish
+    // after this first save (handlePolishResave, below). The context is reset
+    // on the next swap (handleProcess) / new swap.
     persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
       .catch(() => { /* ignore — swap is still complete */ })
+  }
+
+  // Called by ResultStep when polish settles to a NEW value after the first
+  // save. Re-uploads the freshly-built mix and UPDATEs the SAME voice_swaps row
+  // (route keys on the prediction id) — no re-conversion, no credits. Silent +
+  // best-effort: a failure keeps the previously-saved version. Returns success
+  // so ResultStep knows whether to advance its "last saved" marker.
+  async function handlePolishResave(mixedPath: string): Promise<boolean> {
+    const ctx = persistContextRef.current
+    if (!ctx) return false
+    return persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath, undefined, { silent: true })
   }
 
   // Fires automatically after a server-side stem split to split the isolated
@@ -1384,6 +1404,7 @@ export function VoiceSwapPage() {
                 duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
                 persistMix={armMixUpload}
                 onFullMixReady={handleFullMixReady}
+                onPolishResave={handlePolishResave}
                 voiceName={[
                   voices.find((v) => v.id === selectedVoiceId)?.name,
                   convertedVocalsUrl2 ? voices.find((v) => v.id === selectedVoiceId2)?.name : null,
