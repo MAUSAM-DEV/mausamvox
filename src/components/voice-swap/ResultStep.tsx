@@ -101,13 +101,15 @@ const WARMTH_FREQ_HZ = 200
 const WARMTH_MAX_DB = 10
 
 // Bass / Treble: two BIPOLAR shelving EQs on the CONVERTED VOCAL path only,
-// chained alongside Warmth and BEFORE the Reverb/Echo time effects. Each is a
-// plain −12..+12 dB shelf (the knob value IS the dB). At 0 dB NO filter node is
-// inserted, so the graph stays byte-identical to before these controls existed
-// (same guarantee Warmth has at zero). Bass = low-shelf, Treble = high-shelf.
+// chained alongside Warmth and BEFORE the Reverb/Echo time effects. The knob
+// value IS the dB, over ±BASS_MAX_DB / ±TREBLE_MAX_DB. At 0 dB NO filter node
+// is inserted, so the graph stays byte-identical to before these controls
+// existed (same guarantee Warmth has at zero). Bass = low-shelf, Treble =
+// high-shelf. MAX are the tuning knobs for the range (defaults stay 0).
 const BASS_FREQ_HZ = 100
 const TREBLE_FREQ_HZ = 8000
-const EQ_MAX_DB = 12 // ± range for Bass/Treble
+const BASS_MAX_DB = 16   // Bass shelf range: −16..+16 dB
+const TREBLE_MAX_DB = 20 // Treble shelf range: −20..+20 dB
 
 // Reverb: a short synthetic "vocal space" convolution chained AFTER warmth, on
 // the same CONVERTED VOCAL path (music bed untouched). reverb 0..100 maps to
@@ -207,8 +209,8 @@ async function mixStems(
     ? (Math.min(100, Math.max(0, opts.warmth)) / 100) * WARMTH_MAX_DB
     : 0
   // Bass / Treble shelving gain (dB); the knob value IS the dB. 0 → no filter.
-  const bassDb = opts?.bass ? Math.max(-EQ_MAX_DB, Math.min(EQ_MAX_DB, opts.bass)) : 0
-  const trebleDb = opts?.treble ? Math.max(-EQ_MAX_DB, Math.min(EQ_MAX_DB, opts.treble)) : 0
+  const bassDb = opts?.bass ? Math.max(-BASS_MAX_DB, Math.min(BASS_MAX_DB, opts.bass)) : 0
+  const trebleDb = opts?.treble ? Math.max(-TREBLE_MAX_DB, Math.min(TREBLE_MAX_DB, opts.treble)) : 0
   // Wet fraction for the vocal path; 0 at default reverb → no convolver.
   const reverbWet = opts?.reverb
     ? (Math.min(100, Math.max(0, opts.reverb)) / 100) * REVERB_MAX_WET
@@ -1433,19 +1435,19 @@ export function ResultStep({
               <PolishKnob
                 id="bass"
                 label="Bass"
-                hint="Low-shelf EQ (~100 Hz), −12 to +12 dB — drag up/down, double-click to reset"
+                hint="Low-shelf EQ (~100 Hz), −16 to +16 dB — drag up/down, double-click to reset"
                 value={bass}
                 onChange={setBass}
-                min={-EQ_MAX_DB} max={EQ_MAX_DB}
+                min={-BASS_MAX_DB} max={BASS_MAX_DB}
                 format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
               />
               <PolishKnob
                 id="treble"
                 label="Treble"
-                hint="High-shelf EQ (~8 kHz), −12 to +12 dB — drag up/down, double-click to reset"
+                hint="High-shelf EQ (~8 kHz), −20 to +20 dB — drag up/down, double-click to reset"
                 value={treble}
                 onChange={setTreble}
-                min={-EQ_MAX_DB} max={EQ_MAX_DB}
+                min={-TREBLE_MAX_DB} max={TREBLE_MAX_DB}
                 format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
               />
               <PolishKnob
