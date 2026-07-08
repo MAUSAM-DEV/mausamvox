@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
 import { fireWarmPing } from '@/lib/rvc-engine'
+import { fireKaraokeWarmPing } from '@/lib/karaoke-engine'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
 // on success it now also buffers ALL FOUR stems from Replicate into Supabase
@@ -140,12 +141,17 @@ export async function POST(req: NextRequest) {
 
     console.log(`[stem-split] started prediction ${prediction.id} (status=${prediction.status})`)
 
-    // ── 3. Pre-warm the bare-RVC pool (PROJECT_STATUS §6) ─────────────
-    // First of two pings per swap: this one wakes the pool while Demucs runs.
-    // The GET success handler below re-pings when the stems land, because the
-    // 2026-07-05 acceptance swap showed the pool re-chills in under 7 minutes
-    // — Demucs (~3-4 min) plus user think-time already exceeded that window.
-    await fireWarmPing(new URL(req.url).origin, 'stem-split')
+    // ── 3. Pre-warm the downstream pools (PROJECT_STATUS §6) ──────────
+    // First of two RVC pings per swap: this one wakes the RVC pool while Demucs
+    // runs. The GET success handler below re-pings RVC when the stems land, as
+    // the pool re-chills in under 7 min (2026-07-05 acceptance).
+    const origin = new URL(req.url).origin
+    await fireWarmPing(origin, 'stem-split')
+    // Also warm the karaoke (UVR KARA_2) pool NOW: the real karaoke-split fires
+    // the instant these stems land (~120-155s of Demucs = the cold-boot runway),
+    // so — unlike RVC — this is a ONE-shot ping (a GET-time ping would race the
+    // real job). Best-effort; never blocks or breaks the pipeline. (speed step 2)
+    await fireKaraokeWarmPing(origin, 'stem-split')
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {

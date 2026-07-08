@@ -3,6 +3,7 @@ import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { persistStemFile } from '@/lib/stem-persist'
+import { KARAOKE_VERSION, KARAOKE_MODEL } from '@/lib/karaoke-engine'
 
 // GET buffers the lead/backing stems from Replicate into Supabase on success
 // (two parallel ~5 MB download + re-uploads), so allow up to 60 s like stem-split.
@@ -10,13 +11,8 @@ export const maxDuration = 60
 
 // erickluis00/all-in-one-audio — wraps python-audio-separator. We feed it an
 // already-isolated full-vocal stem and ask the UVR karaoke model to split it
-// into lead vs backing vocals. Version hash captured from the live Replicate
-// API; confirm with replicate.models.get before shipping if it ever changes.
-const KARAOKE_VERSION = 'f2a8516c9084ef460592deaa397acd4a97f60f18c3d15d273644c72500cdff0e'
-
-// The exact karaoke checkpoint validated in smoke-tests (Hindi + English):
-// cleanly separates lead from backing on a vocals-only input.
-const KARAOKE_MODEL = 'UVR_MDXNET_KARA_2.onnx'
+// into lead vs backing vocals. KARAOKE_VERSION + KARAOKE_MODEL now live in
+// lib/karaoke-engine.ts (shared single source of truth with the pre-warm ping).
 
 // Replicate SDK v1 wraps file outputs in a FileOutput class whose .url()
 // method returns a URL object. JSON.stringify() shows {} because the URL
