@@ -45,8 +45,6 @@ npm run dev                        # http://localhost:3000
 | `REPLICATE_API_TOKEN` | RVC voice conversion + model training |
 | MVSEP credentials | Gender / stem splitting |
 
-`RUNPOD_*` vars are referenced in `src/lib/runpod.ts` but the live training path uses Replicate — see the note in [PROJECT_STATUS.md](PROJECT_STATUS.md).
-
 ---
 
 ## How it works
@@ -80,7 +78,7 @@ src/
     auth/         # sign-in / sign-up / password reset pages
     voice-swap/   voice-lab/   dashboard/   onboarding/   page.tsx (landing)
   components/     # landing, auth, dashboard, onboarding, voice-swap, voice-lab, ui
-  lib/            # supabase clients, admin allowlist, rate-limit, runpod
+  lib/            # supabase clients, admin allowlist, rate-limit
   middleware.ts   # Supabase session refresh
 supabase/migrations/   # SQL migrations (run via scripts/migrate.mjs)
 ```
