@@ -22,7 +22,7 @@ const features = [
   {
     icon: '✂️',
     title: 'Smart Stem Studio',
-    desc: '4-stem separation, tuned for clean isolation even on dense mixes. BPM and key detection. In-browser per-stem editing. Smart file naming.',
+    desc: '4-stem separation, tuned for clean isolation even on dense mixes. Smart file naming.',
     tag: "4 Stems · StemSplit Engine",
     tagType: 'c',
   },
