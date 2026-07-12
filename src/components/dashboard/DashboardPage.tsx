@@ -234,15 +234,9 @@ export function DashboardPage() {
               <Link href="/dashboard" className="db-drop-item" onClick={() => setDropOpen(false)}>
                 Dashboard
               </Link>
-              {/* Settings isn't built yet — shown disabled with the app's usual
-                  "Soon" marker instead of a dead link. */}
-              <span
-                className="db-drop-item"
-                style={{ opacity: 0.45, pointerEvents: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
+              <Link href="/settings" className="db-drop-item" onClick={() => setDropOpen(false)}>
                 Settings
-                <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#5A5A80' }}>Soon</span>
-              </span>
+              </Link>
               <div className="db-drop-sep" />
               <button className="db-drop-item db-drop-out" onClick={handleSignOut}>
                 Sign Out
