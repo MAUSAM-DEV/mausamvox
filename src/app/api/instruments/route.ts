@@ -6,15 +6,6 @@ import path from 'path'
 import { promisify } from 'util'
 import { createRequire } from 'module'
 import ffmpegPath from 'ffmpeg-static'
-import * as tf from '@tensorflow/tfjs'
-import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm'
-import {
-  BasicPitch,
-  outputToNotesPoly,
-  addPitchBendsToNoteEvents,
-  noteFramesToTime,
-} from '@spotify/basic-pitch'
-import tonejsMidi from '@tonejs/midi'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
@@ -36,13 +27,22 @@ import {
 // notes, written as MIDI, and rendered through js-synthesizer (libfluidsynth
 // WASM) with the bundled GeneralUser GS GM soundfont on the chosen program.
 //
+// ⚠️ IMPORT RULE FOR THIS FILE: the heavy audio deps (@tensorflow/tfjs, the
+// wasm backend, @spotify/basic-pitch, @tonejs/midi, js-synthesizer) must NOT
+// be imported at module scope. Next's build-time page-data collection
+// evaluates the module, and the ESM/CJS interop of @tonejs/midi came back
+// undefined there, failing the whole build ("Cannot destructure property
+// 'Midi'"). They are loaded lazily inside the request path via dynamic
+// import()/createRequire, with explicit default-vs-named interop guards.
+//
 // Credits: Choir pattern — atomic deduct_credits() up front, add_credits()
 // refund on EVERY failure path after the charge, ADMIN_EMAILS bypass.
 // Result: a normal saved track (voice-swaps bucket + kind='instrument' row →
 // sign-on-read playback, Saved Tracks, share, delete, 90-day retention).
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const { Midi } = tonejsMidi
 const execFileAsync = promisify(execFile)
 const nodeRequire = createRequire(import.meta.url)
 
@@ -50,16 +50,35 @@ const BP_SAMPLE_RATE = 22050
 const RENDER_SAMPLE_RATE = 44100
 const RENDER_CHUNK = 8192
 
-// ── Module-level singletons (reused across warm invocations) ────────────────
+// ── Lazy singletons (loaded on first request, reused while the lambda is
+//    warm; never evaluated at build time) ───────────────────────────────────
 
-// tfjs backend: prefer WASM (SIMD), fall back to the pure-JS CPU backend if
+type TfModule = typeof import('@tensorflow/tfjs')
+type BasicPitchModule = typeof import('@spotify/basic-pitch')
+
+// CJS/ESM interop guard: depending on how the bundler/runtime resolves a
+// package, its exports can land on the namespace itself or under .default.
+function interop<T>(mod: unknown): T {
+  const m = mod as { default?: T }
+  return (m.default && typeof m.default === 'object' ? m.default : mod) as T
+}
+
+// tfjs + backend: prefer WASM (SIMD), fall back to the pure-JS CPU backend if
 // the .wasm assets didn't ship or fail to instantiate on the lambda.
-let tfReadyPromise: Promise<string> | null = null
-function ensureTf(): Promise<string> {
-  if (!tfReadyPromise) {
-    tfReadyPromise = (async () => {
+let tfPromise: Promise<{ tf: TfModule; backend: string }> | null = null
+function ensureTf(): Promise<{ tf: TfModule; backend: string }> {
+  if (!tfPromise) {
+    tfPromise = (async () => {
+      const tf = interop<TfModule>(await import('@tensorflow/tfjs'))
       try {
-        setWasmPaths(path.join(path.dirname(nodeRequire.resolve('@tensorflow/tfjs-backend-wasm/package.json')), 'dist') + path.sep)
+        const wasm = interop<typeof import('@tensorflow/tfjs-backend-wasm')>(
+          await import('@tensorflow/tfjs-backend-wasm')
+        )
+        const wasmDist = path.join(
+          path.dirname(nodeRequire.resolve('@tensorflow/tfjs-backend-wasm/package.json')),
+          'dist'
+        ) + path.sep
+        wasm.setWasmPaths(wasmDist)
         await tf.setBackend('wasm')
         await tf.ready()
       } catch (err) {
@@ -67,42 +86,69 @@ function ensureTf(): Promise<string> {
         await tf.setBackend('cpu')
         await tf.ready()
       }
-      return tf.getBackend()
+      return { tf, backend: tf.getBackend() }
     })()
   }
-  return tfReadyPromise
+  return tfPromise
 }
 
-// Basic Pitch model, loaded from the package's own files (the browser-oriented
-// tfjs loads via fetch, so hand it a filesystem IOHandler).
-let basicPitchInstance: BasicPitch | null = null
-async function getBasicPitch(): Promise<BasicPitch> {
-  if (basicPitchInstance) return basicPitchInstance
-  const modelDir = path.dirname(nodeRequire.resolve('@spotify/basic-pitch/model/model.json'))
-  const fileIOHandler = {
-    load: async () => {
-      const modelJSON = JSON.parse(await fs.readFile(path.join(modelDir, 'model.json'), 'utf8'))
-      const shards: Buffer[] = []
-      for (const group of modelJSON.weightsManifest) {
-        for (const p of group.paths) shards.push(await fs.readFile(path.join(modelDir, p)))
+let bpPromise: Promise<{
+  bp: BasicPitchModule
+  basicPitch: InstanceType<BasicPitchModule['BasicPitch']>
+}> | null = null
+function ensureBasicPitch(): NonNullable<typeof bpPromise> {
+  if (!bpPromise) {
+    bpPromise = (async () => {
+      const { tf } = await ensureTf()
+      const bp = interop<BasicPitchModule>(await import('@spotify/basic-pitch'))
+      const modelDir = path.dirname(nodeRequire.resolve('@spotify/basic-pitch/model/model.json'))
+      // The browser-oriented tfjs loads models via fetch — hand it the files.
+      const fileIOHandler = {
+        load: async () => {
+          const modelJSON = JSON.parse(await fs.readFile(path.join(modelDir, 'model.json'), 'utf8'))
+          const shards: Buffer[] = []
+          for (const group of modelJSON.weightsManifest) {
+            for (const p of group.paths) shards.push(await fs.readFile(path.join(modelDir, p)))
+          }
+          return {
+            modelTopology: modelJSON.modelTopology,
+            format: modelJSON.format,
+            generatedBy: modelJSON.generatedBy,
+            convertedBy: modelJSON.convertedBy,
+            weightSpecs: modelJSON.weightsManifest.flatMap((g: { weights: unknown[] }) => g.weights),
+            weightData: new Uint8Array(Buffer.concat(shards)).buffer,
+          }
+        },
       }
-      return {
-        modelTopology: modelJSON.modelTopology,
-        format: modelJSON.format,
-        generatedBy: modelJSON.generatedBy,
-        convertedBy: modelJSON.convertedBy,
-        weightSpecs: modelJSON.weightsManifest.flatMap((g: { weights: unknown[] }) => g.weights),
-        weightData: new Uint8Array(Buffer.concat(shards)).buffer,
-      }
-    },
+      const basicPitch = new bp.BasicPitch(tf.loadGraphModel(fileIOHandler as never))
+      return { bp, basicPitch }
+    })()
   }
-  basicPitchInstance = new BasicPitch(tf.loadGraphModel(fileIOHandler as never))
-  return basicPitchInstance
+  return bpPromise
+}
+
+// @tonejs/midi is ESM with awkward CJS interop — resolve the Midi class from
+// whichever shape arrives (named export or under .default).
+type MidiCtor = typeof import('@tonejs/midi').Midi
+let midiCtorPromise: Promise<MidiCtor> | null = null
+function ensureMidi(): Promise<MidiCtor> {
+  if (!midiCtorPromise) {
+    midiCtorPromise = import('@tonejs/midi').then((m) => {
+      const mod = m as { Midi?: MidiCtor; default?: { Midi?: MidiCtor } }
+      const Midi = mod.Midi ?? mod.default?.Midi
+      if (!Midi) throw new Error('@tonejs/midi interop failed: Midi export not found')
+      return Midi
+    })
+  }
+  return midiCtorPromise
 }
 
 // js-synthesizer needs its Emscripten module registered before first use.
-let synthReadyPromise: Promise<typeof import('js-synthesizer')> | null = null
-function ensureSynth(): Promise<typeof import('js-synthesizer')> {
+// Loaded via createRequire (CJS, opaque to the bundler).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let synthReadyPromise: Promise<any> | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ensureSynth(): Promise<any> {
   if (!synthReadyPromise) {
     synthReadyPromise = (async () => {
       const libfluid = nodeRequire('js-synthesizer/externals/libfluidsynth-2.4.6.js')
@@ -237,8 +283,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Audio → notes (Basic Pitch) ──────────────────────────────────────────
-    const backend = await ensureTf()
-    const basicPitch = await getBasicPitch()
+    const { backend } = await ensureTf()
+    const { bp, basicPitch } = await ensureBasicPitch()
     const frames: number[][] = []
     const onsets: number[][] = []
     const contours: number[][] = []
@@ -253,8 +299,8 @@ export async function POST(req: NextRequest) {
     logStageTiming('basicpitch', inferMs, { cold: 'n/a' })
     console.log(`[instruments] basic-pitch backend=${backend} audio=${audioSeconds.toFixed(1)}s inference=${inferMs}ms`)
 
-    const allNotes = noteFramesToTime(
-      addPitchBendsToNoteEvents(contours, outputToNotesPoly(frames, onsets, 0.25, 0.25, 5))
+    const allNotes = bp.noteFramesToTime(
+      bp.addPitchBendsToNoteEvents(contours, bp.outputToNotesPoly(frames, onsets, 0.25, 0.25, 5))
     )
     // Spurious-note filter: hums produce brief low-confidence artifacts around
     // breaths and note transitions.
@@ -269,6 +315,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Notes → MIDI ─────────────────────────────────────────────────────────
+    const Midi = await ensureMidi()
     const midi = new Midi()
     const track = midi.addTrack()
     track.instrument.number = instrument.gmProgram
