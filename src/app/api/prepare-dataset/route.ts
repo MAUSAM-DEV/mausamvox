@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { execFile } from 'child_process'
+import { promises as fs } from 'fs'
+import os from 'os'
+import path from 'path'
+import { promisify } from 'util'
 import JSZip from 'jszip'
+import ffmpegPath from 'ffmpeg-static'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+
+const execFileAsync = promisify(execFile)
 
 export const maxDuration = 60
 
@@ -118,7 +126,7 @@ export async function POST(req: NextRequest) {
     console.log('[prepare-dataset] downloaded', audioBuffer.length, 'bytes')
 
     // ── 5. Split into clips ──────────────────────────────────────────────────
-    const clips = splitAudio(audioBuffer)
+    const clips = await splitAudio(audioBuffer)
     console.log('[prepare-dataset] clips:', clips.length)
 
     // ── 6. Package into ZIP ──────────────────────────────────────────────────
@@ -223,15 +231,54 @@ export async function POST(req: NextRequest) {
 
 // ── Audio splitting ──────────────────────────────────────────────────────────
 
-function splitAudio(buffer: Buffer): Buffer[] {
+async function splitAudio(buffer: Buffer): Promise<Buffer[]> {
   if (isWav(buffer)) {
     return splitWav(buffer, CLIP_SECONDS, MIN_CLIP_SECONDS)
   }
-  // TODO (Phase B): add ffmpeg-wasm support to handle webm/mp3/m4a properly.
-  // For now, non-WAV audio is packaged as a single clip. RVC training can still
-  // run on a single file — it just produces fewer samples than multi-clip prep.
-  console.log('[prepare-dataset] non-WAV audio detected — packaging as single clip')
-  return [buffer]
+  // Non-WAV audio (mp3/m4a/webm): convert to WAV with ffmpeg first, then run
+  // the SAME splitter as native WAV uploads. These formats were previously
+  // packaged as one giant clip, starving training of samples (weak clones).
+  // Fallback: if conversion fails (bad file, missing binary on the platform),
+  // degrade to the old single-clip packaging so dataset prep never breaks.
+  try {
+    const wav = await convertToWav(buffer)
+    console.log('[prepare-dataset] non-WAV audio converted to WAV for splitting')
+    return splitWav(wav, CLIP_SECONDS, MIN_CLIP_SECONDS)
+  } catch (err) {
+    console.error(
+      '[prepare-dataset] ffmpeg conversion FAILED — falling back to single clip (training will be starved):',
+      err instanceof Error ? err.message : String(err)
+    )
+    return [buffer]
+  }
+}
+
+// Decode any ffmpeg-supported input (mp3/m4a/webm/…) to 16-bit PCM WAV,
+// mono 44.1 kHz — a clean, standard training input (the RVC pipeline resamples
+// anyway, and voice recordings are effectively mono). Uses temp files rather
+// than pipes because m4a (mp4 container) can't reliably stream via stdin.
+async function convertToWav(input: Buffer): Promise<Buffer> {
+  if (!ffmpegPath) throw new Error('ffmpeg binary not available on this platform')
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mvox-dataset-'))
+  const inFile = path.join(dir, 'input')
+  const outFile = path.join(dir, 'output.wav')
+  try {
+    await fs.writeFile(inFile, input)
+    // -bitexact keeps the WAV header minimal (fmt chunk at the standard offset
+    // splitWav reads from); -v error surfaces real failures in the log.
+    await execFileAsync(ffmpegPath, [
+      '-v', 'error', '-y',
+      '-i', inFile,
+      '-ac', '1',
+      '-ar', '44100',
+      '-c:a', 'pcm_s16le',
+      '-bitexact',
+      outFile,
+    ])
+    return await fs.readFile(outFile)
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 // WAV magic: "RIFF" at offset 0, "WAVE" at offset 8
