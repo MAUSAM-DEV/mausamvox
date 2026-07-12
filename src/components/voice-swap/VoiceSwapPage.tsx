@@ -162,6 +162,10 @@ export function VoiceSwapPage() {
   // steps index_rate up (0.80 → 0.85 → 0.90) for a progressively stronger
   // voice match. Reset to 0 on a new track (handleNewSwap). Capped at 2.
   const [regenCount, setRegenCount] = useState(0)
+  // The saved voice_swaps row id from the latest successful persist — lets
+  // ResultStep's Share button point a public link at the SAVED track. Null
+  // until the save lands (Share stays disabled) and reset on new swap/regen.
+  const [persistedSwapId, setPersistedSwapId] = useState<string | null>(null)
   // Caches the trimmed+uploaded 12 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
   // Keyed on sourceUrl + start + length: changing the start point (or clip length)
@@ -459,6 +463,7 @@ export function VoiceSwapPage() {
       }
       const persisted = await res.json()
       console.log('[voice-swap] persisted swap', persisted.swapId, persisted.resaved ? '(re-saved — polish updated)' : persisted.persisted ? '→ storage path saved' : '(result_url only, no durable copy)')
+      if (persisted.swapId) setPersistedSwapId(persisted.swapId)
       // Refresh the Recent Swaps panel after the FIRST save (a re-save doesn't
       // change the row's identity or position — skip the needless query).
       if (!silent) {
@@ -1169,6 +1174,7 @@ export function VoiceSwapPage() {
     setSelectedVoiceId2(null)
     setIsDuet(false)
     setRegenCount(0) // new track → reset the voice-strength ladder
+    setPersistedSwapId(null) // new track → Share must wait for its own save
     tunedClipRef.current = null // new track → drop the cached preview clip
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
@@ -1190,6 +1196,9 @@ export function VoiceSwapPage() {
       showToast(`Regenerating costs ${regenCost} credits, and you don't have enough. Top up to continue.`)
       return
     }
+    // A regen persists a NEW row — clear the old id so Share can't briefly
+    // point a link at the previous take while the new save is in flight.
+    setPersistedSwapId(null)
     // Initial swap = 0.80 (styleIntensity 8). Each regen steps +0.05.
     const indexRate = 0.8 + 0.05 * (regenCount + 1)
     await handleProcess('full', { charge: true, indexRateOverride: indexRate, isRegen: true })
@@ -1409,6 +1418,7 @@ export function VoiceSwapPage() {
                   voices.find((v) => v.id === selectedVoiceId)?.name,
                   convertedVocalsUrl2 ? voices.find((v) => v.id === selectedVoiceId2)?.name : null,
                 ].filter(Boolean).join(' + ') || null}
+                persistedSwapId={persistedSwapId}
               />
             )}
           </div>

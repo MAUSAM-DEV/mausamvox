@@ -9,6 +9,7 @@ import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
+import { ShareControl } from '@/components/share/ShareControl'
 
 // Read-only view of one saved swap: the final polished mix persisted at save
 // time. Deliberately NOT re-editable — stems and effect/fine-tune settings
@@ -27,6 +28,8 @@ type SwapRow = {
   // Durable Demucs vocal-stem path — the lyrics key Performance Mode uses.
   // Null on rows saved before 2026-07-05 (second session) — no lyrics offered.
   vocal_stem_path?: string | null
+  // Public share token (migration 20260712000002). Null/absent = private.
+  share_token?: string | null
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -223,6 +226,11 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <button className="sw-btn-ghost" onClick={() => setPerformSource('full')}>
                   🔊 Perform live
                 </button>
+                <ShareControl
+                  swapId={swapId}
+                  initialToken={swap.share_token ?? null}
+                  onToast={showToast}
+                />
                 {swap.instrumental_path && (
                   <button className="sw-btn-ghost" onClick={() => setPerformSource('music')}>
                     🎼 Perform live · music only

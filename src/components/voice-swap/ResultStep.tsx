@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, createReverbImpulse } from './audioClip'
+import { ShareControl } from '@/components/share/ShareControl'
 
 type AbSide = 'Original' | 'Swapped'
 type PlayMode = 'full' | 'vocals'
@@ -45,6 +46,10 @@ interface ResultStepProps {
   onPolishResave?: (mixedPath: string) => Promise<boolean> | void
   // Name(s) of the voice model(s) the swap used — shown in the result summary.
   voiceName?: string | null
+  // The saved voice_swaps row id, set once the parent's persist succeeds.
+  // Share needs it (a public link points at the SAVED track); null disables
+  // the Share button with a "saving…" hint until the save lands.
+  persistedSwapId?: string | null
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -762,7 +767,7 @@ export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
   onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onPolishResave, voiceName,
+  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -1523,13 +1528,11 @@ export function ResultStep({
           >
             {mp3Encoding ? '⏳ Encoding…' : `↓ MP3`}
           </button>
-          <button
-            className="vs-dl-btn vs-dl-btn--outline vs-dl-btn--soon"
-            disabled
-            title="Shareable links coming soon for Pro"
-          >
-            ⬆ Share<span className="vs-soon-badge">Soon · Pro</span>
-          </button>
+          <ShareControl
+            swapId={persistedSwapId ?? null}
+            initialToken={null}
+            onToast={onToast}
+          />
           <button className="vs-dl-btn vs-dl-btn--outline" onClick={onNewSwap}>+ New Swap</button>
         </div>
       </div>
@@ -1693,17 +1696,6 @@ export function ResultStep({
           background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0;
         }
         .vs-dl-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
-        /* Share is not live yet — dimmed, non-interactive, honestly labelled. */
-        .vs-dl-btn--soon {
-          display: inline-flex; align-items: center; gap: 7px;
-          opacity: 0.45; cursor: not-allowed;
-        }
-        .vs-dl-btn--soon:hover { border-color: #2A2A4A; color: #C4C4E0; }
-        .vs-soon-badge {
-          font-size: 9px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
-          padding: 2px 6px; border-radius: 999px;
-          background: rgba(139,92,246,.15); color: #A78BFA; border: 1px solid rgba(139,92,246,.3);
-        }
 
         /* Fine-tune panel */
         .vs-tune {
