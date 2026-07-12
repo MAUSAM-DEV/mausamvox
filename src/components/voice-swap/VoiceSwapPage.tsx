@@ -32,7 +32,6 @@ const clampPitch = (v: number) => Math.max(-24, Math.min(24, Math.round(v)))
 // Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
 const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
-type AgeRange = 'Young' | 'Mid' | 'Mature'
 
 const AVATAR_PALETTE = [
   'linear-gradient(135deg,#8B5CF6,#EC4899)',
@@ -330,9 +329,6 @@ export function VoiceSwapPage() {
   // ('male') — previously 'Female', which silently converted the female stem and
   // left the original male untouched when a user picked "male" in the duet picker.
   const [gender, setGender] = useState<Gender>('Male')
-  const [ageRange, setAgeRange] = useState<AgeRange>('Young')
-  const [accent, setAccent] = useState('Neutral')
-  const [language, setLanguage] = useState('Same as Source')
   const [styleIntensity, setStyleIntensity] = useState(8)
   const [pitchShift, setPitchShift] = useState(0)
 
@@ -1380,12 +1376,6 @@ export function VoiceSwapPage() {
                 setSelectedVoiceId={setSelectedVoiceId}
                 gender={gender}
                 setGender={handleSetGender}
-                ageRange={ageRange}
-                setAgeRange={setAgeRange}
-                accent={accent}
-                setAccent={setAccent}
-                language={language}
-                setLanguage={setLanguage}
                 styleIntensity={styleIntensity}
                 setStyleIntensity={setStyleIntensity}
                 pitchShift={pitchShift}

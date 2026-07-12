@@ -4,7 +4,6 @@ import Link from 'next/link'
 
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 type Gender = 'Male' | 'Female' | 'Neutral'
-type AgeRange = 'Young' | 'Mid' | 'Mature'
 type DuetSinger = 'male' | 'female'
 
 // Exported so VoiceSwapPage can hold this state and pass it to handleProcess later.
@@ -28,12 +27,6 @@ interface ConfigStepProps {
   setSelectedVoiceId: (id: string) => void
   gender: Gender
   setGender: (g: Gender) => void
-  ageRange: AgeRange
-  setAgeRange: (a: AgeRange) => void
-  accent: string
-  setAccent: (a: string) => void
-  language: string
-  setLanguage: (l: string) => void
   styleIntensity: number
   setStyleIntensity: (v: number) => void
   pitchShift: number
@@ -50,26 +43,20 @@ interface ConfigStepProps {
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
 
-const ACCENTS = ['Neutral', 'American', 'British', 'Indian', 'Australian', 'Irish']
-const LANGUAGES = ['Same as Source', 'Hindi', 'English', 'Spanish', 'French', 'Japanese', 'Korean']
-
 function SegControl<T extends string>({
   options,
   value,
   onChange,
-  disabled = false,
 }: {
   options: T[]
   value: T
   onChange: (v: T) => void
-  disabled?: boolean
 }) {
   return (
-    <div className={`vs-seg${disabled ? ' vs-seg--disabled' : ''}`}>
+    <div className="vs-seg">
       {options.map((opt) => (
         <button
           key={opt}
-          disabled={disabled}
           className={`vs-seg-btn ${value === opt ? 'vs-seg-btn--active' : ''}`}
           onClick={() => onChange(opt)}
         >
@@ -121,8 +108,7 @@ function VoiceGrid({
 
 export function ConfigStep({
   voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
-  gender, setGender, ageRange, setAgeRange,
-  accent, setAccent, language, setLanguage,
+  gender, setGender,
   styleIntensity, setStyleIntensity, pitchShift, setPitchShift,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2,
@@ -238,54 +224,10 @@ export function ConfigStep({
             )}
           </div>
 
-          <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">
-              Age Range
-              <span className="vs-badge-soon">Coming soon</span>
-            </label>
-            <SegControl<AgeRange>
-              options={['Young', 'Mid', 'Mature']}
-              value={ageRange}
-              onChange={setAgeRange}
-              disabled
-            />
-          </div>
-
-          <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">
-              Accent
-              <span className="vs-badge-soon">Coming soon</span>
-            </label>
-            <div className="vs-select-wrap vs-select-wrap--disabled">
-              <select
-                className="vs-select"
-                value={accent}
-                onChange={(e) => setAccent(e.target.value)}
-                disabled
-              >
-                {ACCENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-              <span className="vs-select-arrow">▾</span>
-            </div>
-          </div>
-
-          <div className="vs-ctrl-group">
-            <label className="vs-ctrl-lbl">
-              Output Language
-              <span className="vs-badge-soon">Coming soon</span>
-            </label>
-            <div className="vs-select-wrap vs-select-wrap--disabled">
-              <select
-                className="vs-select"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                disabled
-              >
-                {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <span className="vs-select-arrow">▾</span>
-            </div>
-          </div>
+          {/* Age Range / Accent / Output Language were removed 2026-07-12:
+              RVC exposes no parameter for any of them (see PROJECT_STATUS §6
+              feasibility note) — showing them, even disabled, implied
+              capabilities the pipeline can't deliver. */}
 
           <div className="vs-ctrl-group vs-ctrl-full">
             <label className="vs-ctrl-lbl">
@@ -514,49 +456,6 @@ export function ConfigStep({
           background: linear-gradient(135deg,#8B5CF6,#EC4899);
           color: #fff;
           font-weight: 600;
-        }
-        .vs-seg--disabled { opacity: 0.5; }
-        .vs-seg-btn:disabled {
-          cursor: not-allowed;
-        }
-        .vs-seg-btn:disabled:hover { color: #7878A0; background: transparent; }
-        .vs-badge-soon {
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
-          color: #5A5A80;
-          background: #1E1E3A;
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-        .vs-select-wrap {
-          position: relative;
-        }
-        .vs-select-wrap--disabled { opacity: 0.5; }
-        .vs-select:disabled { cursor: not-allowed; }
-        .vs-select {
-          width: 100%;
-          background: #0E0E20;
-          border: 1px solid #1E1E3A;
-          border-radius: 8px;
-          padding: 8px 28px 8px 12px;
-          font-size: 12px;
-          color: #C4C4E0;
-          outline: none;
-          cursor: pointer;
-          appearance: none;
-          transition: border-color 0.2s;
-        }
-        .vs-select:focus { border-color: rgba(139,92,246,.5); }
-        .vs-select-arrow {
-          position: absolute;
-          right: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #5A5A80;
-          pointer-events: none;
-          font-size: 11px;
         }
         .vs-range {
           -webkit-appearance: none;
