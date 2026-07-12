@@ -34,7 +34,7 @@ import {
 // notes by Basic Pitch (tfjs WASM backend, ~10× faster than the JS-CPU backend
 // in local measurement, with CPU fallback), filtered for spurious short/quiet
 // notes, written as MIDI, and rendered through js-synthesizer (libfluidsynth
-// WASM) with the bundled TimGM6mb GM soundfont on the chosen program.
+// WASM) with the bundled GeneralUser GS GM soundfont on the chosen program.
 //
 // Credits: Choir pattern — atomic deduct_credits() up front, add_credits()
 // refund on EVERY failure path after the charge, ADMIN_EMAILS bypass.
@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
     const JSSynth = await ensureSynth()
     const synth = new JSSynth.Synthesizer()
     synth.init(RENDER_SAMPLE_RATE)
-    const sf2 = await fs.readFile(path.join(process.cwd(), 'assets/soundfonts/TimGM6mb.sf2'))
+    const sf2 = await fs.readFile(path.join(process.cwd(), 'assets/soundfonts/GeneralUserGS.sf2'))
     await synth.loadSFont(sf2.buffer.slice(sf2.byteOffset, sf2.byteOffset + sf2.byteLength))
     await synth.addSMFDataToPlayer(midBytes.buffer.slice(midBytes.byteOffset, midBytes.byteOffset + midBytes.byteLength))
     await synth.playPlayer()
@@ -321,7 +321,7 @@ export async function POST(req: NextRequest) {
     const outF32 = path.join(workDir, 'out.f32')
     const outMp3 = path.join(workDir, 'out.mp3')
     await fs.writeFile(outF32, Buffer.from(interleaved.buffer))
-    // TimGM6mb renders quiet — bring it up, hard-cap at −1 dB.
+    // Soundfont renders conservatively quiet — bring it up, hard-cap at −1 dB.
     await execFileAsync(ffmpegPath, [
       '-v', 'error', '-y', '-f', 'f32le', '-ar', String(RENDER_SAMPLE_RATE), '-ac', '2', '-i', outF32,
       '-af', 'volume=12dB,alimiter=limit=0.891',

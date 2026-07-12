@@ -18,14 +18,15 @@
 //   * Inference: 4.2 s for 3.2 s of audio (~1.3× realtime) on the pure-JS
 //     CPU backend — THE constraint; see PROJECT_STATUS §6 for mitigations
 //     (tfjs wasm backend / input cap).
-//   * MIDI→audio via WASM FluidSynth + TimGM6mb.sf2 (5.9 MB GM soundfont,
-//     the one bundled in pretty_midi): 77 ms for a 7 s render. Round-trip
-//     re-transcription of the rendered piano recovered the same melody.
+//   * MIDI→audio via WASM FluidSynth + a GM soundfont: 77 ms for a 7 s
+//     render. Round-trip re-transcription of the rendered piano recovered
+//     the same melody. (Originally proven with TimGM6mb; the app now bundles
+//     GeneralUser GS — assets/soundfonts/GeneralUserGS.sf2 — after the GPL
+//     TimGM6mb was swapped out for licensing. Either works here.)
 //
 // Deps are NOT in package.json (spike-only). To run:
-//   npm install --no-save @spotify/basic-pitch @tensorflow/tfjs js-synthesizer
-//   curl -sLo /tmp/TimGM6mb.sf2 https://github.com/craffel/pretty-midi/raw/main/pretty_midi/TimGM6mb.sf2
-//   node scripts/spike-voice-to-instrument.mjs <input.wav> /tmp/TimGM6mb.sf2 <output.wav> [gm-program]
+//   (deps are now real app dependencies — no --no-save install needed)
+//   node scripts/spike-voice-to-instrument.mjs <input.wav> assets/soundfonts/GeneralUserGS.sf2 <output.wav> [gm-program]
 // gm-program: General MIDI program number (default 0 = acoustic grand piano;
 // 40 = violin, 73 = flute).
 import fs from 'fs'

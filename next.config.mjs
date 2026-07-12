@@ -25,7 +25,7 @@ const nextConfig = {
         './node_modules/ffmpeg-static/ffmpeg*',
         './node_modules/@spotify/basic-pitch/model/**',
         './node_modules/@tensorflow/tfjs-backend-wasm/dist/*.wasm',
-        './assets/soundfonts/TimGM6mb.sf2',
+        './assets/soundfonts/GeneralUserGS.sf2',
       ],
     },
   },

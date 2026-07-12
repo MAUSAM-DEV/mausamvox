@@ -4,8 +4,8 @@
 //
 // Pipeline (proven by scripts/spike-voice-to-instrument.mjs, PROJECT_STATUS
 // §6): monophonic vocal → @spotify/basic-pitch (audio→MIDI) → js-synthesizer
-// (WASM FluidSynth) + TimGM6mb.sf2 → instrument audio. Local compute only —
-// no paid model.
+// (WASM FluidSynth) + GeneralUserGS.sf2 → instrument audio. Local compute
+// only — no paid model.
 export const INSTRUMENTS_CREDITS = 25
 
 // Hard input cap. Basic Pitch inference on the tfjs WASM backend measured
@@ -29,8 +29,9 @@ export interface InstrumentDef {
   group: 'Keys' | 'Strings' | 'Winds' | 'Brass' | 'Plucked' | 'Other'
 }
 
-// Curated GM programs — popular, distinctive, and known to read well in
-// TimGM6mb. id/gmProgram are the contract; labels are display-only.
+// Curated GM programs — popular and distinctive; all 32 verified present in
+// bank 0 of GeneralUser GS v2.0.3 (phdr parse, 2026-07-12). id/gmProgram are
+// the contract; labels are display-only.
 export const INSTRUMENTS: InstrumentDef[] = [
   // Keys
   { id: 'grand-piano', label: 'Grand Piano', emoji: '🎹', gmProgram: 0, group: 'Keys' },
