@@ -41,6 +41,7 @@ type SwapRow = {
 const KIND_LABELS: Record<string, { subtitle: string; detail: string }> = {
   song_studio: { subtitle: 'AI-generated song — Song Studio', detail: 'Style' },
   choir: { subtitle: 'Vocal harmony stack — Choir Composer', detail: 'Preset' },
+  instrument: { subtitle: 'Melody replayed on an instrument — Instruments', detail: 'Instrument' },
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'

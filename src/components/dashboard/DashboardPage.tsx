@@ -42,9 +42,9 @@ const TOOLS = [
   {
     emoji: '🎷',
     name: 'Instruments',
-    desc: 'Clone any instrument\'s timbre and play it back with MIDI.',
-    href: '#',
-    live: false,
+    desc: 'Hum a melody and hear it played on a real instrument.',
+    href: '/instruments',
+    live: true,
     gradient: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
   },
   {

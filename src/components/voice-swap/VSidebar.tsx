@@ -10,7 +10,7 @@ const TOOLS = [
   { emoji: '🧬', label: 'Voice Lab', href: '/voice-lab' },
   { emoji: '✂️', label: 'Stem Studio', href: '/stem-studio' },
   { emoji: '🎼', label: 'Choir Composer', href: '/choir' },
-  { emoji: '🎷', label: 'Instruments', href: '#' },
+  { emoji: '🎷', label: 'Instruments', href: '/instruments' },
   { emoji: '🎵', label: 'Song Studio', href: '/song-studio' },
 ]
 
