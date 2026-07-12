@@ -1,6 +1,6 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-07-07 · Branch: `main` · Status: Active development (pre-launch)_
+_Last updated: 2026-07-12 · Branch: `main` · Status: Active development (pre-launch)_
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 

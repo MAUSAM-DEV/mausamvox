@@ -2,6 +2,13 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-07-12
+
+- Add "Operating Rules" (standing instructions for the working model) to `CLAUDE.md` — 10 trigger→action procedures (intent reading, problem breakdown, verification, known-vs-guessed labels, self-attack, completeness, delivery, fake-competence scan) plus a final pre-send gate. Loaded automatically every session. Existing sections (How I work / gotchas / handoff protocol) untouched. (commit: eac2b4e)
+- Sync `.env.local.example` with the vars the app actually reads (verified by grepping every `process.env.*` in `src/`): the two public Supabase keys + `SUPABASE_SERVICE_ROLE_KEY`, `REPLICATE_API_TOKEN`, `MVSEP_API_TOKEN`, and optional `RVC_ENGINE` (bare default / cover rollback, commented). No RUNPOD vars. (commit: edf1220)
+- Landing honesty: remove unimplemented BPM/key-detection claims — Pricing Starter feature now reads "4-stem split" (was "+ BPM/key"), and the Smart Stem Studio card drops "BPM and key detection. In-browser per-stem editing." (surrounding true copy kept). Repo-wide grep confirms no other occurrences; onboarding's sample-track "140 BPM" labels are demo metadata, not claims. (commit: f027a87)
+- Remove the dead RunPod module: deleted `src/lib/runpod.ts` (imported nowhere), corrected PROJECT_STATUS/README tech-stack + env-var docs — training runs on Replicate (`replicate/train-rvc-model`), not RunPod/GPT-SoVITS. `.env` files had no RUNPOD vars. `tsc --noEmit` clean. (commit: e61d07b)
+
 ## 2026-07-07
 
 - Pre-warm the karaoke (UVR KARA_2) pool at swap start (speed step 2). Mirrors the existing RVC `fireWarmPing`: when Demucs (stem-split) kicks off, also fire a tiny throwaway karaoke-split prediction so the real karaoke-split — which runs the instant the stems land, ~120–155s later — skips the ~19s cold-start queue. New `src/lib/karaoke-engine.ts` holds `KARAOKE_VERSION`/`KARAOKE_MODEL` (now the single source of truth, imported by the karaoke-split route) + `fireKaraokeWarmPing`. Fired ONCE at stem-split POST (a GET-time re-ping would race the real job, unlike the RVC re-ping). Best-effort/non-blocking (only the create is awaited, all failures swallowed) — never delays or breaks the pipeline, no quality/behaviour change. ~$0.002/swap. Test: a cold swap's karaoke-split `[timing]` line should show a much lower `queue_ms`. (commit: 8cde734)
