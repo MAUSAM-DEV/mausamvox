@@ -9,6 +9,7 @@ import {
   SONG_MIN_SECONDS,
   SONG_MAX_SECONDS,
 } from '@/lib/song-engine'
+import { normalizeLoudness } from '@/lib/loudness'
 
 // Song Studio: AI full-song generation via ACE-Step (see song-engine.ts).
 //
@@ -222,8 +223,11 @@ export async function GET(req: NextRequest) {
       if (!audioRes.ok) {
         return NextResponse.json({ status: 'failed', error: `Output download failed (http ${audioRes.status})` }, { status: 502 })
       }
-      const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+      const rawBuffer = Buffer.from(await audioRes.arrayBuffer())
       const ext = new URL(outputUrl).pathname.split('.').pop()?.toLowerCase() === 'mp3' ? 'mp3' : 'wav'
+      // ACE-Step output comes back much quieter than the rest of the app —
+      // normalize before storing (falls back to the raw audio on failure).
+      const audioBuffer = await normalizeLoudness(rawBuffer, ext, '[song-studio]')
       const swapId = crypto.randomUUID()
       const swapPath = `${user.id}/${swapId}.${ext}`
 

@@ -21,6 +21,8 @@ const nextConfig = {
     outputFileTracingIncludes: {
       '/api/prepare-dataset': ['./node_modules/ffmpeg-static/ffmpeg*'],
       '/api/choir': ['./node_modules/ffmpeg-static/ffmpeg*'],
+      // Loudness normalization (src/lib/loudness.ts) runs ffmpeg here too.
+      '/api/song-studio': ['./node_modules/ffmpeg-static/ffmpeg*'],
       '/api/instruments': [
         './node_modules/ffmpeg-static/ffmpeg*',
         './node_modules/@spotify/basic-pitch/model/**',

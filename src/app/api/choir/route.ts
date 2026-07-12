@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { CHOIR_CREDITS, CHOIR_PRESETS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
+import { normalizeLoudness } from '@/lib/loudness'
 
 // Choir Composer — DSP vocal harmonizer. Takes the user's uploaded solo vocal
 // (a durable audio-uploads path from the existing presign flow) and builds a
@@ -188,7 +189,9 @@ export async function POST(req: NextRequest) {
       '-map', '[mix]', '-c:a', 'libmp3lame', '-b:a', '256k', outFile,
     ], { timeout: 45000 })
 
-    const mixBuffer = await fs.readFile(outFile)
+    // amix attenuates the sum, so the stack lands quiet — bring it to the
+    // app-wide loudness target (falls back to the raw mix on failure).
+    const mixBuffer = await normalizeLoudness(await fs.readFile(outFile), 'mp3', '[choir]')
 
     // ── Persist as a saved track ─────────────────────────────────────────────
     const swapId = crypto.randomUUID()

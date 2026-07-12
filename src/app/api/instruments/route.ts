@@ -18,6 +18,7 @@ import {
   MIN_NOTE_AMPLITUDE,
   findInstrument,
 } from '@/lib/instruments'
+import { normalizeLoudness } from '@/lib/loudness'
 
 // Instruments — voice → instrument, all local compute in this one function
 // (pipeline proven by scripts/spike-voice-to-instrument.mjs; see PROJECT_STATUS
@@ -368,13 +369,15 @@ export async function POST(req: NextRequest) {
     const outF32 = path.join(workDir, 'out.f32')
     const outMp3 = path.join(workDir, 'out.mp3')
     await fs.writeFile(outF32, Buffer.from(interleaved.buffer))
-    // Soundfont renders conservatively quiet — bring it up, hard-cap at −1 dB.
+    // Soundfont renders conservatively quiet — rough boost here (also the
+    // fallback level if loudnorm fails), then normalize to the app-wide
+    // loudness target like every other generated track.
     await execFileAsync(ffmpegPath, [
       '-v', 'error', '-y', '-f', 'f32le', '-ar', String(RENDER_SAMPLE_RATE), '-ac', '2', '-i', outF32,
       '-af', 'volume=12dB,alimiter=limit=0.891',
       '-c:a', 'libmp3lame', '-b:a', '256k', outMp3,
     ])
-    const mp3Buffer = await fs.readFile(outMp3)
+    const mp3Buffer = await normalizeLoudness(await fs.readFile(outMp3), 'mp3', '[instruments]')
 
     // ── Persist as a saved track ─────────────────────────────────────────────
     const swapId = crypto.randomUUID()
