@@ -55,6 +55,14 @@ const TOOLS = [
     live: true,
     gradient: 'linear-gradient(135deg,#06B6D4,#EC4899)',
   },
+  {
+    emoji: '🌐',
+    name: 'Voice Library',
+    desc: 'Browse community-shared voices and use them in your swaps — free.',
+    href: '/library',
+    live: true,
+    gradient: 'linear-gradient(135deg,#10B981,#06B6D4)',
+  },
 ]
 
 type RecentSwap = {

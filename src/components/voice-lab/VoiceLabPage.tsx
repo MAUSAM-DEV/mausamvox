@@ -43,6 +43,21 @@ export function VoiceLabPage() {
       if (!error && clones) {
         const list = clones as SavedVoice[]
         setVoices(list)
+        // Voice Library state, merged best-effort in a SEPARATE query so a
+        // deploy that outruns migration 20260713000000 (published columns)
+        // can't break the main voices list.
+        supabase
+          .from('voice_clones')
+          .select('id, published, library_bio')
+          .eq('user_id', uid)
+          .then(({ data: pub, error: pubErr }) => {
+            if (pubErr || !pub) return
+            const byId = new Map(pub.map((p) => [p.id, p]))
+            setVoices((prev) => prev.map((v) => {
+              const p = byId.get(v.id)
+              return p ? { ...v, published: !!p.published, library_bio: p.library_bio } : v
+            }))
+          })
         // Reconcile any voice still marked 'training': training may have finished
         // while nobody was polling, so the row's status can be stale. One GET per
         // such voice self-heals the row and refreshes the badge to the truth.
@@ -170,6 +185,24 @@ export function VoiceLabPage() {
     showToast('Voice deleted')
   }
 
+  // Publish/unpublish a voice to the free community Voice Library. The route
+  // enforces consent + ready-status server-side; this just reflects the result.
+  async function handlePublishVoice(id: string, publish: boolean, consent: boolean, bio: string) {
+    const res = await fetch('/api/library/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voiceId: id, publish, consent, bio }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error ?? 'Could not update the Library')
+    }
+    setVoices((prev) => prev.map((v) =>
+      v.id === id ? { ...v, published: publish, library_bio: publish ? (bio.trim() || null) : v.library_bio } : v
+    ))
+    showToast(publish ? 'Published to the Voice Library' : 'Removed from the Voice Library')
+  }
+
   // Open a voice from My Voices and reflect its true current status.
   function handleOpenVoice(v: SavedVoice) {
     setSavedVoice(v)
@@ -259,7 +292,7 @@ export function VoiceLabPage() {
           )}
         </div>
 
-        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} onOpenVoice={handleOpenVoice} onDeleteVoice={handleDeleteVoice} />
+        <VLRightPanel onToast={showToast} voices={voices} voicesLoading={voicesLoading} onOpenVoice={handleOpenVoice} onDeleteVoice={handleDeleteVoice} onPublishVoice={handlePublishVoice} />
       </div>
 
       <VToast visible={toast.visible} message={toast.message} />

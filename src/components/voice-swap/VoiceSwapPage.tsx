@@ -283,6 +283,33 @@ export function VoiceSwapPage() {
     })
   }, [])
 
+  // Voice Library: a /voice-swap?libVoice=<id> link (from /library) loads that
+  // published community voice into the picker and preselects it. Kept in a ref
+  // too so the own-voices fetch below can re-merge it without a dep cycle.
+  const libVoiceRef = useRef<VoiceOption | null>(null)
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('libVoice')
+    if (!id) return
+    fetch(`/api/library?id=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.voice) { showToast('That Library voice is no longer shared'); return }
+        const opt: VoiceOption = {
+          id: d.voice.id,
+          name: d.voice.name,
+          sub: 'Community voice · Library',
+          icon: '🌐',
+          avatarBg: 'linear-gradient(135deg,#10B981,#06B6D4)',
+          isLibrary: true,
+        }
+        libVoiceRef.current = opt
+        setVoices((prev) => (prev.some((v) => v.id === opt.id) ? prev : [opt, ...prev]))
+        setSelectedVoiceId(opt.id)
+        setVoiceTab('Library')
+      })
+      .catch(() => { /* picker just shows own voices */ })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch (or refresh) voices every time the user enters the configure step
   useEffect(() => {
     if (!userId) {
@@ -310,8 +337,13 @@ export function VoiceSwapPage() {
               : 'linear-gradient(135deg,#06B6D4,#3B82F6)',
             modelUrl: c.model_url ?? undefined,
           }))
-          setVoices(mapped)
-          if (mapped.length > 0 && !selectedVoiceId) setSelectedVoiceId(mapped[0].id)
+          // Keep the loaded Library voice (if any) in the list across refetches.
+          const lib = libVoiceRef.current
+          setVoices(lib && !mapped.some((m) => m.id === lib.id) ? [lib, ...mapped] : mapped)
+          // Don't default-select over a Library voice that was (or is still
+          // being) loaded from the ?libVoice= link.
+          const libRequested = new URLSearchParams(window.location.search).has('libVoice')
+          if (mapped.length > 0 && !selectedVoiceId && !libRequested) setSelectedVoiceId(mapped[0].id)
         }
         setVoicesLoading(false)
       })
@@ -884,7 +916,7 @@ export function VoiceSwapPage() {
       showToast('Select a voice first')
       return
     }
-    if (!voice.modelUrl) {
+    if (!voice.modelUrl && !voice.isLibrary) {
       showToast(`"${voice.name}" is sample-only — full model training needed for voice swap. Train it in Voice Lab.`)
       return
     }
@@ -947,7 +979,7 @@ export function VoiceSwapPage() {
           showToast('Select a second voice for the female singer first.')
           return
         }
-        if (!voice2.modelUrl) {
+        if (!voice2.modelUrl && !voice2.isLibrary) {
           setProcessing(false)
           showToast(`"${voice2.name}" is sample-only — full model training needed. Train it in Voice Lab.`)
           return
@@ -1218,7 +1250,7 @@ export function VoiceSwapPage() {
     if (!stemResult) { showToast('Upload a track first'); return null }
     const voice = voices.find((v) => v.id === selectedVoiceId)
     if (!voice) { showToast('Select a voice first'); return null }
-    if (!voice.modelUrl) {
+    if (!voice.modelUrl && !voice.isLibrary) {
       showToast(`"${voice.name}" is sample-only — train it in Voice Lab to tune.`)
       return null
     }

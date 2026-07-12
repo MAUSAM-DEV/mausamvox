@@ -9,6 +9,9 @@ interface VLRightPanelProps {
   voicesLoading: boolean
   onOpenVoice?: (v: SavedVoice) => void
   onDeleteVoice?: (id: string) => Promise<void>
+  // Voice Library publish/unpublish. consent is the checkbox value — the API
+  // rejects a publish without it, this UI just collects it honestly.
+  onPublishVoice?: (id: string, publish: boolean, consent: boolean, bio: string) => Promise<void>
 }
 
 function formatDate(iso: string) {
@@ -22,9 +25,29 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
 }
 
-export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDeleteVoice }: VLRightPanelProps) {
+export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDeleteVoice, onPublishVoice }: VLRightPanelProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  // Voice Library publish flow (inline panel, same pattern as delete confirm)
+  const [publishingId, setPublishingId] = useState<string | null>(null)
+  const [pubConsent, setPubConsent] = useState(false)
+  const [pubBio, setPubBio] = useState('')
+  const [pubBusy, setPubBusy] = useState(false)
+
+  const handleConfirmPublish = useCallback(async (v: SavedVoice, publish: boolean) => {
+    if (!onPublishVoice) return
+    setPubBusy(true)
+    try {
+      await onPublishVoice(v.id, publish, pubConsent, pubBio)
+      setPublishingId(null)
+      setPubConsent(false)
+      setPubBio('')
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : 'Library update failed — try again')
+    } finally {
+      setPubBusy(false)
+    }
+  }, [onPublishVoice, onToast, pubConsent, pubBio])
 
   const handleConfirmDelete = useCallback(async (id: string) => {
     if (!onDeleteVoice) return
@@ -57,6 +80,68 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
           {!voicesLoading && voices.map((v) => {
             const isConfirming = confirmingId === v.id
             const isDeleting = deletingIds.has(v.id)
+            const isPublishing = publishingId === v.id
+
+            if (isPublishing) {
+              return (
+                <div key={v.id} className="vlrp-item vlrp-item--pub">
+                  {v.published ? (
+                    <>
+                      <div className="vlrp-confirm-msg">
+                        Remove <b>&ldquo;{v.name}&rdquo;</b> from the Voice Library?
+                        <span className="vlrp-confirm-sub">
+                          The public listing disappears and others can no longer start new swaps with it.
+                        </span>
+                      </div>
+                      <div className="vlrp-confirm-btns">
+                        <button className="vlrp-pub-go" disabled={pubBusy} onClick={() => handleConfirmPublish(v, false)}>
+                          {pubBusy ? 'Removing…' : 'Unpublish'}
+                        </button>
+                        <button className="vlrp-confirm-cancel" disabled={pubBusy} onClick={() => setPublishingId(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="vlrp-confirm-msg">
+                        Share <b>&ldquo;{v.name}&rdquo;</b> in the Voice Library?
+                        <span className="vlrp-confirm-sub">
+                          Anyone can hear its sample and use it in their swaps — free. You can unpublish anytime.
+                        </span>
+                      </div>
+                      <input
+                        className="vlrp-pub-bio"
+                        placeholder="Short description (optional)"
+                        value={pubBio}
+                        maxLength={200}
+                        onChange={(e) => setPubBio(e.target.value)}
+                      />
+                      <label className="vlrp-pub-consent">
+                        <input
+                          type="checkbox"
+                          checked={pubConsent}
+                          onChange={(e) => setPubConsent(e.target.checked)}
+                        />
+                        <span>I own this voice or have the rights, and I consent to others using it in the Library</span>
+                      </label>
+                      <div className="vlrp-confirm-btns">
+                        <button
+                          className="vlrp-pub-go"
+                          disabled={pubBusy || !pubConsent}
+                          onClick={() => handleConfirmPublish(v, true)}
+                        >
+                          {pubBusy ? 'Publishing…' : 'Publish'}
+                        </button>
+                        <button className="vlrp-confirm-cancel" disabled={pubBusy} onClick={() => { setPublishingId(null); setPubConsent(false); setPubBio('') }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            }
 
             if (isConfirming) {
               return (
@@ -96,6 +181,16 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
                   <span className={`vlrp-vi-badge vlrp-vi-badge--${v.type === 'studio' ? 'studio' : 'express'}`}>
                     {v.type === 'studio' ? 'Studio' : 'Express'}
                   </span>
+                  {onPublishVoice && !isDeleting && (v.status === 'ready' || v.published) && (
+                    <button
+                      className={`vlrp-pub-btn${v.published ? ' vlrp-pub-btn--on' : ''}`}
+                      title={v.published ? 'Published to the Voice Library — click to manage' : 'Share in the Voice Library'}
+                      aria-label={v.published ? 'Manage Voice Library listing' : 'Share in the Voice Library'}
+                      onClick={(e) => { e.stopPropagation(); setPubConsent(false); setPubBio(v.library_bio ?? ''); setPublishingId(v.id) }}
+                    >
+                      🌐
+                    </button>
+                  )}
                   {onDeleteVoice && !isDeleting && (
                     <button
                       className="vlrp-del-btn"
@@ -116,6 +211,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
                   <span className={`vlrp-vi-status vlrp-vi-status--${isDeleting ? 'pending' : v.status}`}>
                     {isDeleting ? 'Deleting…' : (STATUS_LABEL[v.status] ?? v.status)}
                   </span>
+                  {v.published && <span className="vlrp-vi-public">🌐 In Library</span>}
                 </div>
               </div>
             )
@@ -245,6 +341,48 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
         /* ── Deleting state ── */
         .vlrp-item--deleting { opacity: 0.45; cursor: default; pointer-events: none; }
         .vlrp-item--deleting:hover { border-color: #1E1E3A; transform: none; }
+
+        /* ── Voice Library publish ── */
+        .vlrp-pub-btn {
+          width: 26px; height: 26px; flex-shrink: 0;
+          border-radius: 6px; border: none;
+          background: transparent; font-size: 13px; line-height: 1;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; padding: 0; margin-left: 2px;
+          opacity: 0; filter: grayscale(1) opacity(0.6);
+          transition: opacity 0.15s, filter 0.15s, background 0.15s;
+        }
+        .vlrp-item:hover .vlrp-pub-btn { opacity: 1; }
+        .vlrp-pub-btn:hover { filter: none; background: rgba(139,92,246,.12); }
+        .vlrp-pub-btn--on { opacity: 1; filter: none; }
+        .vlrp-vi-public { font-size: 10px; font-weight: 700; color: #8B5CF6; letter-spacing: 0.3px; }
+        .vlrp-item--pub {
+          cursor: default;
+          border-color: rgba(139,92,246,.3);
+          background: rgba(139,92,246,.04);
+        }
+        .vlrp-item--pub:hover { transform: none; border-color: rgba(139,92,246,.35); }
+        .vlrp-pub-bio {
+          width: 100%; box-sizing: border-box; margin-bottom: 10px;
+          background: #0D0D22; border: 1px solid #2A2A4A; border-radius: 7px;
+          padding: 8px 10px; color: #F0F0FF; font-size: 11px;
+          font-family: Inter, sans-serif; outline: none;
+        }
+        .vlrp-pub-bio:focus { border-color: #8B5CF6; }
+        .vlrp-pub-bio::placeholder { color: #4A4A6A; }
+        .vlrp-pub-consent {
+          display: flex; gap: 8px; align-items: flex-start;
+          font-size: 10px; color: #C4C4E0; line-height: 1.5;
+          margin-bottom: 12px; cursor: pointer;
+        }
+        .vlrp-pub-consent input { margin-top: 1px; accent-color: #8B5CF6; cursor: pointer; }
+        .vlrp-pub-go {
+          padding: 7px 16px; border-radius: 6px; border: none;
+          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: opacity 0.2s;
+        }
+        .vlrp-pub-go:disabled { opacity: 0.4; cursor: default; }
 
         @media (max-width: 900px) {
           .vlrp {

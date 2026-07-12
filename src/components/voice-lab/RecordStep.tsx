@@ -18,6 +18,10 @@ export interface SavedVoice {
   model_url: string | null
   sample_url: string | null
   created_at: string
+  // Voice Library state — merged in by a separate best-effort query (the
+  // columns arrive with migration 20260713000000, so they're optional here).
+  published?: boolean
+  library_bio?: string | null
 }
 
 interface RecordStepProps {

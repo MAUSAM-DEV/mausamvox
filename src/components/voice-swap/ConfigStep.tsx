@@ -16,6 +16,11 @@ export interface VoiceOption {
   avatarBg: string
   icon?: string
   modelUrl?: string
+  // A published Voice Library voice (someone else's clone, shared with the
+  // owner's consent). Its model is resolved SERVER-side by voiceId in
+  // /api/voice-convert — modelUrl stays undefined on purpose (never leaked
+  // to the browser), so the "sample-only" client gates must not apply.
+  isLibrary?: boolean
 }
 
 interface ConfigStepProps {
@@ -74,34 +79,49 @@ const DUET_MODES: { id: DuetMode; icon: string; label: string; sub: string }[] =
 ]
 
 function VoiceGrid({
-  voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
+  voices, voicesLoading, selectedVoiceId, setSelectedVoiceId, libraryMode = false,
 }: {
   voices: VoiceOption[]
   voicesLoading: boolean
   selectedVoiceId: string | null
   setSelectedVoiceId: (id: string) => void
+  // Library tab: the add-card points at /library instead of Voice Lab.
+  libraryMode?: boolean
 }) {
   if (voicesLoading) return <div className="vs-voice-loading">Loading your voices…</div>
   return (
     <div className="vs-voice-grid">
-      {voices.map((v) => (
-        <div
-          key={v.id}
-          className={`vs-voice-card ${selectedVoiceId === v.id ? 'vs-voice-card--selected' : ''} ${!v.modelUrl ? 'vs-voice-card--sample' : ''}`}
-          onClick={() => setSelectedVoiceId(v.id)}
-          title={!v.modelUrl ? 'Sample-only voice — full voice conversion requires model training' : undefined}
-        >
-          {selectedVoiceId === v.id && <div className="vs-va-check">✓</div>}
-          <div className="vs-va-avatar" style={{ background: v.avatarBg }}>{v.icon ?? '🎤'}</div>
-          <div className="vs-va-name">{v.name}</div>
-          <div className="vs-va-sub">{v.sub}{!v.modelUrl ? ' · sample only' : ''}</div>
-        </div>
-      ))}
-      <Link href="/voice-lab" className="vs-voice-card vs-voice-card--add">
-        <div className="vs-va-add-icon">+</div>
-        <div className="vs-va-name">Add Voice</div>
-        <div className="vs-va-sub">Clone a new voice</div>
-      </Link>
+      {voices.map((v) => {
+        // Library voices resolve their model server-side by voiceId, so no
+        // modelUrl here does NOT mean sample-only.
+        const sampleOnly = !v.modelUrl && !v.isLibrary
+        return (
+          <div
+            key={v.id}
+            className={`vs-voice-card ${selectedVoiceId === v.id ? 'vs-voice-card--selected' : ''} ${sampleOnly ? 'vs-voice-card--sample' : ''}`}
+            onClick={() => setSelectedVoiceId(v.id)}
+            title={sampleOnly ? 'Sample-only voice — full voice conversion requires model training' : undefined}
+          >
+            {selectedVoiceId === v.id && <div className="vs-va-check">✓</div>}
+            <div className="vs-va-avatar" style={{ background: v.avatarBg }}>{v.icon ?? '🎤'}</div>
+            <div className="vs-va-name">{v.name}</div>
+            <div className="vs-va-sub">{v.sub}{sampleOnly ? ' · sample only' : ''}</div>
+          </div>
+        )
+      })}
+      {libraryMode ? (
+        <Link href="/library" className="vs-voice-card vs-voice-card--add">
+          <div className="vs-va-add-icon">🌐</div>
+          <div className="vs-va-name">Browse Library</div>
+          <div className="vs-va-sub">Community voices, free</div>
+        </Link>
+      ) : (
+        <Link href="/voice-lab" className="vs-voice-card vs-voice-card--add">
+          <div className="vs-va-add-icon">+</div>
+          <div className="vs-va-name">Add Voice</div>
+          <div className="vs-va-sub">Clone a new voice</div>
+        </Link>
+      )}
     </div>
   )
 }
@@ -184,11 +204,19 @@ export function ConfigStep({
           ))}
         </div>
 
+        {/* My Voices/Library tabs filter the grid; Ghost Singers keeps its
+            historical show-everything behavior. The duet second grid below
+            always shows every voice regardless of tab. */}
         <VoiceGrid
-          voices={voices}
+          voices={
+            voiceTab === 'Library' ? voices.filter((v) => v.isLibrary)
+            : voiceTab === 'My Voices' ? voices.filter((v) => !v.isLibrary)
+            : voices
+          }
           voicesLoading={voicesLoading}
           selectedVoiceId={selectedVoiceId}
           setSelectedVoiceId={setSelectedVoiceId}
+          libraryMode={voiceTab === 'Library'}
         />
 
         {/* Second voice section — Mode 2 only */}

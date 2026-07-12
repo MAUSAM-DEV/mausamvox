@@ -21,6 +21,8 @@ const LIBRARY: { emoji: string; label: string; href: string | null }[] = [
   // "Saved Tracks" (not "Projects" — they're finished outputs, not editable
   // projects; stems/settings aren't stored). Matches the dashboard's naming.
   { emoji: '📁', label: 'Saved Tracks', href: '/swaps' },
+  // Free community-shared voices; the paid Marketplace below stays a stub.
+  { emoji: '🌐', label: 'Voice Library', href: '/library' },
   { emoji: '🛒', label: 'Marketplace', href: null },
 ]
 

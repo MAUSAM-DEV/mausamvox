@@ -125,12 +125,27 @@ export async function POST(req: NextRequest) {
     // voiceModelUrl as a last resort for backwards compatibility.
     let effectiveModelUrl = voiceModelUrl ?? ''
     if (voiceId && user) {
-      const { data: clone } = await supabaseAdmin
+      let { data: clone } = await supabaseAdmin
         .from('voice_clones')
         .select('model_path, model_url')
         .eq('id', voiceId)
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
+
+      if (!clone) {
+        // Voice Library: not the caller's own voice — allow it only if its
+        // owner published it (free community use, owner consent recorded at
+        // publish time). Errors here (incl. a missing published column
+        // pre-migration) read as not found, keeping private voices private.
+        const { data: pub } = await supabaseAdmin
+          .from('voice_clones')
+          .select('model_path, model_url')
+          .eq('id', voiceId)
+          .eq('published', true)
+          .maybeSingle()
+        clone = pub
+        if (pub) console.log('[voice-convert] using published Library voice', voiceId)
+      }
 
       if (clone?.model_path) {
         // Route Replicate through our proxy so the model URL never expires

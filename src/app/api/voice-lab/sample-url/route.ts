@@ -27,14 +27,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    const { data: clone, error: cloneError } = await supabaseAdmin
+    let { data: clone } = await supabaseAdmin
       .from('voice_clones')
       .select('sample_path')
       .eq('id', voiceCloneId)
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (cloneError || !clone?.sample_path) {
+    if (!clone?.sample_path) {
+      // Voice Library: a published community voice may be sampled by any
+      // signed-in user (Voice Swap's auto key-match needs the target sample).
+      // Errors here (incl. a missing published column pre-migration) read as
+      // not found.
+      const { data: pub } = await supabaseAdmin
+        .from('voice_clones')
+        .select('sample_path')
+        .eq('id', voiceCloneId)
+        .eq('published', true)
+        .maybeSingle()
+      clone = pub
+    }
+
+    if (!clone?.sample_path) {
       return NextResponse.json({ error: 'No sample found' }, { status: 404 })
     }
 
