@@ -243,10 +243,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    // 2. Fetch plan + balance via the service-role client (bypasses RLS).
+    // 2. Fetch the plan via the service-role client (bypasses RLS).
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('users')
-      .select('plan, credits_remaining')
+      .select('plan')
       .eq('id', user.id)
       .single()
     if (profileError || !profile) {
@@ -262,21 +262,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Premium feature' }, { status: 403 })
       }
 
-      // 4. Balance gate.
-      if (profile.credits_remaining < GENDER_SPLIT_COST) {
-        return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
-      }
-
-      // 5. Deduct BEFORE starting MVSEP work.
-      // KNOWN LIMITATION: this read-then-write debit is not atomic, so concurrent
-      // requests can race and over/under-spend. Mirrors /api/credits/deduct.
-      // Future hardening: move to an atomic Postgres RPC (e.g. a `deduct_credits`
-      // SECURITY DEFINER function) so the check-and-decrement is a single statement.
-      const { error: debitError } = await supabaseAdmin
-        .from('users')
-        .update({ credits_remaining: profile.credits_remaining - GENDER_SPLIT_COST })
-        .eq('id', user.id)
+      // 4. Balance check + deduct BEFORE starting MVSEP work — atomic via the
+      // deduct_credits RPC (migration 20260712000000): the check and decrement
+      // are one statement, so concurrent requests can no longer race a stale
+      // balance the way the old read-then-update here could.
+      const { error: debitError } = await supabaseAdmin.rpc('deduct_credits', {
+        p_user_id: user.id,
+        p_amount: GENDER_SPLIT_COST,
+      })
       if (debitError) {
+        if (debitError.message.includes('INSUFFICIENT_CREDITS')) {
+          return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
+        }
         console.error('[gender-split] debit failed:', debitError.message)
         return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
       }
