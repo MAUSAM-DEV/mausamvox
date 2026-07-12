@@ -34,9 +34,9 @@ const TOOLS = [
   {
     emoji: '🎼',
     name: 'Choir Composer',
-    desc: 'Generate full choir arrangements from a single vocal line.',
-    href: '#',
-    live: false,
+    desc: 'Turn a solo vocal into stacked harmonies of your own voice.',
+    href: '/choir',
+    live: true,
     gradient: 'linear-gradient(135deg,#8B5CF6,#06B6D4)',
   },
   {

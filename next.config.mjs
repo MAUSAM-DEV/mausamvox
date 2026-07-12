@@ -12,6 +12,7 @@ const nextConfig = {
     // packaging with a loud log if the binary is still missing at runtime.
     outputFileTracingIncludes: {
       '/api/prepare-dataset': ['./node_modules/ffmpeg-static/ffmpeg*'],
+      '/api/choir': ['./node_modules/ffmpeg-static/ffmpeg*'],
     },
   },
   // @breezystack/lamejs is an ESM-only package ("type":"module") and must be

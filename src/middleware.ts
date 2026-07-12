@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
 
   if (
     !user &&
-    (pathname.startsWith('/voice-swap') || pathname.startsWith('/voice-lab') || pathname.startsWith('/stem-studio') || pathname.startsWith('/song-studio') || pathname.startsWith('/swaps'))
+    (pathname.startsWith('/voice-swap') || pathname.startsWith('/voice-lab') || pathname.startsWith('/stem-studio') || pathname.startsWith('/song-studio') || pathname.startsWith('/choir') || pathname.startsWith('/swaps'))
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/sign-in'
@@ -44,5 +44,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/voice-swap/:path*', '/voice-lab/:path*', '/stem-studio/:path*', '/song-studio/:path*', '/swaps/:path*'],
+  matcher: ['/voice-swap/:path*', '/voice-lab/:path*', '/stem-studio/:path*', '/song-studio/:path*', '/choir/:path*', '/swaps/:path*'],
 }

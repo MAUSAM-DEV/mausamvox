@@ -30,9 +30,17 @@ type SwapRow = {
   vocal_stem_path?: string | null
   // Public share token (migration 20260712000002). Null/absent = private.
   share_token?: string | null
-  // 'song_studio' = an AI-generated Song Studio track (migration
-  // 20260712000003); null/absent = a voice swap. Only affects labels here.
+  // 'song_studio' = an AI-generated Song Studio track, 'choir' = a Choir
+  // Composer harmony stack (migration 20260712000003); null/absent = a voice
+  // swap. Only affects labels here.
   kind?: string | null
+}
+
+// Subtitle + "Voice" detail label per row kind — generated/harmonized tracks
+// must not claim to be swaps.
+const KIND_LABELS: Record<string, { subtitle: string; detail: string }> = {
+  song_studio: { subtitle: 'AI-generated song — Song Studio', detail: 'Style' },
+  choir: { subtitle: 'Vocal harmony stack — Choir Composer', detail: 'Preset' },
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -195,14 +203,14 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <div>
                   <h1 className="sw-title">{swap.song_name}</h1>
                   <div className="sw-subtitle">
-                    {swap.kind === 'song_studio' ? 'AI-generated song — Song Studio' : 'Saved swap — final mix'}
+                    {KIND_LABELS[swap.kind ?? '']?.subtitle ?? 'Saved swap — final mix'}
                   </div>
                 </div>
               </div>
 
               <div className="sw-details">
                 <div className="sw-detail">
-                  <span className="sw-detail-lbl">{swap.kind === 'song_studio' ? 'Style' : 'Voice'}</span>
+                  <span className="sw-detail-lbl">{KIND_LABELS[swap.kind ?? '']?.detail ?? 'Voice'}</span>
                   <span className="sw-detail-val">{swap.voice_used}</span>
                 </div>
                 <div className="sw-detail">
