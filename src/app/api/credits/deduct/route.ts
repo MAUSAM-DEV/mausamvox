@@ -28,35 +28,27 @@ export async function POST(req: NextRequest) {
   }
   const userId = sessionUser.id
 
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-    return NextResponse.json({ error: 'A positive amount is required' }, { status: 400 })
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'A positive whole-number amount is required' }, { status: 400 })
   }
 
-  // Fetch current balance
-  const { data: user, error: fetchError } = await supabaseAdmin
-    .from('users')
-    .select('credits_remaining')
-    .eq('id', userId)
-    .single()
+  // The balance check and decrement happen atomically inside deduct_credits()
+  // (migration 20260712000000) — a separate read-then-update here would let two
+  // concurrent requests both pass the check against the same stale balance.
+  const { data: newBalance, error: rpcError } = await supabaseAdmin.rpc('deduct_credits', {
+    p_user_id: userId,
+    p_amount: amount,
+  })
 
-  if (fetchError || !user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  }
-
-  if (user.credits_remaining < amount) {
-    return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
-  }
-
-  const { data, error: updateError } = await supabaseAdmin
-    .from('users')
-    .update({ credits_remaining: user.credits_remaining - amount })
-    .eq('id', userId)
-    .select('credits_remaining')
-    .single()
-
-  if (updateError) {
+  if (rpcError) {
+    if (rpcError.message.includes('INSUFFICIENT_CREDITS')) {
+      return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
+    }
+    if (rpcError.message.includes('USER_NOT_FOUND')) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
     return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, creditsRemaining: data.credits_remaining, action })
+  return NextResponse.json({ success: true, creditsRemaining: newBalance, action })
 }
