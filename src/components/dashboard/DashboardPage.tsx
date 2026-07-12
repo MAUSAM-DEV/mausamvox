@@ -50,9 +50,9 @@ const TOOLS = [
   {
     emoji: '🎵',
     name: 'Song Studio',
-    desc: 'Write, arrange, and produce full songs with AI assistance.',
-    href: '#',
-    live: false,
+    desc: 'Generate full AI songs from your lyrics and a style prompt.',
+    href: '/song-studio',
+    live: true,
     gradient: 'linear-gradient(135deg,#06B6D4,#EC4899)',
   },
 ]

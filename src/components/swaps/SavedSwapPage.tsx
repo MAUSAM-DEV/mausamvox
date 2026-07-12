@@ -30,6 +30,9 @@ type SwapRow = {
   vocal_stem_path?: string | null
   // Public share token (migration 20260712000002). Null/absent = private.
   share_token?: string | null
+  // 'song_studio' = an AI-generated Song Studio track (migration
+  // 20260712000003); null/absent = a voice swap. Only affects labels here.
+  kind?: string | null
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -191,13 +194,15 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <span className="sw-title-ico">🎵</span>
                 <div>
                   <h1 className="sw-title">{swap.song_name}</h1>
-                  <div className="sw-subtitle">Saved swap — final mix</div>
+                  <div className="sw-subtitle">
+                    {swap.kind === 'song_studio' ? 'AI-generated song — Song Studio' : 'Saved swap — final mix'}
+                  </div>
                 </div>
               </div>
 
               <div className="sw-details">
                 <div className="sw-detail">
-                  <span className="sw-detail-lbl">Voice</span>
+                  <span className="sw-detail-lbl">{swap.kind === 'song_studio' ? 'Style' : 'Voice'}</span>
                   <span className="sw-detail-val">{swap.voice_used}</span>
                 </div>
                 <div className="sw-detail">

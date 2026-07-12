@@ -11,7 +11,7 @@ const TOOLS = [
   { emoji: '✂️', label: 'Stem Studio', href: '/stem-studio', active: false },
   { emoji: '🎼', label: 'Choir Composer', href: '#', active: false },
   { emoji: '🎷', label: 'Instruments', href: '#', active: false },
-  { emoji: '🎵', label: 'Song Studio', href: '#', active: false },
+  { emoji: '🎵', label: 'Song Studio', href: '/song-studio', active: false },
 ]
 
 // href: null = unbuilt, rendered dim + "Soon". My Voices links to Voice Lab,
