@@ -171,24 +171,16 @@ async function persistStems(
 }
 
 // Best-effort refund of GENDER_SPLIT_COST after a charge whose MVSEP job never
-// started. Re-reads the CURRENT balance first (rather than the pre-debit value)
-// so a concurrent legitimate top-up isn't clobbered. Never throws: a failed
-// refund is logged but must not mask the original error to the caller.
+// started. Atomic via the add_credits RPC (migration 20260712000001) — the old
+// read-then-update increment could lose the refund when racing a concurrent
+// balance write. Never throws: a failed refund is logged but must not mask the
+// original error to the caller.
 async function refundCredits(userId: string): Promise<void> {
   try {
-    const { data: current, error: readError } = await supabaseAdmin
-      .from('users')
-      .select('credits_remaining')
-      .eq('id', userId)
-      .single()
-    if (readError || !current) {
-      console.error('[gender-split] refund read failed:', readError?.message ?? 'user not found')
-      return
-    }
-    const { error: refundError } = await supabaseAdmin
-      .from('users')
-      .update({ credits_remaining: current.credits_remaining + GENDER_SPLIT_COST })
-      .eq('id', userId)
+    const { error: refundError } = await supabaseAdmin.rpc('add_credits', {
+      p_user_id: userId,
+      p_amount: GENDER_SPLIT_COST,
+    })
     if (refundError) {
       console.error('[gender-split] refund failed:', refundError.message)
     }

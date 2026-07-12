@@ -379,22 +379,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Charge AFTER a successful insert (the race loser above never charges) and
-  // never on failure. Same read-then-update softness as the deduct route —
-  // logged in PROJECT_STATUS. A charge failure doesn't take the lyrics away.
+  // never on failure. Atomic via the deduct_credits RPC (migration
+  // 20260712000000), but deliberately best-effort: the transcription already
+  // ran, so an insufficient balance skips the charge and any other failure is
+  // logged without taking the lyrics away.
   if (!ADMIN_EMAILS.includes(user.email ?? '')) {
     try {
-      const { data: u } = await supabaseAdmin
-        .from('users')
-        .select('credits_remaining')
-        .eq('id', user.id)
-        .single()
-      if (u && u.credits_remaining >= LYRICS_COST) {
-        await supabaseAdmin
-          .from('users')
-          .update({ credits_remaining: u.credits_remaining - LYRICS_COST })
-          .eq('id', user.id)
-      } else {
-        console.warn(`[lyrics] balance too low to charge ${LYRICS_COST} — lyrics kept (transcription already ran)`)
+      const { error: chargeError } = await supabaseAdmin.rpc('deduct_credits', {
+        p_user_id: user.id,
+        p_amount: LYRICS_COST,
+      })
+      if (chargeError) {
+        if (chargeError.message.includes('INSUFFICIENT_CREDITS')) {
+          console.warn(`[lyrics] balance too low to charge ${LYRICS_COST} — lyrics kept (transcription already ran)`)
+        } else {
+          console.error('[lyrics] charge failed:', chargeError.message)
+        }
       }
     } catch (err) {
       console.error('[lyrics] charge failed:', err instanceof Error ? err.message : String(err))
