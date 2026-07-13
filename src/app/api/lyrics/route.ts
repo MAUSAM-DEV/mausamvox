@@ -24,23 +24,35 @@ export const maxDuration = 30
 // PATCH { stemPath, lines }            → user edit (text fixes / line
 //                                        deletions), sets edited = true
 //
-// Engine: vaibhavs10/incredibly-fast-whisper (Whisper large-v3) with
-// timestamp: 'word' — one word per chunk. We regroup the words into
-// phrase-level display lines (groupWordsIntoLines) exactly like before AND
-// nest each word's timing under its line, so a single transcription serves
-// both today's line display and the (deferred) word-level highlighter. Its
-// native word timestamps need no per-language alignment model, unlike
-// WhisperX's aligner (no Tamil/Bengali/Punjabi/Marathi).
+// Engine: victor-upmeet/whisperx (Whisper large-v3 + VAD + wav2vec2 forced
+// alignment). Switched from vaibhavs10/incredibly-fast-whisper (3ab86df6)
+// after an A/B on a real Hindi vocal stem (stems/x0pczbb6…-vocals.mp3,
+// 2026-07-13): the old engine's HF *chunked* pipeline + native (cross-
+// attention) word timestamps produced fragmented lines, words stretched over
+// 27-second spans, replacement-char junk and mangled text; WhisperX returned
+// coherent phrases with sub-second word timings. Two mechanisms drive that:
+// VAD pre-segmentation only feeds Whisper actual singing (silence/bleed
+// stretches — the hallucination trigger — are skipped), and forced alignment
+// pins each word to the audio instead of guessing from attention. Alignment
+// needs a per-language wav2vec2 model; both UI languages (English, Hindi)
+// have one. If auto-detect lands on a language WITHOUT an aligner the
+// segments come back word-less and we fall back to segment-level lines
+// (LyricsPane already renders lines without nested words as whole-line
+// highlight — same as edited rows).
+//
+// We still regroup the flattened words into phrase-level display lines
+// (groupWordsIntoLines) and nest each word's timing under its line, so a
+// single transcription serves the line display and the word highlighter.
 //
 // track_lyrics access follows the voice_swaps pattern: no RLS, service_role
 // admin client, ownership enforced in app code via .eq('user_id', …).
 // Stem paths themselves are session-gated but not per-user (same exposure as
 // /api/stems/download); the transcription is keyed AND charged to the caller.
-const WHISPER_VERSION = '3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c'
+const WHISPERX_VERSION = '655845d6190ef70573c669245f245892cd039df4b880a1e3a65852c09252f5cc'
 const LYRICS_COST = 25
 
-// UI hint values → the cog's language enum ('None' = auto-detect).
-// 'hindi-rom' and 'hindi-deva' both transcribe with language=hindi; the -rom
+// UI hint values → WhisperX ISO-639-1 codes ('None' = omit → auto-detect).
+// 'hindi-rom' and 'hindi-deva' both transcribe with language=hi; the -rom
 // variant then transliterates the Devanagari output to Latin server-side
 // before storing (src/lib/romanize.ts). The stored track_lyrics.language is
 // the UI hint value itself, so each row records which variant (language +
@@ -48,10 +60,10 @@ const LYRICS_COST = 25
 // (kept for old rows' labels; no longer offered by the UI).
 const LANGUAGE_MAP: Record<string, string> = {
   auto: 'None',
-  'hindi-rom': 'hindi',
-  'hindi-deva': 'hindi',
-  hindi: 'hindi',
-  english: 'english',
+  'hindi-rom': 'hi',
+  'hindi-deva': 'hi',
+  hindi: 'hi',
+  english: 'en',
 }
 
 // One transcribed word with its timing. Nested inside each line for the
@@ -67,24 +79,51 @@ function validStemPath(p: unknown): p is string {
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-// incredibly-fast-whisper with timestamp: 'word' → { text, chunks: [{ text,
-// timestamp: [start, end] }] } — SAME shape as 'chunk' mode, but one WORD per
-// chunk. A word's end is occasionally null (last word / a boundary) — fall
-// back to a short 0.4s so per-word highlighting still advances.
-function parseWords(output: unknown): WordTiming[] {
-  const chunks = (output as { chunks?: Array<{ text?: unknown; timestamp?: unknown }> } | null)?.chunks
-  if (!Array.isArray(chunks)) return []
+// WhisperX output: { detected_language, segments: [{ start, end, text,
+// words: [{ word, start, end, score }] }] } (shape verified against a real
+// prediction, 2026-07-13).
+//
+// * words → flattened into one global WordTiming[] and re-grouped into
+//   display lines exactly as before (the VAD segments are silence-separated,
+//   so the 0.8s-gap heuristic naturally re-finds their boundaries).
+// * Unaligned tokens (digits/symbols — the aligner can't place them) come
+//   WITHOUT start/end: anchor them to the previous word's end so their text
+//   isn't dropped from the line.
+// * A segment with NO usable words (language without a wav2vec2 aligner, only
+//   reachable via auto-detect) becomes a segment-level fallback line — the
+//   renderer shows lines without nested `words` as whole-line highlight,
+//   same as edited rows.
+function parseWhisperX(output: unknown): { words: WordTiming[]; segmentLines: LyricLine[] } {
+  const segments = (output as { segments?: Array<Record<string, unknown>> } | null)?.segments
   const words: WordTiming[] = []
-  for (const c of chunks) {
-    const text = typeof c?.text === 'string' ? c.text.trim() : ''
-    const ts = Array.isArray(c?.timestamp) ? c.timestamp : []
-    const start = typeof ts[0] === 'number' && isFinite(ts[0]) ? ts[0] : null
-    if (!text || start === null) continue
-    const end = typeof ts[1] === 'number' && isFinite(ts[1]) && ts[1] > start ? ts[1] : start + 0.4
-    words.push({ text, start: round2(start), end: round2(end) })
+  const segmentLines: LyricLine[] = []
+  if (!Array.isArray(segments)) return { words, segmentLines }
+  for (const s of segments) {
+    const segWords = Array.isArray(s?.words) ? (s.words as Array<Record<string, unknown>>) : []
+    let prevEnd: number | null = typeof s?.start === 'number' && isFinite(s.start) ? s.start : null
+    let gotWords = false
+    for (const w of segWords) {
+      const text = typeof w?.word === 'string' ? w.word.trim() : ''
+      if (!text) continue
+      const start = typeof w?.start === 'number' && isFinite(w.start) ? w.start : prevEnd
+      if (start === null) continue
+      const end = typeof w?.end === 'number' && isFinite(w.end) && w.end > start ? w.end : start + 0.4
+      words.push({ text, start: round2(start), end: round2(end) })
+      prevEnd = end
+      gotWords = true
+    }
+    if (!gotWords) {
+      const text = typeof s?.text === 'string' ? s.text.trim() : ''
+      const start = typeof s?.start === 'number' && isFinite(s.start) ? s.start : null
+      const end = typeof s?.end === 'number' && isFinite(s.end) ? s.end : null
+      if (text && start !== null && end !== null && end > start) {
+        segmentLines.push({ start: round2(start), end: round2(end), text })
+      }
+    }
   }
   words.sort((a, b) => a.start - b.start)
-  return words
+  segmentLines.sort((a, b) => a.start - b.start)
+  return { words, segmentLines }
 }
 
 // Group per-word timings back into the phrase-level display lines we render
@@ -245,22 +284,24 @@ export async function POST(req: NextRequest) {
   }
 
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  // Pinned: the cog also offers task 'translate' — never use it. NOTE this
+  // pin can't stop translation when the language hint mismatches the sung
+  // language: hint = Whisper's DECODE language, so 'english' on a Hindi
+  // song still comes out (part-)translated. The UI copy owns that honesty.
+  const input: Record<string, unknown> = {
+    audio_file: signed.signedUrl,
+    task: 'transcribe',
+    // wav2vec2 forced alignment → the per-word timings the highlighter needs.
+    align_output: true,
+    // Deterministic decode (no sampling); WhisperX's VAD already prevents the
+    // silence-hallucination loops that temperature fallback exists to break.
+    temperature: 0,
+  }
+  // Omitting `language` = auto-detect (the cog's 'None' default).
+  if (language !== 'None') input.language = language
   const prediction = await replicate.predictions.create({
-    version: WHISPER_VERSION,
-    input: {
-      audio: signed.signedUrl,
-      // Pinned: the cog also offers task 'translate' — never use it. NOTE this
-      // pin can't stop translation when the language hint mismatches the sung
-      // language: hint = Whisper's DECODE language, so 'english' on a Hindi
-      // song still comes out (part-)translated. The UI copy owns that honesty.
-      task: 'transcribe',
-      language,
-      // Word-level timestamps: we regroup them into phrase lines server-side
-      // (groupWordsIntoLines) AND nest each word under its line for the
-      // word-highlighting renderer. One call, one charge, serves both.
-      timestamp: 'word',
-      batch_size: 24,
-    },
+    version: WHISPERX_VERSION,
+    input,
   })
   console.log(`[lyrics] started prediction ${prediction.id} (lang=${language}) for ${body.stemPath}`)
   return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
@@ -300,20 +341,29 @@ export async function GET(req: NextRequest) {
 
   logReplicateTiming('lyrics', prediction)
 
-  // Passive probe: if the engine ever starts exposing confidence fields
-  // (no_speech_prob / avg_logprob / compression_ratio), we learn for free.
-  // Logs only — nothing branches on this.
-  const out = prediction.output as { chunks?: Array<Record<string, unknown>> } | null
-  console.log('[lyrics] output keys:', out && typeof out === 'object' ? Object.keys(out).join(',') : typeof out)
-  const firstChunk = Array.isArray(out?.chunks) ? out?.chunks[0] : undefined
-  if (firstChunk && typeof firstChunk === 'object') console.log('[lyrics] chunk keys:', Object.keys(firstChunk).join(','))
+  // Passive probe: detected language + segment/word coverage per run. Logs
+  // only — nothing branches on this.
+  const out = prediction.output as { detected_language?: unknown; segments?: unknown[] } | null
+  console.log(
+    '[lyrics] output keys:', out && typeof out === 'object' ? Object.keys(out).join(',') : typeof out,
+    '| detected_language:', out && typeof out === 'object' ? out.detected_language : undefined,
+    '| segments:', Array.isArray(out?.segments) ? out?.segments.length : 0,
+  )
 
   const noLyrics = () => NextResponse.json({ status: 'failed', error: 'No lyrics could be transcribed from this vocal — it may be instrumental or too quiet.' })
 
-  let words = parseWords(prediction.output)
+  // segmentLines is the no-aligner fallback (auto-detected language without a
+  // wav2vec2 alignment model): line display works, word highlight degrades to
+  // whole-line — LyricsPane's existing edited-row behavior.
+  const parsed = parseWhisperX(prediction.output)
+  let words = parsed.words
+  let segmentLines = parsed.segmentLines
+  if (segmentLines.length > 0) {
+    console.log(`[lyrics] ${segmentLines.length} segment(s) came back unaligned (no wav2vec2 aligner for this language) — those lines get whole-line highlight`)
+  }
   // Honest failure: instrumental-only stems or hallucination filtering can
   // leave nothing usable. Nothing is stored and nothing is charged.
-  if (words.length === 0) return noLyrics()
+  if (words.length === 0 && segmentLines.length === 0) return noLyrics()
 
   const rawLang = req.nextUrl.searchParams.get('language') ?? 'auto'
   const language = LANGUAGE_MAP[rawLang] !== undefined ? rawLang : 'auto'
@@ -329,7 +379,12 @@ export async function GET(req: NextRequest) {
     words = words
       .map((w) => ({ ...w, text: romanizeDevanagari(w.text) }))
       .filter((w) => w.text.length > 0) // a word that was ONLY danda marks romanizes to ''
-    if (words.length === 0) return noLyrics()
+    // hindi-rom pins language=hi, which HAS an aligner, so segmentLines is
+    // empty in practice — romanized anyway for correctness.
+    segmentLines = segmentLines
+      .map((l) => ({ ...l, text: romanizeDevanagari(l.text) }))
+      .filter((l) => l.text.length > 0)
+    if (words.length === 0 && segmentLines.length === 0) return noLyrics()
   }
 
   // Drop the clear Whisper hum-hallucination signature at the WORD level (after
@@ -339,12 +394,15 @@ export async function GET(req: NextRequest) {
   // returns [] and we hit the honest no-lyrics path below (nothing stored/charged).
   words = dropHallucinatedWords(words)
 
-  // Regroup words into phrase lines; each line carries its nested `words`.
+  // Regroup words into phrase lines (each carrying its nested `words`), then
+  // interleave any unaligned segment-fallback lines by start time.
   const lines = groupWordsIntoLines(words)
+    .concat(segmentLines)
+    .sort((a, b) => a.start - b.start)
   if (lines.length === 0) return noLyrics()
 
   const force = req.nextUrl.searchParams.get('force') === '1'
-  const engine = `vaibhavs10/incredibly-fast-whisper:${WHISPER_VERSION.slice(0, 8)}`
+  const engine = `victor-upmeet/whisperx:${WHISPERX_VERSION.slice(0, 8)}`
 
   if (force) {
     // Regenerate: REPLACE the stored row in place — same (user_id, source_key)
