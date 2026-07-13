@@ -74,7 +74,7 @@ export function WhyUs() {
 
       <div
         style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '64px' }}
-        className="why-grid"
+        className="why-grid rv-stagger"
       >
         {reasons.map((r) => (
           <WhyCard key={r.num} {...r} />

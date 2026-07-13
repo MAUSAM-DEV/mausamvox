@@ -124,7 +124,7 @@ export function Features() {
           borderRadius: '20px',
           overflow: 'hidden',
         }}
-        className="feat-grid"
+        className="feat-grid rv-stagger"
       >
         {features.map((f, i) => (
           <FeatureCard key={i} {...f} />

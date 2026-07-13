@@ -1,16 +1,23 @@
 'use client'
 
+// Indian languages first (voice swap is language-agnostic — RVC re-voices
+// phonemes), then global reach. Marquee CSS lives in globals.css
+// (.lang-marquee / .lang-track / .lang-set); reduced motion falls back to
+// the old static wrapped row.
 const langs = [
-  '🇬🇧 English',
   '🇮🇳 Hindi',
+  '🇮🇳 Bengali',
+  '🇮🇳 Tamil',
+  '🇮🇳 Telugu',
+  '🇮🇳 Punjabi',
+  '🇮🇳 Marathi',
+  '🇬🇧 English',
   '🇪🇸 Spanish',
   '🇫🇷 French',
   '🇩🇪 German',
   '🇯🇵 Japanese',
   '🇰🇷 Korean',
   '🇧🇷 Portuguese',
-  '🇮🇳 Tamil',
-  '🇮🇳 Bengali',
   '🇸🇦 Arabic',
   '+ more coming',
 ]
@@ -20,7 +27,7 @@ export function LangStrip() {
     <div
       style={{
         textAlign: 'center',
-        padding: '52px 28px',
+        padding: '52px 0',
         borderTop: '1px solid rgba(255,255,255,.04)',
         borderBottom: '1px solid rgba(255,255,255,.04)',
       }}
@@ -37,10 +44,20 @@ export function LangStrip() {
       >
         Supported Languages
       </p>
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {langs.map((lang) => (
-          <LangPill key={lang} label={lang} />
-        ))}
+      <div className="lang-marquee">
+        <div className="lang-track">
+          <div className="lang-set">
+            {langs.map((lang) => (
+              <LangPill key={lang} label={lang} />
+            ))}
+          </div>
+          {/* duplicate set = the seamless wrap; hidden from screen readers */}
+          <div className="lang-set lang-set-dup" aria-hidden="true">
+            {langs.map((lang) => (
+              <LangPill key={lang} label={lang} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -60,6 +77,7 @@ function LangPill({ label }: { label: string }) {
         cursor: 'default',
         transition: 'all 0.25s',
         display: 'inline-block',
+        whiteSpace: 'nowrap',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = '#9D5CFF'

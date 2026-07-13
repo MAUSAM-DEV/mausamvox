@@ -66,7 +66,7 @@ export function TechSection() {
 
         <div
           style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '64px' }}
-          className="tech-grid"
+          className="tech-grid rv-stagger"
         >
           {techs.map((t) => (
             <TechCard key={t.title} {...t} />

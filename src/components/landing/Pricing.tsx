@@ -130,7 +130,7 @@ export function Pricing() {
 
       <div
         style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '64px' }}
-        className="pricing-grid"
+        className="pricing-grid rv-stagger"
       >
         {plans.map((plan) => (
           <PriceCard key={plan.tier} plan={plan} />
