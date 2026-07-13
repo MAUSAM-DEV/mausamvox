@@ -29,6 +29,11 @@ const nextConfig = {
         './node_modules/@tensorflow/tfjs-backend-wasm/dist/*.wasm',
         './assets/soundfonts/GeneralUserGS.sf2',
       ],
+      // Social-video export: ffmpeg + the TTF drawtext renders overlays with.
+      '/api/share-video': [
+        './node_modules/ffmpeg-static/ffmpeg*',
+        './assets/fonts/NotoSans-Regular.ttf',
+      ],
     },
   },
   // @breezystack/lamejs is an ESM-only package ("type":"module") and must be

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, createReverbImpulse } from './audioClip'
 import { ShareControl } from '@/components/share/ShareControl'
+import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
 type AbSide = 'Original' | 'Swapped'
 type PlayMode = 'full' | 'vocals'
@@ -1531,6 +1532,11 @@ export function ResultStep({
           <ShareControl
             swapId={persistedSwapId ?? null}
             initialToken={null}
+            onToast={onToast}
+          />
+          <ShareVideoButton
+            swapId={persistedSwapId ?? null}
+            songName={stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'My track'}
             onToast={onToast}
           />
           <button className="vs-dl-btn vs-dl-btn--outline" onClick={onNewSwap}>+ New Swap</button>

@@ -10,6 +10,7 @@ import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
 import { ShareControl } from '@/components/share/ShareControl'
+import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
 // Read-only view of one saved swap: the final polished mix persisted at save
 // time. Deliberately NOT re-editable — stems and effect/fine-tune settings
@@ -243,6 +244,11 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <ShareControl
                   swapId={swapId}
                   initialToken={swap.share_token ?? null}
+                  onToast={showToast}
+                />
+                <ShareVideoButton
+                  swapId={swapId}
+                  songName={swap.song_name}
                   onToast={showToast}
                 />
                 {swap.instrumental_path && (
