@@ -8,6 +8,7 @@ import JSZip from 'jszip'
 import ffmpegPath from 'ffmpeg-static'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+import { denoiseVocal } from '@/lib/denoise'
 
 const execFileAsync = promisify(execFile)
 
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     console.log('[prepare-dataset] user:', user.id)
 
     // ── 2. Parse body ────────────────────────────────────────────────────────
-    let body: { audioUrl?: string; voiceCloneId?: string }
+    let body: { audioUrl?: string; voiceCloneId?: string; denoise?: boolean }
     try {
       body = await req.json()
     } catch {
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { audioUrl, voiceCloneId } = body
+    // Optional vocal cleanup, default ON (matches the Voice Lab toggle) —
+    // users disable it for already-clean studio recordings.
+    const denoise = body.denoise !== false
     if (!voiceCloneId) {
       return NextResponse.json({ error: 'voiceCloneId is required' }, { status: 400 })
     }
@@ -125,8 +129,18 @@ export async function POST(req: NextRequest) {
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
     console.log('[prepare-dataset] downloaded', audioBuffer.length, 'bytes')
 
-    // ── 5. Split into clips ──────────────────────────────────────────────────
-    const clips = await splitAudio(audioBuffer)
+    // ── 5. Optional vocal cleanup, then split into clips ─────────────────────
+    // Cleanup runs BEFORE splitting so every training clip benefits. On success
+    // denoiseVocal returns cleaned WAV (which splitAudio splits natively); on
+    // any ffmpeg failure it returns the ORIGINAL buffer and the pipeline
+    // proceeds exactly as with cleanup off — dataset prep never breaks on this.
+    let prepared: Buffer = audioBuffer
+    if (denoise) {
+      prepared = await denoiseVocal(audioBuffer, '[prepare-dataset]')
+    } else {
+      console.log('[prepare-dataset] denoise disabled by user — using raw sample')
+    }
+    const clips = await splitAudio(prepared)
     console.log('[prepare-dataset] clips:', clips.length)
 
     // ── 6. Package into ZIP ──────────────────────────────────────────────────

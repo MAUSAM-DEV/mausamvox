@@ -116,19 +116,22 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
   }, [poll, stopPolling])
 
   // Full Studio flow: prepare dataset → start training → poll to completion.
-  const start = useCallback(async (voice: SavedVoice) => {
+  // `denoise` (default true) = the Voice Lab "Clean up background noise"
+  // toggle, applied server-side before the sample is split into clips.
+  const start = useCallback(async (voice: SavedVoice, denoise = true) => {
     clearTimers()
     setError(null)
     activeIdRef.current = voice.id
     setPhase('preparing')
     try {
-      // 1. Split + zip + upload the sample into the RVC dataset format.
+      // 1. (Optionally clean) + split + zip + upload the sample into the RVC
+      //    dataset format.
       const prep = await fetch('/api/prepare-dataset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // No audioUrl: the route signs a fresh URL from the clone's sample_path,
         // so training no longer depends on the (now-removed) stored sample_url.
-        body: JSON.stringify({ voiceCloneId: voice.id }),
+        body: JSON.stringify({ voiceCloneId: voice.id, denoise }),
       })
       const prepData = await prep.json().catch(() => ({}))
       if (!mountedRef.current || activeIdRef.current !== voice.id) return
@@ -165,7 +168,7 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
     startPolling(voiceId)
   }, [clearTimers, startPolling])
 
-  const retry = useCallback((voice: SavedVoice) => start(voice), [start])
+  const retry = useCallback((voice: SavedVoice, denoise = true) => start(voice, denoise), [start])
 
   const reset = useCallback(() => {
     clearTimers()

@@ -20,6 +20,11 @@ export function VoiceLabPage() {
   // Both tiers run the same real training pipeline; Express uses a shorter
   // recording and fewer epochs (decided server-side) for a ~15-min turnaround.
   const [cloneType, setCloneType] = useState<CloneType>('studio')
+  // "Clean up background noise" — optional ffmpeg cleanup (highpass + afftdn)
+  // applied server-side to the training sample before it's split into clips.
+  // Default ON (most users record on phones); turn OFF for an already-clean
+  // studio recording. Free — no credit charge.
+  const [denoise, setDenoise] = useState(true)
 
   // My Voices — real rows from voice_clones, fetched on mount and
   // updated locally whenever RecordStep saves a new sample.
@@ -163,7 +168,7 @@ export function VoiceLabPage() {
       return
     }
     setStep(3)
-    training.start(savedVoice)
+    training.start(savedVoice, denoise)
   }
 
   // Delete a voice: remove storage files + row, reset UI if it was the active voice.
@@ -214,7 +219,7 @@ export function VoiceLabPage() {
     if (v.status === 'training' || v.status === 'failed') {
       training.resume(v.id) // first poll corrects to the real status
     } else {
-      training.start(v) // pending / never-trained — run the full flow
+      training.start(v, denoise) // pending / never-trained — run the full flow
     }
   }
 
@@ -245,7 +250,7 @@ export function VoiceLabPage() {
                 phase={training.phase}
                 error={training.error}
                 voiceName={savedVoice?.name ?? null}
-                onRetry={() => savedVoice && training.retry(savedVoice)}
+                onRetry={() => savedVoice && training.retry(savedVoice, denoise)}
               />
             )}
             {step === 4 && (
@@ -272,6 +277,16 @@ export function VoiceLabPage() {
                   <span>Express clone — <b style={{ color: '#8B5CF6' }}>same real training</b>, shorter recording, ready in ~15 minutes</span>
                 )}
               </div>
+              {step === 2 && (
+                <label className="vl-denoise-toggle" title="Free ffmpeg cleanup (rumble filter + gentle noise reduction) applied to your sample before training. Turn off for an already-clean studio recording.">
+                  <input
+                    type="checkbox"
+                    checked={denoise}
+                    onChange={(e) => setDenoise(e.target.checked)}
+                  />
+                  <span>Clean up background noise <em>(recommended)</em></span>
+                </label>
+              )}
               <div className="vl-ab-btns">
                 {step > 1 && (
                   <button className="vl-btn-back" onClick={() => goStep((step - 1) as Step)}>
@@ -334,6 +349,19 @@ export function VoiceLabPage() {
           align-items: center;
           gap: 10px;
         }
+        .vl-denoise-toggle {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 11.5px;
+          color: #8888AA;
+          cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .vl-denoise-toggle input { accent-color: #8B5CF6; cursor: pointer; }
+        .vl-denoise-toggle em { color: #5A5A80; font-style: normal; }
+        .vl-denoise-toggle:hover { color: #C4C4E0; }
         .vl-ab-hint {
           font-size: 11px;
           color: #5A5A80;
