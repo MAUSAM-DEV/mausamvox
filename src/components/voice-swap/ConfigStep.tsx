@@ -44,6 +44,10 @@ interface ConfigStepProps {
   setDuetSinger?: (s: DuetSinger) => void
   selectedVoiceId2?: string | null
   setSelectedVoiceId2?: (id: string) => void
+  // Guided (AI Cover) mode: hide the advanced Swap Controls (Gender Lock,
+  // Style Intensity, Pitch Shift) behind their defaults — pitch is still
+  // auto-matched by the page — and show first-timer copy instead.
+  guided?: boolean
 }
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
@@ -131,7 +135,7 @@ export function ConfigStep({
   gender, setGender,
   styleIntensity, setStyleIntensity, pitchShift, setPitchShift,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
-  selectedVoiceId2, setSelectedVoiceId2,
+  selectedVoiceId2, setSelectedVoiceId2, guided = false,
 }: ConfigStepProps) {
   const activeDuetMode = duetMode ?? 'one'
 
@@ -189,8 +193,14 @@ export function ConfigStep({
 
         {/* Voice Picker */}
         <div className="vs-section-lbl">
-          {hasDuet && activeDuetMode === 'both-split' ? 'Voice for Male Singer' : 'Choose Target Voice'}
+          {hasDuet && activeDuetMode === 'both-split' ? 'Voice for Male Singer' : guided ? 'Choose a Voice' : 'Choose Target Voice'}
         </div>
+        {guided && (
+          <div className="vs-guided-hint">
+            🌐 Community voices from the Library are free to use — no voice training
+            needed. Have your own trained clone? It&apos;s under My Voices.
+          </div>
+        )}
 
         <div className="vs-vtabs">
           {VOICE_TABS.map((t) => (
@@ -233,7 +243,20 @@ export function ConfigStep({
           </>
         )}
 
-        {/* Swap Controls */}
+        {/* Swap Controls — hidden in guided mode: the defaults (Style Intensity 8,
+            Pitch 0 + the page's auto key-match) apply untouched, and the copy
+            below says so honestly. Full control stays one link away. */}
+        {guided ? (
+          <>
+            <div className="vs-divider" />
+            <div className="vs-guided-note">
+              ⚙️ Smart defaults applied — pitch is matched to your chosen voice
+              automatically. Want full control (style intensity, pitch shift, duets)?{' '}
+              <Link href="/voice-swap" className="vs-guided-note-link">Use Voice Swap</Link>.
+            </div>
+          </>
+        ) : (
+        <>
         <div className="vs-divider" />
         <div className="vs-section-lbl">Swap Controls</div>
 
@@ -315,6 +338,8 @@ export function ConfigStep({
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       <style suppressHydrationWarning>{`
@@ -443,6 +468,23 @@ export function ConfigStep({
           background: #1E1E3A;
           margin: 20px 0;
         }
+        .vs-guided-hint {
+          font-size: 12px;
+          color: #8888AA;
+          line-height: 1.5;
+          margin: -6px 0 14px;
+        }
+        .vs-guided-note {
+          font-size: 12px;
+          color: #8888AA;
+          line-height: 1.6;
+          padding: 12px 14px;
+          border: 1px solid #1E1E3A;
+          border-radius: 10px;
+          background: #0E0E20;
+        }
+        .vs-guided-note-link { color: #8B5CF6; text-decoration: none; }
+        .vs-guided-note-link:hover { text-decoration: underline; }
         .vs-controls-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);

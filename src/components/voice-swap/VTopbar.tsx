@@ -5,14 +5,17 @@ const STEPS = ['Upload', 'Configure', 'Result']
 interface VTopbarProps {
   step: 1 | 2 | 3
   onGoStep: (s: 1 | 2 | 3) => void
+  // Guided (AI Cover) mode renames the breadcrumb steps; omitted = Voice Swap's.
+  labels?: [string, string, string]
 }
 
-export function VTopbar({ step, onGoStep }: VTopbarProps) {
+export function VTopbar({ step, onGoStep, labels }: VTopbarProps) {
+  const steps = labels ?? STEPS
   return (
     <>
       <div className="vs-topbar">
         <div className="vs-breadcrumb">
-          {STEPS.map((label, i) => {
+          {steps.map((label, i) => {
             const n = (i + 1) as 1 | 2 | 3
             const isDone = n < step
             const isActive = n === step

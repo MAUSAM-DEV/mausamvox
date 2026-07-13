@@ -6,6 +6,8 @@ import { LogoMark } from '@/components/ui/Logo'
 import { createClient } from '@/lib/supabase/client'
 
 const TOOLS = [
+  // First-run path: guided zero-setup covers over the Voice Swap pipeline.
+  { emoji: '✨', label: 'AI Cover', href: '/ai-cover' },
   { emoji: '🔄', label: 'Voice Swap', href: '/voice-swap' },
   { emoji: '🧬', label: 'Voice Lab', href: '/voice-lab' },
   { emoji: '✂️', label: 'Stem Studio', href: '/stem-studio' },

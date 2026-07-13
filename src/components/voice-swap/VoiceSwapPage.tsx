@@ -148,7 +148,11 @@ async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
-export function VoiceSwapPage() {
+// guided = the /ai-cover "AI Cover" mode: the SAME pipeline, credits and steps
+// as Voice Swap, but framed as a zero-setup wizard for first-timers — Library
+// tab first (community voices preselected, no training needed), advanced
+// controls (duet split, style intensity, pitch) hidden behind smart defaults.
+export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Navigation
   const [step, setStep] = useState<Step>(1)
 
@@ -194,8 +198,9 @@ export function VoiceSwapPage() {
   // instead of KARA_2. Lifted here (not in UploadStep) because routing lives here.
   const [isDuet, setIsDuet] = useState(false)
 
-  // Voice picker
-  const [voiceTab, setVoiceTab] = useState<VoiceTab>('My Voices')
+  // Voice picker — guided (AI Cover) mode starts on the Library tab: its whole
+  // point is covers with community voices, before the user has trained anything.
+  const [voiceTab, setVoiceTab] = useState<VoiceTab>(guided ? 'Library' : 'My Voices')
   const [voices, setVoices] = useState<VoiceOption[]>([])
   const [voicesLoading, setVoicesLoading] = useState(true)
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null)
@@ -283,10 +288,21 @@ export function VoiceSwapPage() {
     })
   }, [])
 
+  // Shared shape for every Library voice shown in the picker. Their models are
+  // resolved SERVER-side by voiceId (voice-convert's published-voice fallback)
+  // — modelUrl stays undefined on purpose.
+  const toLibOption = (v: { id: string; name: string }): VoiceOption => ({
+    id: v.id,
+    name: v.name,
+    sub: 'Community voice · Library',
+    icon: '🌐',
+    avatarBg: 'linear-gradient(135deg,#10B981,#06B6D4)',
+    isLibrary: true,
+  })
+
   // Voice Library: a /voice-swap?libVoice=<id> link (from /library) loads that
-  // published community voice into the picker and preselects it. Kept in a ref
-  // too so the own-voices fetch below can re-merge it without a dep cycle.
-  const libVoiceRef = useRef<VoiceOption | null>(null)
+  // published community voice into the picker and preselects it. The own-voices
+  // fetch below preserves every isLibrary entry across refetches.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('libVoice')
     if (!id) return
@@ -294,18 +310,35 @@ export function VoiceSwapPage() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.voice) { showToast('That Library voice is no longer shared'); return }
-        const opt: VoiceOption = {
-          id: d.voice.id,
-          name: d.voice.name,
-          sub: 'Community voice · Library',
-          icon: '🌐',
-          avatarBg: 'linear-gradient(135deg,#10B981,#06B6D4)',
-          isLibrary: true,
-        }
-        libVoiceRef.current = opt
+        const opt = toLibOption(d.voice)
         setVoices((prev) => (prev.some((v) => v.id === opt.id) ? prev : [opt, ...prev]))
         setSelectedVoiceId(opt.id)
         setVoiceTab('Library')
+      })
+      .catch(() => { /* picker just shows own voices */ })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Voice Library: load the FULL published community list into the picker, so
+  // the Library tab works without a ?libVoice= deep link — this is the
+  // zero-setup path for users who haven't trained a voice yet. Previously the
+  // tab only ever showed a deep-linked voice, so it sat empty for everyone else.
+  useEffect(() => {
+    fetch('/api/library')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.voices ?? []) as { id: string; name: string }[]
+        if (list.length === 0) return
+        setVoices((prev) => {
+          const merged = [...prev]
+          for (const v of list) {
+            if (!merged.some((m) => m.id === v.id)) merged.push(toLibOption(v))
+          }
+          return merged
+        })
+        // Guided (AI Cover) mode: preselect the first community voice so a
+        // first-timer can generate without configuring anything. Never
+        // overrides a selection already made (incl. a ?libVoice= preselect).
+        if (guided) setSelectedVoiceId((prev) => prev ?? list[0].id)
       })
       .catch(() => { /* picker just shows own voices */ })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -337,13 +370,18 @@ export function VoiceSwapPage() {
               : 'linear-gradient(135deg,#06B6D4,#3B82F6)',
             modelUrl: c.model_url ?? undefined,
           }))
-          // Keep the loaded Library voice (if any) in the list across refetches.
-          const lib = libVoiceRef.current
-          setVoices(lib && !mapped.some((m) => m.id === lib.id) ? [lib, ...mapped] : mapped)
+          // Keep every Library voice (deep-linked or list-loaded) in the list
+          // across refetches; an own clone wins a duplicate id (it carries
+          // modelUrl, and the library copy is the same model anyway).
+          setVoices((prev) => [
+            ...mapped,
+            ...prev.filter((v) => v.isLibrary && !mapped.some((m) => m.id === v.id)),
+          ])
           // Don't default-select over a Library voice that was (or is still
-          // being) loaded from the ?libVoice= link.
+          // being) loaded from the ?libVoice= link — nor over guided mode's
+          // community-voice preselect.
           const libRequested = new URLSearchParams(window.location.search).has('libVoice')
-          if (mapped.length > 0 && !selectedVoiceId && !libRequested) setSelectedVoiceId(mapped[0].id)
+          if (mapped.length > 0 && !selectedVoiceId && !libRequested && !guided) setSelectedVoiceId(mapped[0].id)
         }
         setVoicesLoading(false)
       })
@@ -1373,14 +1411,26 @@ export function VoiceSwapPage() {
   return (
     <>
       <div className="vs-shell">
-        <VSidebar creditsRemaining={creditsRemaining} creditsTotal={creditsTotal} plan={plan} />
+        <VSidebar creditsRemaining={creditsRemaining} creditsTotal={creditsTotal} plan={plan} activeTool={guided ? 'AI Cover' : 'Voice Swap'} />
 
         {/* Centre column */}
         <div className="vs-centre">
-          <VTopbar step={step} onGoStep={goStep} />
+          <VTopbar step={step} onGoStep={goStep} labels={guided ? ['Pick a song', 'Choose a voice', 'Your cover'] : undefined} />
 
           {/* Workspace */}
           <div className="vs-workspace">
+            {guided && step === 1 && (
+              <div className="vs-guided-banner">
+                <span className="vs-guided-banner-icon">✨</span>
+                <div>
+                  <div className="vs-guided-banner-title">Make an AI cover in 3 steps — no setup needed</div>
+                  <div className="vs-guided-banner-sub">
+                    Upload a song, pick a free community voice from the Library (no voice
+                    training required), and generate. Same engine as Voice Swap, same credits.
+                  </div>
+                </div>
+              </div>
+            )}
             {step === 1 && (
               <UploadStep
                 userId={userId}
@@ -1396,6 +1446,7 @@ export function VoiceSwapPage() {
                 isDuet={isDuet}
                 onSetIsDuet={setIsDuet}
                 isAdmin={isAdmin}
+                guided={guided}
               />
             )}
             {step === 2 && (
@@ -1419,6 +1470,7 @@ export function VoiceSwapPage() {
                 setDuetSinger={handleSetDuetSinger}
                 selectedVoiceId2={selectedVoiceId2}
                 setSelectedVoiceId2={setSelectedVoiceId2}
+                guided={guided}
               />
             )}
             {step === 3 && (
@@ -1482,7 +1534,7 @@ export function VoiceSwapPage() {
                     handleProcess('preview')
                   }}
                 >
-                  {step === 1 ? 'Next: Configure →' : '▶ Preview'}
+                  {step === 1 ? (guided ? 'Next: Choose a Voice →' : 'Next: Configure →') : '▶ Preview'}
                 </button>
                 {step === 2 && (
                   <button
@@ -1491,7 +1543,7 @@ export function VoiceSwapPage() {
                     title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
                     onClick={() => handleProcess('full')}
                   >
-                    ⚡ Process Full Track
+                    {guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
                   </button>
                 )}
               </div>
@@ -1534,6 +1586,29 @@ export function VoiceSwapPage() {
         }
         .vs-workspace::-webkit-scrollbar { width: 4px; }
         .vs-workspace::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vs-guided-banner {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 14px 16px;
+          margin-bottom: 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(139,92,246,.25);
+          background: linear-gradient(135deg, rgba(139,92,246,.08), rgba(236,72,153,.06));
+        }
+        .vs-guided-banner-icon { font-size: 20px; line-height: 1.2; }
+        .vs-guided-banner-title {
+          font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 14px;
+          font-weight: 700;
+          color: #F0F0FF;
+          margin-bottom: 3px;
+        }
+        .vs-guided-banner-sub {
+          font-size: 12px;
+          color: #8888AA;
+          line-height: 1.5;
+        }
         .vs-action-bar {
           flex-shrink: 0;
           border-top: 1px solid #1E1E3A;

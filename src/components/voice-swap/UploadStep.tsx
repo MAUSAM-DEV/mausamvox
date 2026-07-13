@@ -148,6 +148,9 @@ interface UploadStepProps {
   isDuet: boolean
   onSetIsDuet: (v: boolean) => void
   isAdmin?: boolean
+  // Guided (AI Cover) mode: hide the duet declaration + duet-split controls —
+  // duets are an advanced Voice Swap flow, not part of the simple cover wizard.
+  guided?: boolean
 }
 
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split).
@@ -249,7 +252,7 @@ function StemCard({
   )
 }
 
-export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle', isDuet, onSetIsDuet, isAdmin = false }: UploadStepProps) {
+export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle', isDuet, onSetIsDuet, isAdmin = false, guided = false }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
   const [activeStemUrl, setActiveStemUrl] = useState<string | null>(null)
   const [activeStemLabel, setActiveStemLabel] = useState('')
@@ -671,7 +674,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
                 {/* Duet declaration — pre-upload toggle that routes to gender-split
                     (MVSEP male/female) instead of karaoke-split (KARA_2). KARA_2
-                    can't cleanly separate alternating leads; MVSEP handles it. */}
+                    can't cleanly separate alternating leads; MVSEP handles it.
+                    Hidden in guided (AI Cover) mode — duets stay a Voice Swap flow. */}
+                {!guided && (
                 <label className="vs-duet-toggle" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
@@ -687,6 +692,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                     <span className="vs-duet-toggle-cost">250 cr</span>
                   )}
                 </label>
+                )}
               </>
             )}
 
@@ -897,8 +903,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
             {/* Duet split fallback — shown when the user didn't declare a duet
                 pre-upload. Admins bypass all plan/credit gates (server enforces
-                the real gate via isAdmin check in /api/gender-split). */}
-            {(() => {
+                the real gate via isAdmin check in /api/gender-split).
+                Hidden in guided (AI Cover) mode with the rest of the duet UI. */}
+            {!guided && (() => {
               const done = !!(displayResult.maleVocalsUrl || displayResult.femaleVocalsUrl)
               const isFree = !isAdmin && plan === 'free'
               const tooPoor = !isAdmin && !isFree && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST
@@ -951,7 +958,9 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                 ? 'Waiting for vocal split…'
                 : isDuetGated
                   ? 'Skip and continue without Duet Split →'
-                  : 'Continue to Voice Swap →'}
+                  : guided
+                    ? 'Continue: Choose a Voice →'
+                    : 'Continue to Voice Swap →'}
             </button>
           </div>
         )}

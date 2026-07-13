@@ -8,6 +8,14 @@ import { VToast } from '@/components/voice-swap/VToast'
 
 const TOOLS = [
   {
+    emoji: '✨',
+    name: 'AI Cover',
+    desc: 'Cover any song in a new voice in 3 guided steps — free community voices, no training needed.',
+    href: '/ai-cover',
+    live: true,
+    gradient: 'linear-gradient(135deg,#EC4899,#F59E0B)',
+  },
+  {
     emoji: '🔄',
     name: 'Voice Swap',
     desc: 'Replace any song\'s vocals with your cloned AI voice in minutes.',
