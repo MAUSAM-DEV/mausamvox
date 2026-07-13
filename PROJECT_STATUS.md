@@ -83,6 +83,12 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 35. **Mobile share sheet** — on a PHONE, the modal shows "📤 Share…" (Web Share API with files) → system sheet → send to WhatsApp/Instagram; cancelling the sheet must not toast an error.
 36. **Failure honesty** — a render error toasts clearly and nothing else breaks (playback/share/download all unaffected).
 
+**ALSO untested — landing page motion (`07906c8`), front-end only, quick eyeball:**
+
+38. **Language marquee** — landing page under the hero: "Supported Languages" is now an endless slow ticker (Indian languages first), edges fade out, hover pauses it, and the loop must wrap with NO visible jump (watch it for one full cycle ~48s if unsure). On a phone it should scroll smoothly, not judder.
+39. **Scroll-reveal** — scrolling down, each section (Features/Why/Quality/Tech/Pricing/CTA) fades in and rises once, and the cards inside the four grids cascade one-by-one with a brief soft purple glow that fades. Scrolling back up must NOT re-hide anything. Card hover effects (lift/border) must still work after the reveal.
+40. **Reduced motion** — System Settings → Accessibility → Display → Reduce motion ON → reload the landing: no ticker (static wrapped pills, like before), no reveal animation, everything visible immediately.
+
 **ALSO untested — design-system polish Phase 1 (`1fe1867`), purely visual, quick eyeball only:**
 
 37. **Contrast/vibrancy pass** — global token recolor (secondary text grays brightened to WCAG AA 5.8–7.9:1, borders crisper, purple/pink/cyan accents more vivid; backgrounds/status colors/layouts untouched). Skim dashboard, a swap result, Perform Live and /library — on a phone too: secondary text/labels should read clearly (no more faded gray), card borders visible, CTAs/gradients punchier but NOT neon. If anything looks washed-out or garish, report the page — the fix is one hex in the mapping (see CHANGELOG 2026-07-13).
