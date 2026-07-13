@@ -83,6 +83,10 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 35. **Mobile share sheet** — on a PHONE, the modal shows "📤 Share…" (Web Share API with files) → system sheet → send to WhatsApp/Instagram; cancelling the sheet must not toast an error.
 36. **Failure honesty** — a render error toasts clearly and nothing else breaks (playback/share/download all unaffected).
 
+**ALSO untested — design-system polish Phase 1 (`1fe1867`), purely visual, quick eyeball only:**
+
+37. **Contrast/vibrancy pass** — global token recolor (secondary text grays brightened to WCAG AA 5.8–7.9:1, borders crisper, purple/pink/cyan accents more vivid; backgrounds/status colors/layouts untouched). Skim dashboard, a swap result, Perform Live and /library — on a phone too: secondary text/labels should read clearly (no more faded gray), card borders visible, CTAs/gradients punchier but NOT neon. If anything looks washed-out or garish, report the page — the fix is one hex in the mapping (see CHANGELOG 2026-07-13).
+
 ---
 
 ## 1. Tech Stack
