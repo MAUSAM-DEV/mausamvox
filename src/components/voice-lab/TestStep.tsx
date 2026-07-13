@@ -35,9 +35,9 @@ function TestBarsCanvas({ playing }: { playing: boolean }) {
       const bw = 2.5, gap = 2, step = bw + gap
       const count = Math.floor(W / step)
       const grd = ctx.createLinearGradient(0, 0, W, 0)
-      grd.addColorStop(0, 'rgba(139,92,246,.9)')
-      grd.addColorStop(0.5, 'rgba(236,72,153,.9)')
-      grd.addColorStop(1, 'rgba(6,182,212,.9)')
+      grd.addColorStop(0, 'rgba(157,92,255,.9)')
+      grd.addColorStop(0.5, 'rgba(249,69,158,.9)')
+      grd.addColorStop(1, 'rgba(12,199,232,.9)')
       ctx.fillStyle = grd
       for (let i = 0; i < count; i++) {
         const h = playingRef.current
@@ -195,7 +195,7 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
       <style suppressHydrationWarning>{`
         .vlte-stage {
           background: #121225;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           padding: 40px 32px;
           text-align: center;
@@ -230,20 +230,20 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           font-size: 22px; font-weight: 700; color: #F0F0FF;
           margin-bottom: 6px; position: relative;
         }
-        .vlte-p { font-size: 13px; color: #5A5A80; margin-bottom: 24px; position: relative; line-height: 1.6; }
+        .vlte-p { font-size: 13px; color: #8E8EB4; margin-bottom: 24px; position: relative; line-height: 1.6; }
         .vlte-test-row {
           display: flex; align-items: center; gap: 12px;
           max-width: 440px; margin: 0 auto 24px;
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 12px; padding: 14px 16px; position: relative;
         }
         .vlte-play-btn {
           width: 40px; height: 40px; border-radius: 50%; border: none; flex-shrink: 0;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           cursor: pointer; transition: all 0.25s;
           display: flex; align-items: center; justify-content: center;
         }
-        .vlte-play-btn:hover:not(:disabled) { transform: scale(1.08); box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+        .vlte-play-btn:hover:not(:disabled) { transform: scale(1.08); box-shadow: 0 6px 18px rgba(157,92,255,.4); }
         .vlte-play-btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .vlte-play-spinner {
           width: 16px; height: 16px; border-radius: 50%; display: block;
@@ -251,33 +251,33 @@ export function TestStep({ testPlaying, setTestPlaying, onToast, onTrainAnother,
           animation: vlteSpin 0.7s linear infinite;
         }
         @keyframes vlteSpin { to { transform: rotate(360deg); } }
-        .vlte-test-lbl { font-size: 11px; color: #5A5A80; flex-shrink: 0; }
+        .vlte-test-lbl { font-size: 11px; color: #8E8EB4; flex-shrink: 0; }
         .vlte-retry {
-          background: transparent; border: 1px solid #272745; border-radius: 6px;
-          color: #8B5CF6; font-size: 11px; font-weight: 600; padding: 3px 10px;
+          background: transparent; border: 1px solid #383866; border-radius: 6px;
+          color: #9D5CFF; font-size: 11px; font-weight: 600; padding: 3px 10px;
           cursor: pointer; flex-shrink: 0; transition: all 0.2s;
         }
-        .vlte-retry:hover { border-color: #8B5CF6; }
+        .vlte-retry:hover { border-color: #9D5CFF; }
         .vlte-actions {
           display: flex; gap: 10px; justify-content: center;
           flex-wrap: wrap; position: relative;
         }
         .vlte-btn-main {
           padding: 11px 24px; border-radius: 8px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600;
           cursor: pointer; transition: all 0.25s; white-space: nowrap;
         }
-        .vlte-btn-main:hover { box-shadow: 0 8px 26px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .vlte-btn-main:hover { box-shadow: 0 8px 26px rgba(157,92,255,.4); transform: translateY(-1px); }
         .vlte-btn-sec {
           padding: 11px 20px; border-radius: 8px;
-          border: 1px solid #272745; background: transparent;
+          border: 1px solid #383866; background: transparent;
           color: #C4C4E0; font-size: 13px; font-weight: 500;
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
-        .vlte-btn-sec:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vlte-btn-sec:hover { border-color: #9D5CFF; color: #9D5CFF; }
 
         @media (max-width: 900px) {
           .vlte-stage { padding: 32px 18px; }

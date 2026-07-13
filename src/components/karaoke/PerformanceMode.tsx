@@ -247,11 +247,11 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         .pm-exit {
           position: absolute; top: 18px; right: 18px;
           width: 42px; height: 42px; border-radius: 50%;
-          border: 1px solid #2A2A4A; background: rgba(255,255,255,.03);
+          border: 1px solid #3C3C6A; background: rgba(255,255,255,.03);
           color: #C4C4E0; font-size: 16px; cursor: pointer;
           transition: all 0.2s;
         }
-        .pm-exit:hover { border-color: #8B5CF6; color: #F0F0FF; }
+        .pm-exit:hover { border-color: #9D5CFF; color: #F0F0FF; }
         .pm-body {
           width: 100%; max-width: 460px;
           padding: 24px; text-align: center;
@@ -259,27 +259,27 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         }
         .pm-kicker {
           font-size: 11px; font-weight: 700; letter-spacing: 2px;
-          text-transform: uppercase; color: #8B5CF6; margin-bottom: 10px;
+          text-transform: uppercase; color: #9D5CFF; margin-bottom: 10px;
         }
         .pm-track {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 24px; font-weight: 700; letter-spacing: -0.4px;
           color: #F0F0FF; margin: 0 0 6px; word-break: break-word;
         }
-        .pm-note { font-size: 13px; color: #7878A0; margin: 0 0 4px; line-height: 1.6; }
-        .pm-honest { font-size: 12px; color: #5A5A80; margin: 0 0 20px; }
-        .pm-status { font-size: 13px; color: #5A5A80; padding: 40px 0; }
+        .pm-note { font-size: 13px; color: #A0A0C8; margin: 0 0 4px; line-height: 1.6; }
+        .pm-honest { font-size: 12px; color: #8E8EB4; margin: 0 0 20px; }
+        .pm-status { font-size: 13px; color: #8E8EB4; padding: 40px 0; }
         .pm-status--err { color: #F87171; }
         .pm-play {
           width: 110px; height: 110px; border-radius: 50%;
           border: none; cursor: pointer;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-size: 34px; line-height: 1;
           display: flex; align-items: center; justify-content: center;
           transition: all 0.25s;
           margin-bottom: 26px;
         }
-        .pm-play:hover { box-shadow: 0 14px 44px rgba(139,92,246,.5); transform: scale(1.03); }
+        .pm-play:hover { box-shadow: 0 14px 44px rgba(157,92,255,.5); transform: scale(1.03); }
         .pm-times {
           width: 100%; display: flex; justify-content: space-between;
           font-size: 13px; font-weight: 600; color: #C4C4E0;
@@ -291,7 +291,7 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
           margin-bottom: 26px;
         }
         .pm-seek::-webkit-slider-runnable-track {
-          height: 6px; border-radius: 3px; background: #1E1E3A;
+          height: 6px; border-radius: 3px; background: #2E2E56;
         }
         .pm-seek::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
@@ -300,7 +300,7 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
           box-shadow: 0 2px 8px rgba(0,0,0,.5);
         }
         .pm-seek::-moz-range-track {
-          height: 6px; border-radius: 3px; background: #1E1E3A;
+          height: 6px; border-radius: 3px; background: #2E2E56;
         }
         .pm-seek::-moz-range-thumb {
           width: 22px; height: 22px; border-radius: 50%; border: none;
@@ -308,12 +308,12 @@ export function PerformanceMode({ trackName, sourceNote, srcUrl, stemUrls, lyric
         }
         .pm-restart {
           padding: 12px 26px; border-radius: 10px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 14px; font-weight: 600; cursor: pointer;
           transition: all 0.2s;
         }
-        .pm-restart:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .pm-restart:hover { border-color: #9D5CFF; color: #9D5CFF; }
       `}</style>
     </div>
   )

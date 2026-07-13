@@ -277,7 +277,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                   <> A music-only backing isn&rsquo;t stored for this track — it was
                   saved before we started keeping one. Run a new swap to get it.</>
                 )}
-                {' '}Want a different take? <Link href="/voice-swap" style={{ color: '#8B5CF6' }}>Run a new swap</Link>.
+                {' '}Want a different take? <Link href="/voice-swap" style={{ color: '#9D5CFF' }}>Run a new swap</Link>.
               </p>
             </div>
           )}
@@ -314,13 +314,13 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
         }
         .sw-head {
           padding: 18px 40px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
         .sw-back {
-          font-size: 13px; font-weight: 600; color: #7878A0;
+          font-size: 13px; font-weight: 600; color: #A0A0C8;
           text-decoration: none; transition: color 0.2s;
         }
         .sw-back:hover { color: #F0F0FF; }
@@ -333,11 +333,11 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
         }
         .sw-center-note {
           text-align: center; padding: 80px 0;
-          font-size: 13px; color: #5A5A80;
+          font-size: 13px; color: #8E8EB4;
         }
         .sw-card {
           background: #09091A;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 16px;
           padding: 24px;
         }
@@ -348,7 +348,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
           font-size: 18px; font-weight: 700; color: #F0F0FF; margin-bottom: 8px;
         }
         .sw-note-txt {
-          font-size: 13px; color: #7878A0; line-height: 1.7;
+          font-size: 13px; color: #A0A0C8; line-height: 1.7;
           max-width: 400px; margin: 0 auto 22px;
         }
         .sw-title-row {
@@ -360,19 +360,19 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
           font-size: 20px; font-weight: 700; letter-spacing: -0.4px;
           color: #F0F0FF; margin: 0 0 2px; word-break: break-word;
         }
-        .sw-subtitle { font-size: 11px; color: #5A5A80; }
+        .sw-subtitle { font-size: 11px; color: #8E8EB4; }
         .sw-details {
           display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px;
         }
         .sw-detail {
           flex: 1; min-width: 120px;
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 10px; padding: 10px 14px;
         }
         .sw-detail-lbl {
           display: block; font-size: 10px; font-weight: 700;
           letter-spacing: 1.5px; text-transform: uppercase;
-          color: #5A5A80; margin-bottom: 3px;
+          color: #8E8EB4; margin-bottom: 3px;
         }
         .sw-detail-val { font-size: 13px; font-weight: 600; color: #F0F0FF; }
         .sw-actions {
@@ -381,25 +381,25 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
         .sw-btn-solid {
           display: inline-block;
           padding: 11px 22px; border-radius: 9px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; text-decoration: none;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.25s;
         }
         .sw-btn-solid:hover:not(:disabled) {
-          box-shadow: 0 8px 24px rgba(139,92,246,.4);
+          box-shadow: 0 8px 24px rgba(157,92,255,.4);
           transform: translateY(-1px);
         }
         .sw-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
         .sw-btn-ghost {
           padding: 11px 22px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.2s;
         }
-        .sw-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .sw-btn-ghost:hover { border-color: #9D5CFF; color: #9D5CFF; }
         .sw-btn-danger {
           padding: 11px 22px; border-radius: 9px;
           border: 1px solid rgba(239,68,68,.3); background: transparent;
@@ -411,7 +411,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
         .sw-btn-danger:hover:not(:disabled) { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.5); }
         .sw-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
         .sw-note-fine {
-          font-size: 12px; color: #5A5A80; line-height: 1.6;
+          font-size: 12px; color: #8E8EB4; line-height: 1.6;
           margin: 16px 0 0;
         }
         @media (max-width: 640px) {

@@ -64,9 +64,9 @@ function MicCanvas({ recording }: { recording: boolean }) {
         const bw = 3, gap = 2.5, step = bw + gap
         const count = Math.floor(W / step)
         const grd = ctx.createLinearGradient(0, 0, W, 0)
-        grd.addColorStop(0,   'rgba(139,92,246,.9)')
-        grd.addColorStop(0.5, 'rgba(236,72,153,.9)')
-        grd.addColorStop(1,   'rgba(6,182,212,.9)')
+        grd.addColorStop(0,   'rgba(157,92,255,.9)')
+        grd.addColorStop(0.5, 'rgba(249,69,158,.9)')
+        grd.addColorStop(1,   'rgba(12,199,232,.9)')
         ctx.fillStyle = grd
         for (let i = 0; i < count; i++) {
           const base = Math.sin(tRef.current / 12 + i * 0.4) * 0.5 + 0.5
@@ -213,37 +213,37 @@ export function ActionScreen({
         /* mic stage */
         .oba-mic-stage {
           max-width: 560px; margin: 0 auto 28px;
-          background: #121225; border: 1px solid #1E1E3A; border-radius: 16px;
+          background: #121225; border: 1px solid #2E2E56; border-radius: 16px;
           padding: 30px 28px; text-align: center;
         }
         .oba-mic-line {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 19px; font-weight: 500; line-height: 1.5; margin-bottom: 4px;
         }
-        .oba-mic-hint { font-size: 11px; color: #5A5A80; margin-bottom: 20px; }
+        .oba-mic-hint { font-size: 11px; color: #8E8EB4; margin-bottom: 20px; }
         .oba-mic-row {
           height: 64px; border-radius: 11px; margin-bottom: 20px;
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           position: relative; overflow: hidden;
         }
         .oba-mic-idle {
           position: absolute; inset: 0;
           display: flex; align-items: center; justify-content: center;
-          font-size: 12px; color: #5A5A80; pointer-events: none;
+          font-size: 12px; color: #8E8EB4; pointer-events: none;
         }
         .oba-rec-circle {
           width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           display: inline-flex; align-items: center; justify-content: center;
           transition: all .25s;
         }
-        .oba-rec-circle:hover { transform: scale(1.07); box-shadow: 0 10px 30px rgba(236,72,153,.4); }
+        .oba-rec-circle:hover { transform: scale(1.07); box-shadow: 0 10px 30px rgba(249,69,158,.4); }
         .oba-rec-circle--on { background: #EF4444 !important; animation: obaRp 1.5s ease infinite; }
         @keyframes obaRp {
           0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.4); }
           50%      { box-shadow: 0 0 0 13px rgba(239,68,68,0); }
         }
-        .oba-rec-status { font-size: 12px; color: #5A5A80; margin-top: 12px; min-height: 18px; }
+        .oba-rec-status { font-size: 12px; color: #8E8EB4; margin-top: 12px; min-height: 18px; }
         .oba-rec-status b { color: #C4C4E0; }
 
         /* option grid */
@@ -252,31 +252,31 @@ export function ActionScreen({
           gap: 12px; max-width: 760px; margin: 0 auto 28px;
         }
         .oba-opt {
-          background: #121225; border: 1px solid #1E1E3A; border-radius: 13px;
+          background: #121225; border: 1px solid #2E2E56; border-radius: 13px;
           padding: 20px 16px; cursor: pointer; transition: all .25s;
           text-align: center; position: relative;
         }
-        .oba-opt:hover { border-color: rgba(139,92,246,.4); transform: translateY(-3px); }
-        .oba-opt--on { border-color: #8B5CF6; background: rgba(139,92,246,.07); }
+        .oba-opt:hover { border-color: rgba(157,92,255,.4); transform: translateY(-3px); }
+        .oba-opt--on { border-color: #9D5CFF; background: rgba(157,92,255,.07); }
         .oba-opt--on::after {
           content: '✓'; position: absolute; top: 9px; right: 11px;
-          font-size: 10px; font-weight: 700; color: #8B5CF6;
+          font-size: 10px; font-weight: 700; color: #9D5CFF;
         }
         .oba-opt-ico {
           width: 46px; height: 46px; border-radius: 12px; margin: 0 auto 12px;
-          background: linear-gradient(135deg, rgba(139,92,246,.18), rgba(236,72,153,.12));
-          border: 1px solid rgba(139,92,246,.2);
+          background: linear-gradient(135deg, rgba(157,92,255,.18), rgba(249,69,158,.12));
+          border: 1px solid rgba(157,92,255,.2);
           display: flex; align-items: center; justify-content: center; font-size: 20px;
         }
         .oba-opt-name { font-size: 13px; font-weight: 600; color: #F0F0FF; }
-        .oba-opt-sub  { font-size: 11px; color: #5A5A80; margin-top: 3px; }
+        .oba-opt-sub  { font-size: 11px; color: #8E8EB4; margin-top: 3px; }
         .oba-opt-mini {
           display: flex; align-items: center; justify-content: center;
           gap: 1.5px; height: 20px; margin-top: 10px; overflow: hidden;
         }
         .oba-om {
           width: 2px; border-radius: 1px; flex-shrink: 0;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
         }
 
         @media (max-width: 760px) {

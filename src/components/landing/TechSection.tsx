@@ -60,7 +60,7 @@ export function TechSection() {
         >
           Powered by<br />Mausam Studio Engine.
         </h2>
-        <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
+        <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
           Built and tuned specifically for vocals — not retrofitted speech models.
         </p>
 
@@ -87,18 +87,18 @@ function TechCard({ tag, title, desc, model }: { tag: string; title: string; des
     <div
       style={{
         background: '#13132A',
-        border: '1px solid #1E1E3A',
+        border: '1px solid #2E2E56',
         borderRadius: '14px',
         padding: '28px 24px',
         transition: 'border-color 0.3s, transform 0.3s',
         cursor: 'default',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(139,92,246,.3)'
+        e.currentTarget.style.borderColor = 'rgba(157,92,255,.3)'
         e.currentTarget.style.transform = 'translateY(-3px)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#1E1E3A'
+        e.currentTarget.style.borderColor = '#2E2E56'
         e.currentTarget.style.transform = ''
       }}
     >
@@ -116,16 +116,16 @@ function TechCard({ tag, title, desc, model }: { tag: string; title: string; des
       >
         {title}
       </h4>
-      <p style={{ fontSize: '12px', color: '#606088', lineHeight: 1.65 }}>{desc}</p>
+      <p style={{ fontSize: '12px', color: '#9494BC', lineHeight: 1.65 }}>{desc}</p>
       <span
         style={{
           marginTop: '14px',
           padding: '5px 12px',
-          background: 'rgba(139,92,246,.07)',
-          border: '1px solid rgba(139,92,246,.18)',
+          background: 'rgba(157,92,255,.07)',
+          border: '1px solid rgba(157,92,255,.18)',
           borderRadius: '4px',
           fontSize: '11px',
-          color: '#8B5CF6',
+          color: '#9D5CFF',
           fontFamily: 'var(--font-grotesk), "Space Grotesk", monospace',
           fontWeight: 600,
           display: 'inline-block',

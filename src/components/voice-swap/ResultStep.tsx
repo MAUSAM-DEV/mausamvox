@@ -413,9 +413,9 @@ function PlayerWaveCanvas({ playing }: { playing: boolean }) {
     resize()
 
     const layers = [
-      { a: 0.30, f: 0.013, s: 0.032, c: 'rgba(139,92,246,.9)', lw: 1.8 },
-      { a: 0.16, f: 0.024, s: 0.058, c: 'rgba(236,72,153,.5)', lw: 1.3 },
-      { a: 0.09, f: 0.038, s: 0.085, c: 'rgba(6,182,212,.3)',  lw: 1.0 },
+      { a: 0.30, f: 0.013, s: 0.032, c: 'rgba(157,92,255,.9)', lw: 1.8 },
+      { a: 0.16, f: 0.024, s: 0.058, c: 'rgba(249,69,158,.5)', lw: 1.3 },
+      { a: 0.09, f: 0.038, s: 0.085, c: 'rgba(12,199,232,.3)',  lw: 1.0 },
     ]
 
     function frame() {
@@ -516,7 +516,7 @@ function PolishKnob({
           else if (e.key === 'End') nudge(e, max - value)
         }}
       >
-        <circle cx={c} cy={c} r={r} fill="none" stroke="#1E1E3A" strokeWidth="4"
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#2E2E56" strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={`${circ * sweepFrac} ${circ}`} transform={arcStart}
         />
@@ -531,8 +531,8 @@ function PolishKnob({
         />
         <defs>
           <linearGradient id={`pk-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#8B5CF6" />
-            <stop offset="100%" stopColor="#EC4899" />
+            <stop offset="0%" stopColor="#9D5CFF" />
+            <stop offset="100%" stopColor="#F9459E" />
           </linearGradient>
         </defs>
       </svg>
@@ -1490,15 +1490,15 @@ export function ResultStep({
 
         {/* Regen row */}
         <div className="vs-regen-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#5A5A80' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#8E8EB4' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M4 4v5h5M20 20v-5h-5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
-              <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
+              <path d="M4 4v5h5M20 20v-5h-5" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
+              <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
             </svg>
             {regenCapReached ? (
               <>Maximum voice strength reached for this track.</>
             ) : (
-              <>Regenerate for a <strong style={{ color: '#8B5CF6' }}>stronger voice match</strong> · costs <strong style={{ color: '#8B5CF6' }}>200 cr</strong></>
+              <>Regenerate for a <strong style={{ color: '#9D5CFF' }}>stronger voice match</strong> · costs <strong style={{ color: '#9D5CFF' }}>200 cr</strong></>
             )}
           </div>
           <button
@@ -1547,13 +1547,13 @@ export function ResultStep({
         .vs-result-top { display: flex; align-items: center; gap: 20px; }
         .vs-result-score-lbl {
           font-size: 10px; font-weight: 700; letter-spacing: 2px;
-          text-transform: uppercase; color: #5A5A80; margin-bottom: 4px;
+          text-transform: uppercase; color: #8E8EB4; margin-bottom: 4px;
         }
         .vs-result-check {
           width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 8px 24px rgba(139,92,246,.35);
+          box-shadow: 0 8px 24px rgba(157,92,255,.35);
         }
         .vs-result-chip {
           padding: 3px 10px; border-radius: 999px;
@@ -1561,15 +1561,15 @@ export function ResultStep({
           font-size: 11px; font-weight: 600; color: #10B981;
         }
         .vs-player {
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 12px; overflow: hidden; margin-bottom: 14px;
         }
-        .vs-player-tabs { display: flex; align-items: center; border-bottom: 1px solid #1E1E3A; padding: 0 4px; }
+        .vs-player-tabs { display: flex; align-items: center; border-bottom: 1px solid #2E2E56; padding: 0 4px; }
         .vs-toggle-group { display: flex; }
         .vs-toggle-spacer { flex: 1; }
         .vs-ptab {
           padding: 8px 14px; border: none; background: transparent;
-          font-size: 11px; font-weight: 500; color: #5A5A80;
+          font-size: 11px; font-weight: 500; color: #8E8EB4;
           cursor: pointer; transition: all 0.2s; position: relative;
         }
         .vs-ptab:hover:not(:disabled) { color: #F0F0FF; }
@@ -1577,7 +1577,7 @@ export function ResultStep({
         .vs-ptab--active { color: #F0F0FF; font-weight: 600; }
         .vs-ptab--active::after {
           content: ''; position: absolute; bottom: 0; left: 4px; right: 4px;
-          height: 2px; background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          height: 2px; background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           border-radius: 2px 2px 0 0;
         }
 
@@ -1589,15 +1589,15 @@ export function ResultStep({
         .vs-mixing-ring {
           width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
           border: 3px solid transparent;
-          border-top-color: #8B5CF6;
-          border-right-color: #EC4899;
+          border-top-color: #9D5CFF;
+          border-right-color: #F9459E;
           animation: vs-spin 0.8s linear infinite;
         }
         @keyframes vs-spin { to { transform: rotate(360deg); } }
         .vs-mixing-title {
           font-size: 14px; font-weight: 600; color: #C4C4E0; margin-bottom: 3px;
         }
-        .vs-mixing-sub { font-size: 11px; color: #5A5A80; line-height: 1.5; }
+        .vs-mixing-sub { font-size: 11px; color: #8E8EB4; line-height: 1.5; }
 
         /* Mix note (fallback/error) */
         .vs-mix-note {
@@ -1615,19 +1615,19 @@ export function ResultStep({
         }
         .vs-player-controls {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 8px 14px; border-top: 1px solid #1E1E3A;
+          padding: 8px 14px; border-top: 1px solid #2E2E56;
         }
-        .vs-time { font-size: 11px; color: #5A5A80; font-variant-numeric: tabular-nums; }
+        .vs-time { font-size: 11px; color: #8E8EB4; font-variant-numeric: tabular-nums; }
         .vs-play-btn {
           width: 32px; height: 32px; border-radius: 50%; border: none;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E);
           color: #fff; font-size: 12px; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
-          transition: all 0.2s; box-shadow: 0 4px 12px rgba(139,92,246,.4);
+          transition: all 0.2s; box-shadow: 0 4px 12px rgba(157,92,255,.4);
         }
-        .vs-play-btn:hover { transform: scale(1.1); box-shadow: 0 6px 18px rgba(139,92,246,.5); }
+        .vs-play-btn:hover { transform: scale(1.1); box-shadow: 0 6px 18px rgba(157,92,255,.5); }
         .vs-polish {
-          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 10px;
+          background: #0E0E20; border: 1px solid #2E2E56; border-radius: 10px;
           padding: 12px 14px; margin-bottom: 14px;
         }
         .vs-polish-head {
@@ -1641,7 +1641,7 @@ export function ResultStep({
         }
         .vs-polish-spin {
           width: 9px; height: 9px; border-radius: 50%;
-          border: 1.5px solid rgba(139,92,246,.3); border-top-color: #8B5CF6;
+          border: 1.5px solid rgba(157,92,255,.3); border-top-color: #9D5CFF;
           animation: vsPolishSpin 0.7s linear infinite;
         }
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
@@ -1652,11 +1652,11 @@ export function ResultStep({
         @keyframes vsSavedFade { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
         .vs-polish-presets { display: flex; gap: 8px; margin-left: auto; }
         .vs-polish-preset {
-          border: 1px solid #2A2A4A; background: transparent; color: #7878A0;
+          border: 1px solid #3C3C6A; background: transparent; color: #A0A0C8;
           font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
-        .vs-polish-preset:hover { border-color: #8B5CF6; color: #C4B5FD; }
+        .vs-polish-preset:hover { border-color: #9D5CFF; color: #C4B5FD; }
         .vs-knob-row {
           display: flex; align-items: flex-start; justify-content: center;
           gap: 24px; flex-wrap: wrap;
@@ -1667,25 +1667,25 @@ export function ResultStep({
         .vs-knob svg {
           cursor: ns-resize; touch-action: none; border-radius: 50%;
         }
-        .vs-knob svg:focus-visible { outline: 2px solid #8B5CF6; outline-offset: 2px; }
+        .vs-knob svg:focus-visible { outline: 2px solid #9D5CFF; outline-offset: 2px; }
         .vs-knob-label { font-size: 12px; color: #C4C4E0; }
         .vs-knob-val {
-          font-size: 11px; font-weight: 600; color: #8B5CF6;
+          font-size: 11px; font-weight: 600; color: #9D5CFF;
           font-variant-numeric: tabular-nums;
         }
-        .vs-polish-foot { font-size: 11px; color: #5A5A80; margin-top: 8px; text-align: center; }
+        .vs-polish-foot { font-size: 11px; color: #8E8EB4; margin-top: 8px; text-align: center; }
         .vs-regen-row {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 10px 14px; background: #0E0E20; border: 1px solid #1E1E3A;
+          padding: 10px 14px; background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 10px; margin-bottom: 14px;
         }
         .vs-regen-btn {
           padding: 5px 14px; border-radius: 6px;
-          border: 1px solid rgba(139,92,246,.3); background: rgba(139,92,246,.08);
-          color: #8B5CF6; font-size: 12px; font-weight: 600;
+          border: 1px solid rgba(157,92,255,.3); background: rgba(157,92,255,.08);
+          color: #9D5CFF; font-size: 12px; font-weight: 600;
           cursor: pointer; transition: all 0.2s;
         }
-        .vs-regen-btn:hover { background: rgba(139,92,246,.16); }
+        .vs-regen-btn:hover { background: rgba(157,92,255,.16); }
         .vs-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-dl-btn {
           padding: 10px 20px; border-radius: 8px;
@@ -1693,19 +1693,19 @@ export function ResultStep({
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
         .vs-dl-btn--primary {
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           border: none; color: #fff; flex: 1; min-width: 120px;
         }
-        .vs-dl-btn--primary:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .vs-dl-btn--primary:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .vs-dl-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .vs-dl-btn--outline {
-          background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0;
+          background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0;
         }
-        .vs-dl-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vs-dl-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
 
         /* Fine-tune panel */
         .vs-tune {
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 10px; margin-bottom: 14px; overflow: hidden;
         }
         .vs-tune-head {
@@ -1718,45 +1718,45 @@ export function ResultStep({
         .vs-tune-adv {
           font-size: 9px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
           padding: 2px 6px; border-radius: 999px; margin-left: 6px;
-          background: rgba(139,92,246,.15); color: #A78BFA; border: 1px solid rgba(139,92,246,.3);
+          background: rgba(157,92,255,.15); color: #A78BFA; border: 1px solid rgba(157,92,255,.3);
         }
-        .vs-tune-chev { color: #5A5A80; font-size: 10px; }
-        .vs-tune-body { padding: 4px 14px 14px; border-top: 1px solid #1E1E3A; }
+        .vs-tune-chev { color: #8E8EB4; font-size: 10px; }
+        .vs-tune-body { padding: 4px 14px 14px; border-top: 1px solid #2E2E56; }
         .vs-tune-row { margin-top: 12px; }
         .vs-tune-rowtop { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
         .vs-tune-label { font-size: 12px; color: #C4C4E0; }
-        .vs-tune-hint { font-size: 10px; color: #5A5A80; font-variant-numeric: tabular-nums; }
+        .vs-tune-hint { font-size: 10px; color: #8E8EB4; font-variant-numeric: tabular-nums; }
         .vs-tune-val {
           font-size: 12px; color: #A78BFA; font-weight: 600;
           font-variant-numeric: tabular-nums;
         }
-        .vs-tune-slider { width: 100%; accent-color: #8B5CF6; cursor: pointer; }
+        .vs-tune-slider { width: 100%; accent-color: #9D5CFF; cursor: pointer; }
         .vs-tune-slider:disabled { opacity: 0.5; cursor: not-allowed; }
         .vs-tune-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
         .vs-tune-preview-btn {
           padding: 8px 16px; border-radius: 8px; border: none;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899); color: #fff;
+          background: linear-gradient(135deg,#9D5CFF,#F9459E); color: #fff;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .vs-tune-preview-btn:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(139,92,246,.4); }
+        .vs-tune-preview-btn:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(157,92,255,.4); }
         .vs-tune-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .vs-tune-reset-btn {
           padding: 8px 14px; border-radius: 8px;
-          border: 1px solid rgba(139,92,246,.4); background: transparent; color: #C4B5FD;
+          border: 1px solid rgba(157,92,255,.4); background: transparent; color: #C4B5FD;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .vs-tune-reset-btn:hover:not(:disabled) { background: rgba(139,92,246,.12); }
+        .vs-tune-reset-btn:hover:not(:disabled) { background: rgba(157,92,255,.12); }
         .vs-tune-reset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .vs-tune-cost { font-size: 11px; color: #5A5A80; }
+        .vs-tune-cost { font-size: 11px; color: #8E8EB4; }
         .vs-tune-compare {
-          margin-top: 16px; padding-top: 14px; border-top: 1px solid #1E1E3A;
+          margin-top: 16px; padding-top: 14px; border-top: 1px solid #2E2E56;
           display: flex; flex-direction: column; gap: 12px;
         }
-        .vs-tune-ab { align-self: flex-start; border: 1px solid #1E1E3A; border-radius: 8px; }
+        .vs-tune-ab { align-self: flex-start; border: 1px solid #2E2E56; border-radius: 8px; }
         .vs-tune-mini { display: flex; align-items: center; gap: 12px; }
-        .vs-tune-bar { flex: 1; height: 5px; background: #1E1E3A; border-radius: 3px; overflow: hidden; }
-        .vs-tune-bar-fill { height: 100%; background: linear-gradient(135deg,#8B5CF6,#EC4899); border-radius: 3px; }
-        .vs-tune-side { font-size: 11px; color: #5A5A80; min-width: 80px; text-align: right; }
+        .vs-tune-bar { flex: 1; height: 5px; background: #2E2E56; border-radius: 3px; overflow: hidden; }
+        .vs-tune-bar-fill { height: 100%; background: linear-gradient(135deg,#9D5CFF,#F9459E); border-radius: 3px; }
+        .vs-tune-side { font-size: 11px; color: #8E8EB4; min-width: 80px; text-align: right; }
         .vs-tune-apply {
           align-self: flex-start; padding: 8px 16px; border-radius: 8px;
           border: 1px solid rgba(16,185,129,.4); background: rgba(16,185,129,.1);

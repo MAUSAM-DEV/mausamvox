@@ -34,9 +34,9 @@ const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
 
 const AVATAR_PALETTE = [
-  'linear-gradient(135deg,#8B5CF6,#EC4899)',
-  'linear-gradient(135deg,#EC4899,#06B6D4)',
-  'linear-gradient(135deg,#06B6D4,#8B5CF6)',
+  'linear-gradient(135deg,#9D5CFF,#F9459E)',
+  'linear-gradient(135deg,#F9459E,#0CC7E8)',
+  'linear-gradient(135deg,#0CC7E8,#9D5CFF)',
 ]
 
 // Every StemResult URL field that has a durable-path twin. Used on cache
@@ -296,7 +296,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     name: v.name,
     sub: 'Community voice · Library',
     icon: '🌐',
-    avatarBg: 'linear-gradient(135deg,#10B981,#06B6D4)',
+    avatarBg: 'linear-gradient(135deg,#10B981,#0CC7E8)',
     isLibrary: true,
   })
 
@@ -366,8 +366,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             sub: c.type === 'studio' ? 'Studio Clone' : 'Express Clone',
             icon: c.type === 'studio' ? '⭐' : '🎙️',
             avatarBg: c.type === 'studio'
-              ? 'linear-gradient(135deg,#8B5CF6,#EC4899)'
-              : 'linear-gradient(135deg,#06B6D4,#3B82F6)',
+              ? 'linear-gradient(135deg,#9D5CFF,#F9459E)'
+              : 'linear-gradient(135deg,#0CC7E8,#3B82F6)',
             modelUrl: c.model_url ?? undefined,
           }))
           // Keep every Library voice (deep-linked or list-loaded) in the list
@@ -1582,10 +1582,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           overflow-y: auto;
           padding: 24px;
           scrollbar-width: thin;
-          scrollbar-color: #2A2A4A transparent;
+          scrollbar-color: #3C3C6A transparent;
         }
         .vs-workspace::-webkit-scrollbar { width: 4px; }
-        .vs-workspace::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vs-workspace::-webkit-scrollbar-thumb { background: #3C3C6A; border-radius: 2px; }
         .vs-guided-banner {
           display: flex;
           align-items: flex-start;
@@ -1593,8 +1593,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           padding: 14px 16px;
           margin-bottom: 16px;
           border-radius: 12px;
-          border: 1px solid rgba(139,92,246,.25);
-          background: linear-gradient(135deg, rgba(139,92,246,.08), rgba(236,72,153,.06));
+          border: 1px solid rgba(157,92,255,.25);
+          background: linear-gradient(135deg, rgba(157,92,255,.08), rgba(249,69,158,.06));
         }
         .vs-guided-banner-icon { font-size: 20px; line-height: 1.2; }
         .vs-guided-banner-title {
@@ -1606,12 +1606,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         }
         .vs-guided-banner-sub {
           font-size: 12px;
-          color: #8888AA;
+          color: #A8A8CC;
           line-height: 1.5;
         }
         .vs-action-bar {
           flex-shrink: 0;
-          border-top: 1px solid #1E1E3A;
+          border-top: 1px solid #2E2E56;
           padding: 12px 20px;
           display: flex;
           align-items: center;
@@ -1621,7 +1621,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         }
         .vs-credit-hint {
           font-size: 12px;
-          color: #5A5A80;
+          color: #8E8EB4;
           flex-shrink: 0;
         }
         .vs-action-btns {
@@ -1632,7 +1632,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         .vs-btn-ghost {
           padding: 9px 18px;
           border-radius: 8px;
-          border: 1px solid #2A2A4A;
+          border: 1px solid #3C3C6A;
           background: transparent;
           color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
@@ -1642,13 +1642,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           transition: all 0.2s;
           white-space: nowrap;
         }
-        .vs-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vs-btn-ghost:hover { border-color: #9D5CFF; color: #9D5CFF; }
         .vs-btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
         .vs-btn-solid {
           padding: 9px 18px;
           border-radius: 8px;
           border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px;
@@ -1658,7 +1658,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           white-space: nowrap;
         }
         .vs-btn-solid:hover {
-          box-shadow: 0 8px 24px rgba(139,92,246,.4);
+          box-shadow: 0 8px 24px rgba(157,92,255,.4);
           transform: translateY(-1px);
         }
         .vs-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }

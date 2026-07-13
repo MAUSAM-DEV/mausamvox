@@ -25,7 +25,7 @@ export function Footer() {
     >
       <LogoFull size={30} />
 
-      <p style={{ fontSize: '12px', color: '#606088' }}>
+      <p style={{ fontSize: '12px', color: '#9494BC' }}>
         © 2026 MausamVox. Any Voice. Any Language. Any Song.
       </p>
 
@@ -36,12 +36,12 @@ export function Footer() {
             href={link.href}
             style={{
               fontSize: '12px',
-              color: '#606088',
+              color: '#9494BC',
               textDecoration: 'none',
               transition: 'color 0.2s',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = '#F0F0FF' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#606088' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#9494BC' }}
           >
             {link.label}
           </a>

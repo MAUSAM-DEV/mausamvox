@@ -34,11 +34,11 @@ export function OBTopbar({ screen, onSkip }: OBTopbarProps) {
           font-size: 18px; font-weight: 700; letter-spacing: -.2px; color: #F0F0FF;
         }
         .obt-logo-txt em {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           font-style: normal;
         }
-        .obt-skip { font-size: 12px; color: #5A5A80; cursor: pointer; transition: color .2s; }
+        .obt-skip { font-size: 12px; color: #8E8EB4; cursor: pointer; transition: color .2s; }
         .obt-skip:hover { color: #F0F0FF; }
         @media (max-width: 760px) { .obt-strip { padding: 16px 0; } }
       `}</style>

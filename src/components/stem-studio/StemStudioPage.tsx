@@ -354,7 +354,7 @@ export function StemStudioPage() {
 
                 <p className="ss-note">
                   Download links stay fresh while this page is open. Want the vocals swapped
-                  to an AI voice? Head to <a href="/voice-swap" style={{ color: '#8B5CF6' }}>Voice Swap</a>.
+                  to an AI voice? Head to <a href="/voice-swap" style={{ color: '#9D5CFF' }}>Voice Swap</a>.
                 </p>
               </div>
             )}
@@ -396,7 +396,7 @@ export function StemStudioPage() {
           justify-content: space-between;
           gap: 14px;
           padding: 18px 28px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           flex-shrink: 0;
         }
         .ss-h1 {
@@ -404,11 +404,11 @@ export function StemStudioPage() {
           font-size: 20px; font-weight: 700; letter-spacing: -0.4px;
           color: #F0F0FF; margin: 0 0 3px;
         }
-        .ss-sub { font-size: 12px; color: #5A5A80; margin: 0; }
+        .ss-sub { font-size: 12px; color: #8E8EB4; margin: 0; }
         .ss-cost-chip {
           flex-shrink: 0;
           font-size: 11px; font-weight: 600; color: #C4C4E0;
-          background: #121225; border: 1px solid #1E1E3A;
+          background: #121225; border: 1px solid #2E2E56;
           padding: 7px 14px; border-radius: 99px;
           white-space: nowrap;
         }
@@ -420,14 +420,14 @@ export function StemStudioPage() {
           width: 100%;
           margin: 0 auto;
           scrollbar-width: thin;
-          scrollbar-color: #2A2A4A transparent;
+          scrollbar-color: #3C3C6A transparent;
         }
         .ss-workspace::-webkit-scrollbar { width: 4px; }
-        .ss-workspace::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .ss-workspace::-webkit-scrollbar-thumb { background: #3C3C6A; border-radius: 2px; }
 
         /* dropzone */
         .ss-dropzone {
-          border: 2px dashed #2A2A4A;
+          border: 2px dashed #3C3C6A;
           border-radius: 16px;
           background: #09091A;
           padding: 56px 24px;
@@ -436,17 +436,17 @@ export function StemStudioPage() {
           transition: all 0.25s;
         }
         .ss-dropzone:hover, .ss-dropzone--over {
-          border-color: rgba(139,92,246,.55);
-          background: rgba(139,92,246,.04);
+          border-color: rgba(157,92,255,.55);
+          background: rgba(157,92,255,.04);
         }
         .ss-dz-ico { font-size: 34px; margin-bottom: 14px; }
         .ss-dz-title {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 17px; font-weight: 700; color: #F0F0FF; margin-bottom: 4px;
         }
-        .ss-dz-hint { font-size: 13px; color: #7878A0; margin-bottom: 14px; }
-        .ss-dz-formats { font-size: 11px; color: #5A5A80; }
-        .ss-note { font-size: 12px; color: #5A5A80; margin: 16px 2px 0; line-height: 1.6; }
+        .ss-dz-hint { font-size: 13px; color: #A0A0C8; margin-bottom: 14px; }
+        .ss-dz-formats { font-size: 11px; color: #8E8EB4; }
+        .ss-note { font-size: 12px; color: #8E8EB4; margin: 16px 2px 0; line-height: 1.6; }
         .ss-error {
           font-size: 13px; color: #F87171;
           background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.2);
@@ -458,8 +458,8 @@ export function StemStudioPage() {
         .ss-spinner {
           width: 44px; height: 44px; margin: 0 auto 20px;
           border-radius: 50%;
-          border: 3px solid #1E1E3A;
-          border-top-color: #8B5CF6;
+          border: 3px solid #2E2E56;
+          border-top-color: #9D5CFF;
           animation: ssSpin 0.9s linear infinite;
         }
         @keyframes ssSpin { to { transform: rotate(360deg); } }
@@ -467,7 +467,7 @@ export function StemStudioPage() {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 16px; font-weight: 700; color: #F0F0FF; margin-bottom: 6px;
         }
-        .ss-prog-sub { font-size: 12px; color: #5A5A80; }
+        .ss-prog-sub { font-size: 12px; color: #8E8EB4; }
 
         /* result */
         .ss-result-head {
@@ -478,17 +478,17 @@ export function StemStudioPage() {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 16px; font-weight: 700; color: #F0F0FF; margin-bottom: 2px;
         }
-        .ss-result-file { font-size: 12px; color: #5A5A80; word-break: break-all; }
+        .ss-result-file { font-size: 12px; color: #8E8EB4; word-break: break-all; }
         .ss-btn-ghost {
           flex-shrink: 0;
           padding: 8px 16px; border-radius: 8px;
-          border: 1px solid #2A2A4A; background: transparent;
+          border: 1px solid #3C3C6A; background: transparent;
           color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 12px; font-weight: 600; cursor: pointer;
           transition: all 0.2s; white-space: nowrap;
         }
-        .ss-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .ss-btn-ghost:hover { border-color: #9D5CFF; color: #9D5CFF; }
         .ss-stem-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -496,7 +496,7 @@ export function StemStudioPage() {
         }
         .ss-stem-card {
           background: #09091A;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           padding: 12px;
         }
@@ -506,18 +506,18 @@ export function StemStudioPage() {
         }
         .ss-stem-name { font-size: 13px; font-weight: 700; color: #F0F0FF; }
         .ss-dl-btn {
-          font-size: 11px; font-weight: 600; color: #8B5CF6;
+          font-size: 11px; font-weight: 600; color: #9D5CFF;
           text-decoration: none;
           padding: 5px 11px; border-radius: 7px;
-          border: 1px solid rgba(139,92,246,.25);
+          border: 1px solid rgba(157,92,255,.25);
           transition: all 0.18s; white-space: nowrap;
         }
-        .ss-dl-btn:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .ss-dl-btn:hover { background: rgba(157,92,255,.1); border-color: rgba(157,92,255,.5); }
         .ss-karaoke-cta {
           display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
           margin-top: 16px;
         }
-        .ss-karaoke-hint { font-size: 11px; color: #5A5A80; }
+        .ss-karaoke-hint { font-size: 11px; color: #8E8EB4; }
 
         @media (max-width: 900px) {
           .ss-shell {

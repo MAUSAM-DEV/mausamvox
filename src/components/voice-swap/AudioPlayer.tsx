@@ -30,9 +30,9 @@ function WaveCanvas({ playing }: { playing: boolean }) {
     window.addEventListener('resize', resize)
 
     const layers = [
-      { a: 0.30, f: 0.013, s: 0.032, c: 'rgba(139,92,246,.9)', lw: 1.8 },
-      { a: 0.16, f: 0.024, s: 0.058, c: 'rgba(236,72,153,.5)', lw: 1.3 },
-      { a: 0.09, f: 0.038, s: 0.085, c: 'rgba(6,182,212,.3)',  lw: 1.0 },
+      { a: 0.30, f: 0.013, s: 0.032, c: 'rgba(157,92,255,.9)', lw: 1.8 },
+      { a: 0.16, f: 0.024, s: 0.058, c: 'rgba(249,69,158,.5)', lw: 1.3 },
+      { a: 0.09, f: 0.038, s: 0.085, c: 'rgba(12,199,232,.3)',  lw: 1.0 },
     ]
 
     function frame() {
@@ -212,7 +212,7 @@ export function AudioPlayer({ src, label, autoPlay = false, onTimeUpdate, onPlay
 const AP_CSS = `
   .ap-shell {
     background: #0E0E20;
-    border: 1px solid #1E1E3A;
+    border: 1px solid #2E2E56;
     border-radius: 12px;
     overflow: hidden;
   }
@@ -224,7 +224,7 @@ const AP_CSS = `
   }
   .ap-empty-hint {
     font-size: 11px;
-    color: #3A3A60;
+    color: #4A4A7A;
   }
   .ap-label-row {
     display: flex;
@@ -235,7 +235,7 @@ const AP_CSS = `
   .ap-label-dot {
     width: 6px; height: 6px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #8B5CF6, #EC4899);
+    background: linear-gradient(135deg, #9D5CFF, #F9459E);
     flex-shrink: 0;
   }
   .ap-label-txt {
@@ -243,7 +243,7 @@ const AP_CSS = `
     font-weight: 700;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #7878A0;
+    color: #A0A0C8;
   }
   .ap-error {
     font-size: 11px;
@@ -278,11 +278,11 @@ const AP_CSS = `
     align-items: center;
     justify-content: space-between;
     padding: 8px 14px;
-    border-top: 1px solid #1E1E3A;
+    border-top: 1px solid #2E2E56;
   }
   .ap-time {
     font-size: 11px;
-    color: #5A5A80;
+    color: #8E8EB4;
     font-variant-numeric: tabular-nums;
     min-width: 34px;
   }
@@ -290,7 +290,7 @@ const AP_CSS = `
     width: 32px; height: 32px;
     border-radius: 50%;
     border: none;
-    background: linear-gradient(135deg, #8B5CF6, #EC4899);
+    background: linear-gradient(135deg, #9D5CFF, #F9459E);
     color: #fff;
     font-size: 12px;
     cursor: pointer;
@@ -298,12 +298,12 @@ const AP_CSS = `
     align-items: center;
     justify-content: center;
     transition: transform 0.2s, box-shadow 0.2s;
-    box-shadow: 0 4px 12px rgba(139,92,246,.4);
+    box-shadow: 0 4px 12px rgba(157,92,255,.4);
     flex-shrink: 0;
   }
   .ap-play-btn:hover:not(:disabled) {
     transform: scale(1.1);
-    box-shadow: 0 6px 18px rgba(139,92,246,.5);
+    box-shadow: 0 6px 18px rgba(157,92,255,.5);
   }
   .ap-play-btn:disabled {
     opacity: 0.4;

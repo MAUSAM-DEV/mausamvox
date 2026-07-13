@@ -9,7 +9,7 @@ export function VToast({ visible, message }: { visible: boolean; message: string
         left: '50%',
         transform: `translateX(-50%) translateY(${visible ? '0' : '10px'})`,
         background: '#16162C',
-        border: '1px solid #272745',
+        border: '1px solid #383866',
         borderRadius: '10px',
         padding: '10px 18px',
         display: 'flex',

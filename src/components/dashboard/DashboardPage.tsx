@@ -13,7 +13,7 @@ const TOOLS = [
     desc: 'Cover any song in a new voice in 3 guided steps — free community voices, no training needed.',
     href: '/ai-cover',
     live: true,
-    gradient: 'linear-gradient(135deg,#EC4899,#F59E0B)',
+    gradient: 'linear-gradient(135deg,#F9459E,#F59E0B)',
   },
   {
     emoji: '🔄',
@@ -21,7 +21,7 @@ const TOOLS = [
     desc: 'Replace any song\'s vocals with your cloned AI voice in minutes.',
     href: '/voice-swap',
     live: true,
-    gradient: 'linear-gradient(135deg,#8B5CF6,#EC4899)',
+    gradient: 'linear-gradient(135deg,#9D5CFF,#F9459E)',
   },
   {
     emoji: '🧬',
@@ -29,7 +29,7 @@ const TOOLS = [
     desc: 'Record and train a photorealistic AI clone of your own voice.',
     href: '/voice-lab',
     live: true,
-    gradient: 'linear-gradient(135deg,#EC4899,#06B6D4)',
+    gradient: 'linear-gradient(135deg,#F9459E,#0CC7E8)',
   },
   {
     emoji: '✂️',
@@ -37,7 +37,7 @@ const TOOLS = [
     desc: 'Separate any track into vocals, bass, drums and more with the StemSplit Engine.',
     href: '/stem-studio',
     live: true,
-    gradient: 'linear-gradient(135deg,#06B6D4,#8B5CF6)',
+    gradient: 'linear-gradient(135deg,#0CC7E8,#9D5CFF)',
   },
   {
     emoji: '🎼',
@@ -45,7 +45,7 @@ const TOOLS = [
     desc: 'Turn a solo vocal into stacked harmonies of your own voice.',
     href: '/choir',
     live: true,
-    gradient: 'linear-gradient(135deg,#8B5CF6,#06B6D4)',
+    gradient: 'linear-gradient(135deg,#9D5CFF,#0CC7E8)',
   },
   {
     emoji: '🎷',
@@ -53,7 +53,7 @@ const TOOLS = [
     desc: 'Hum a melody and hear it played on a real instrument.',
     href: '/instruments',
     live: true,
-    gradient: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
+    gradient: 'linear-gradient(135deg,#F9459E,#9D5CFF)',
   },
   {
     emoji: '🎵',
@@ -61,7 +61,7 @@ const TOOLS = [
     desc: 'Generate full AI songs from your lyrics and a style prompt.',
     href: '/song-studio',
     live: true,
-    gradient: 'linear-gradient(135deg,#06B6D4,#EC4899)',
+    gradient: 'linear-gradient(135deg,#0CC7E8,#F9459E)',
   },
   {
     emoji: '🌐',
@@ -69,7 +69,7 @@ const TOOLS = [
     desc: 'Browse community-shared voices and use them in your swaps — free.',
     href: '/library',
     live: true,
-    gradient: 'linear-gradient(135deg,#10B981,#06B6D4)',
+    gradient: 'linear-gradient(135deg,#10B981,#0CC7E8)',
   },
 ]
 
@@ -337,11 +337,11 @@ export function DashboardPage() {
           </div>
           <div className="db-recent">
             {swapsLoading ? (
-              <div style={{ padding: '20px 0', color: '#5A5A80', fontSize: '13px' }}>Loading…</div>
+              <div style={{ padding: '20px 0', color: '#8E8EB4', fontSize: '13px' }}>Loading…</div>
             ) : recentSwaps.length === 0 ? (
-              <div style={{ padding: '20px 0', color: '#5A5A80', fontSize: '13px' }}>
+              <div style={{ padding: '20px 0', color: '#8E8EB4', fontSize: '13px' }}>
                 No swaps yet —{' '}
-                <Link href="/voice-swap" style={{ color: '#8B5CF6' }}>start your first</Link>
+                <Link href="/voice-swap" style={{ color: '#9D5CFF' }}>start your first</Link>
               </div>
             ) : (
               recentSwaps.map((item) => (
@@ -379,30 +379,30 @@ export function DashboardPage() {
           padding: 0 40px;
           background: rgba(5,5,15,.85);
           backdrop-filter: blur(24px);
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
         }
         .db-topnav { display: flex; gap: 2px; flex: 1; }
         .db-tnav {
           padding: 6px 14px; border-radius: 7px;
-          font-size: 13px; font-weight: 500; color: #7878A0;
+          font-size: 13px; font-weight: 500; color: #A0A0C8;
           text-decoration: none; transition: all 0.2s;
         }
         .db-tnav:hover { color: #F0F0FF; background: rgba(255,255,255,.04); }
-        .db-tnav--active { color: #F0F0FF; background: rgba(139,92,246,.12); }
+        .db-tnav--active { color: #F0F0FF; background: rgba(157,92,255,.12); }
         .db-topbar-end { margin-left: auto; position: relative; flex-shrink: 0; }
         .db-avatar {
           width: 34px; height: 34px; border-radius: 50%;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           display: flex; align-items: center; justify-content: center;
           font-size: 13px; font-weight: 700; color: #fff;
           cursor: pointer; transition: transform 0.18s, box-shadow 0.18s;
           user-select: none;
         }
-        .db-avatar:hover { transform: scale(1.07); box-shadow: 0 0 0 3px rgba(139,92,246,.3); }
+        .db-avatar:hover { transform: scale(1.07); box-shadow: 0 0 0 3px rgba(157,92,255,.3); }
         .db-drop {
           position: absolute; top: calc(100% + 10px); right: 0;
           min-width: 210px;
-          background: #0E0E20; border: 1px solid #2A2A4A;
+          background: #0E0E20; border: 1px solid #3C3C6A;
           border-radius: 12px; padding: 6px;
           box-shadow: 0 20px 60px rgba(0,0,0,.7);
           animation: dbFade 0.15s ease;
@@ -413,8 +413,8 @@ export function DashboardPage() {
         }
         .db-drop-user { padding: 10px 10px 8px; }
         .db-drop-name { font-size: 13px; font-weight: 600; color: #F0F0FF; }
-        .db-drop-email { font-size: 11px; color: #5A5A80; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .db-drop-sep { height: 1px; background: #1E1E3A; margin: 4px 0; }
+        .db-drop-email { font-size: 11px; color: #8E8EB4; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-drop-sep { height: 1px; background: #2E2E56; margin: 4px 0; }
         .db-drop-item {
           display: block; width: 100%;
           padding: 8px 10px; border-radius: 7px;
@@ -423,7 +423,7 @@ export function DashboardPage() {
           border: none; background: none; text-align: left;
           transition: all 0.15s;
         }
-        .db-drop-item:hover { background: rgba(139,92,246,.1); color: #F0F0FF; }
+        .db-drop-item:hover { background: rgba(157,92,255,.1); color: #F0F0FF; }
         .db-drop-out { color: #F87171 !important; }
         .db-drop-out:hover { background: rgba(239,68,68,.08) !important; }
 
@@ -437,14 +437,14 @@ export function DashboardPage() {
         .db-welcome { margin-bottom: 40px; }
         .db-welcome-eye {
           font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
-          text-transform: uppercase; color: #5A5A80; margin: 0 0 10px;
+          text-transform: uppercase; color: #8E8EB4; margin: 0 0 10px;
         }
         .db-welcome-h1 {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 38px; font-weight: 700; letter-spacing: -1px;
           color: #F0F0FF; margin: 0 0 10px; line-height: 1.1;
         }
-        .db-welcome-sub { font-size: 15px; color: #5A5A80; margin: 0; }
+        .db-welcome-sub { font-size: 15px; color: #8E8EB4; margin: 0; }
 
         /* stats */
         .db-stats {
@@ -454,14 +454,14 @@ export function DashboardPage() {
           flex: 1; min-width: 140px;
           display: flex; align-items: center; gap: 12px;
           padding: 16px 18px; border-radius: 12px;
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
         }
         .db-stat-ico { font-size: 20px; }
         .db-stat-val {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 20px; font-weight: 700; color: #F0F0FF; line-height: 1;
         }
-        .db-stat-lbl { font-size: 11px; color: #5A5A80; margin-top: 3px; }
+        .db-stat-lbl { font-size: 11px; color: #8E8EB4; margin-top: 3px; }
 
         /* sections */
         .db-section { margin-bottom: 48px; }
@@ -474,7 +474,7 @@ export function DashboardPage() {
           font-size: 17px; font-weight: 700; color: #F0F0FF; margin: 0;
         }
         .db-sec-more {
-          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          font-size: 12px; font-weight: 600; color: #9D5CFF;
           text-decoration: none; transition: color 0.2s;
         }
         .db-sec-more:hover { color: #C084FC; }
@@ -488,14 +488,14 @@ export function DashboardPage() {
         .db-card {
           display: flex; flex-direction: column; gap: 10px;
           padding: 18px; border-radius: 14px;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           background: #09091A;
           text-decoration: none; position: relative;
           transition: all 0.22s;
         }
         .db-card--live:hover {
-          border-color: rgba(139,92,246,.4);
-          background: rgba(139,92,246,.04);
+          border-color: rgba(157,92,255,.4);
+          background: rgba(157,92,255,.04);
           transform: translateY(-2px);
           box-shadow: 0 14px 40px rgba(0,0,0,.35);
         }
@@ -514,15 +514,15 @@ export function DashboardPage() {
           text-transform: uppercase;
           padding: 3px 8px; border-radius: 99px; margin-top: 2px;
         }
-        .db-badge--live { background: rgba(139,92,246,.15); color: #8B5CF6; }
-        .db-badge--soon { background: rgba(255,255,255,.05); color: #5A5A80; }
+        .db-badge--live { background: rgba(157,92,255,.15); color: #9D5CFF; }
+        .db-badge--soon { background: rgba(255,255,255,.05); color: #8E8EB4; }
         .db-card-name {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 14px; font-weight: 700; color: #F0F0FF;
         }
-        .db-card-desc { font-size: 12px; color: #5A5A80; line-height: 1.55; flex: 1; }
+        .db-card-desc { font-size: 12px; color: #8E8EB4; line-height: 1.55; flex: 1; }
         .db-card-arrow {
-          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          font-size: 12px; font-weight: 600; color: #9D5CFF;
           opacity: 0; transition: opacity 0.2s, transform 0.2s;
           margin-top: 4px;
         }
@@ -533,23 +533,23 @@ export function DashboardPage() {
         .db-row {
           display: flex; align-items: center; gap: 12px;
           padding: 12px 14px; border-radius: 10px;
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           transition: border-color 0.2s;
         }
-        .db-row:hover { border-color: rgba(139,92,246,.25); }
+        .db-row:hover { border-color: rgba(157,92,255,.25); }
         .db-row-ico { font-size: 18px; flex-shrink: 0; }
         .db-row-info { flex: 1; min-width: 0; }
         .db-row-name { font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .db-row-meta { font-size: 11px; color: #5A5A80; }
+        .db-row-meta { font-size: 11px; color: #8E8EB4; }
         .db-row-open {
-          font-size: 12px; font-weight: 600; color: #8B5CF6;
+          font-size: 12px; font-weight: 600; color: #9D5CFF;
           text-decoration: none; flex-shrink: 0;
-          padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(139,92,246,.25);
+          padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(157,92,255,.25);
           transition: all 0.18s;
         }
-        .db-row-open:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .db-row-open:hover { background: rgba(157,92,255,.1); border-color: rgba(157,92,255,.5); }
         .db-row-del {
-          font-size: 14px; line-height: 1; font-weight: 400; color: #5A5A80;
+          font-size: 14px; line-height: 1; font-weight: 400; color: #8E8EB4;
           background: none; border: none; cursor: pointer; flex-shrink: 0;
           padding: 5px 7px; border-radius: 6px; transition: color 0.18s, background 0.18s;
         }

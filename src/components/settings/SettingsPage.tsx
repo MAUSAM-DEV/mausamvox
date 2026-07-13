@@ -288,11 +288,11 @@ export function SettingsPage() {
         }
         .set-head {
           padding: 18px 40px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           display: flex; align-items: center; justify-content: space-between;
         }
         .set-back {
-          font-size: 13px; font-weight: 600; color: #7878A0;
+          font-size: 13px; font-weight: 600; color: #A0A0C8;
           text-decoration: none; transition: color 0.2s;
         }
         .set-back:hover { color: #F0F0FF; }
@@ -305,10 +305,10 @@ export function SettingsPage() {
           font-size: 24px; font-weight: 700; letter-spacing: -0.5px;
           color: #F0F0FF; margin: 0 0 6px;
         }
-        .set-sub { font-size: 13px; color: #7878A0; line-height: 1.6; margin: 0 0 26px; }
-        .set-note { text-align: center; padding: 60px 0; font-size: 13px; color: #5A5A80; }
+        .set-sub { font-size: 13px; color: #A0A0C8; line-height: 1.6; margin: 0 0 26px; }
+        .set-note { text-align: center; padding: 60px 0; font-size: 13px; color: #8E8EB4; }
         .set-card {
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           border-radius: 16px; padding: 22px 24px; margin-bottom: 14px;
         }
         .set-card-title {
@@ -322,25 +322,25 @@ export function SettingsPage() {
         .set-row { display: flex; gap: 10px; }
         .set-input {
           flex: 1; min-width: 0;
-          background: #0D0D22; border: 1px solid #2A2A4A; border-radius: 9px;
+          background: #0D0D22; border: 1px solid #3C3C6A; border-radius: 9px;
           padding: 11px 14px; color: #F0F0FF; font-size: 13px;
           font-family: Inter, sans-serif; outline: none; transition: border-color 0.2s;
         }
-        .set-input:focus { border-color: #8B5CF6; }
-        .set-input::placeholder { color: #4A4A6A; }
+        .set-input:focus { border-color: #9D5CFF; }
+        .set-input::placeholder { color: #6E6E96; }
         .set-btn {
           padding: 11px 22px; border-radius: 9px; border: none; flex-shrink: 0;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
         .set-btn:hover:not(:disabled) {
-          box-shadow: 0 8px 24px rgba(139,92,246,.4);
+          box-shadow: 0 8px 24px rgba(157,92,255,.4);
           transform: translateY(-1px);
         }
         .set-btn:disabled { opacity: 0.5; cursor: default; }
-        .set-current { font-size: 13px; color: #7878A0; margin-bottom: 14px; }
+        .set-current { font-size: 13px; color: #A0A0C8; margin-bottom: 14px; }
         .set-current-val { color: #F0F0FF; font-weight: 600; }
         .set-ok {
           margin-top: 10px; font-size: 12px; color: #34D399; line-height: 1.6;
@@ -350,13 +350,13 @@ export function SettingsPage() {
         }
         .set-info-row {
           display: flex; justify-content: space-between; align-items: baseline;
-          font-size: 13px; color: #7878A0; padding: 8px 0;
+          font-size: 13px; color: #A0A0C8; padding: 8px 0;
           border-bottom: 1px solid #14142A;
         }
         .set-info-row:last-child { border-bottom: none; }
         .set-info-val { color: #F0F0FF; font-weight: 600; }
         .set-danger { border-color: rgba(248,113,113,.25); }
-        .set-danger-txt { flex: 1; font-size: 13px; color: #7878A0; }
+        .set-danger-txt { flex: 1; font-size: 13px; color: #A0A0C8; }
         .set-btn-danger {
           background: transparent; border: 1px solid rgba(248,113,113,.5);
           color: #F87171;
@@ -366,25 +366,25 @@ export function SettingsPage() {
           border-color: #F87171;
         }
         .set-danger-note {
-          margin-top: 14px; font-size: 12px; color: #5A5A80; line-height: 1.6;
+          margin-top: 14px; font-size: 12px; color: #8E8EB4; line-height: 1.6;
         }
         /* PasswordInput ships its own au-* class names, styled only inside the
            auth layout — replicate those rules here so it renders identically. */
         .au-input {
           width: 100%; padding: 13px 16px; border-radius: 10px;
-          background: #080814; border: 1px solid #1E1E3A; color: #F0F0FF;
+          background: #080814; border: 1px solid #2E2E56; color: #F0F0FF;
           font-family: var(--font-inter), 'Inter', sans-serif;
           font-size: 14px; outline: none; transition: border-color .2s;
           box-sizing: border-box;
         }
-        .au-input:focus { border-color: rgba(139,92,246,.6); }
-        .au-input::placeholder { color: #3A3A60; }
+        .au-input:focus { border-color: rgba(157,92,255,.6); }
+        .au-input::placeholder { color: #4A4A7A; }
         .au-pw-wrap { position: relative; }
         .au-pw-wrap .au-input { padding-right: 44px; }
         .au-pw-toggle {
           position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
           background: none; border: none; padding: 0; cursor: pointer;
-          color: #3A3A60; transition: color .2s; display: flex; align-items: center;
+          color: #4A4A7A; transition: color .2s; display: flex; align-items: center;
           line-height: 0;
         }
         .au-pw-toggle:hover { color: #C4C4E0; }

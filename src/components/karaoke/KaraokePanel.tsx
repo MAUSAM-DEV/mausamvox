@@ -386,7 +386,7 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
       <style suppressHydrationWarning>{`
         .kp-card {
           background: #09091A;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           padding: 18px;
           margin-top: 16px;
@@ -398,24 +398,24 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
         }
         .kp-min {
           flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
-          border: 1px solid #2A2A4A; background: transparent; color: #7878A0;
+          border: 1px solid #3C3C6A; background: transparent; color: #A0A0C8;
           font-size: 12px; line-height: 1; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
           transition: all 0.2s;
         }
-        .kp-min:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .kp-min:hover:not(:disabled) { border-color: #9D5CFF; color: #9D5CFF; }
         .kp-min:disabled { opacity: 0.4; cursor: not-allowed; }
         /* Collapsed: hide the body (frees the vertical space) but keep it
            mounted so recording/lyrics/clock are untouched. */
         .kp-body--collapsed { display: none; }
         .kp-tag {
           font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-          color: #06B6D4; padding: 3px 10px; border-radius: 99px;
-          background: rgba(6,182,212,.1); border: 1px solid rgba(6,182,212,.25);
+          color: #0CC7E8; padding: 3px 10px; border-radius: 99px;
+          background: rgba(12,199,232,.1); border: 1px solid rgba(12,199,232,.25);
         }
-        .kp-sub { font-size: 12px; color: #7878A0; margin: 8px 0 4px; line-height: 1.6; }
-        .kp-hint { font-size: 11px; color: #5A5A80; margin: 0 0 14px; }
-        .kp-note { font-size: 12px; color: #5A5A80; padding: 14px 0; }
+        .kp-sub { font-size: 12px; color: #A0A0C8; margin: 8px 0 4px; line-height: 1.6; }
+        .kp-hint { font-size: 11px; color: #8E8EB4; margin: 0 0 14px; }
+        .kp-note { font-size: 12px; color: #8E8EB4; padding: 14px 0; }
         .kp-note--err { color: #F87171; }
         .kp-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
         .kp-btn-rec {
@@ -439,7 +439,7 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
           font-size: 14px; font-weight: 700; color: #F0F0FF;
           font-variant-numeric: tabular-nums;
         }
-        .kp-rec-lbl { font-size: 11px; color: #7878A0; flex: 1; }
+        .kp-rec-lbl { font-size: 11px; color: #A0A0C8; flex: 1; }
         .kp-btn-stop {
           padding: 8px 16px; border-radius: 8px; border: none;
           background: #EF4444; color: #fff;
@@ -448,21 +448,21 @@ export function KaraokePanel({ backingUrls, trackName, backingLabel, lyricsSourc
         }
         .kp-btn-solid {
           padding: 9px 18px; border-radius: 8px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4); color: #fff;
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8); color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
-        .kp-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); }
+        .kp-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); }
         .kp-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
         .kp-btn-ghost {
           padding: 9px 18px; border-radius: 8px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .kp-btn-ghost:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .kp-btn-ghost:hover:not(:disabled) { border-color: #9D5CFF; color: #9D5CFF; }
         .kp-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
-        .kp-fine { font-size: 11px; color: #5A5A80; line-height: 1.6; margin: 12px 0 0; }
+        .kp-fine { font-size: 11px; color: #8E8EB4; line-height: 1.6; margin: 12px 0 0; }
       `}</style>
     </div>
   )

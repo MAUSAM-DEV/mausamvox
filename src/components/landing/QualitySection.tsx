@@ -63,7 +63,7 @@ export function QualitySection() {
           >
             You hear it<br />before you download.
           </h2>
-          <p style={{ fontSize: '16px', color: '#606088', maxWidth: '420px', lineHeight: 1.75 }}>
+          <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '420px', lineHeight: 1.75 }}>
             Preview your swap and A/B it against the original before you commit.
             Not happy? Fine-tune the voice settings, polish the vocal, and regenerate —
             every take is your call.
@@ -104,7 +104,7 @@ export function QualitySection() {
           <div
             style={{
               background: '#13132A',
-              border: '1px solid #1E1E3A',
+              border: '1px solid #2E2E56',
               borderRadius: '20px',
               padding: '32px',
               position: 'relative',
@@ -119,11 +119,11 @@ export function QualitySection() {
                 width: '200px',
                 height: '200px',
                 borderRadius: '50%',
-                background: 'radial-gradient(rgba(139,92,246,.15),transparent 70%)',
+                background: 'radial-gradient(rgba(157,92,255,.15),transparent 70%)',
                 pointerEvents: 'none',
               }}
             />
-            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#606088', marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#9494BC', marginBottom: '12px' }}>
               Fine-tune &amp; Polish
             </div>
             <div
@@ -141,16 +141,16 @@ export function QualitySection() {
 
             {controlBars.map((bar, i) => (
               <div key={bar.id} style={{ marginTop: i === 0 ? '20px' : '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#606088', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9494BC', marginBottom: '6px' }}>
                   <span>{bar.label}</span>
                   <span>{bar.pct}%</span>
                 </div>
-                <div style={{ height: '6px', background: '#1E1E3A', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '6px', background: '#2E2E56', borderRadius: '3px', overflow: 'hidden' }}>
                   <div
                     style={{
                       height: '100%',
                       borderRadius: '3px',
-                      background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                      background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
                       width: barsAnimated ? `${bar.pct}%` : '0%',
                       transition: `width 1.5s ease ${i * 200}ms`,
                     }}
@@ -183,21 +183,21 @@ export function QualitySection() {
                 marginTop: '16px',
                 padding: '12px 20px',
                 background: '#0F0F22',
-                border: '1px solid #1E1E3A',
+                border: '1px solid #2E2E56',
                 borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
                 fontSize: '13px',
-                color: '#606088',
+                color: '#9494BC',
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M4 4v5h5M20 20v-5h-5" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
-                <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" />
+                <path d="M4 4v5h5M20 20v-5h-5" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
+                <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
               </svg>
               Not happy with a take?{' '}
-              <strong style={{ color: '#8B5CF6', fontWeight: 600 }}>Adjust and regenerate</strong> anytime
+              <strong style={{ color: '#9D5CFF', fontWeight: 600 }}>Adjust and regenerate</strong> anytime
             </div>
           </div>
         </div>

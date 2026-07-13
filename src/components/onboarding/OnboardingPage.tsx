@@ -107,17 +107,17 @@ export function OnboardingPage() {
         }
         .ob-orb1 {
           width: 560px; height: 560px; top: -180px; left: -120px;
-          background: radial-gradient(circle, rgba(139,92,246,.16), transparent 70%);
+          background: radial-gradient(circle, rgba(157,92,255,.16), transparent 70%);
           animation: obDrift1 11s ease-in-out infinite;
         }
         .ob-orb2 {
           width: 480px; height: 480px; bottom: -160px; right: -100px;
-          background: radial-gradient(circle, rgba(236,72,153,.12), transparent 70%);
+          background: radial-gradient(circle, rgba(249,69,158,.12), transparent 70%);
           animation: obDrift2 13s ease-in-out infinite;
         }
         .ob-orb3 {
           width: 300px; height: 300px; top: 45%; left: 55%;
-          background: radial-gradient(circle, rgba(6,182,212,.08), transparent 70%);
+          background: radial-gradient(circle, rgba(12,199,232,.08), transparent 70%);
           animation: obDrift1 9s 2s ease-in-out infinite;
         }
         @keyframes obDrift1 {
@@ -148,9 +148,9 @@ export function OnboardingPage() {
 
         /* ── progress dots ─────────────────────────────── */
         .ob-dots { display: flex; gap: 8px; align-items: center; padding-bottom: 26px; flex-shrink: 0; }
-        .ob-dot { width: 7px; height: 7px; border-radius: 99px; background: #272745; transition: all .4s; }
-        .ob-dot--on { width: 26px; background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4); }
-        .ob-dot--past { background: #8B5CF6; }
+        .ob-dot { width: 7px; height: 7px; border-radius: 99px; background: #383866; transition: all .4s; }
+        .ob-dot--on { width: 26px; background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8); }
+        .ob-dot--past { background: #9D5CFF; }
 
         /* ── screen wrap ───────────────────────────────── */
         .ob-screen-wrap {
@@ -160,8 +160,8 @@ export function OnboardingPage() {
         }
 
         /* ── footer ────────────────────────────────────── */
-        .ob-foot-note { font-size: 11px; color: #5A5A80; text-align: center; padding: 16px 0 22px; flex-shrink: 0; }
-        .ob-foot-note b { color: #7878A0; }
+        .ob-foot-note { font-size: 11px; color: #8E8EB4; text-align: center; padding: 16px 0 22px; flex-shrink: 0; }
+        .ob-foot-note b { color: #A0A0C8; }
 
         /* ── shared: screen animation ─────────────────── */
         .ob-screen { width: 100%; animation: obRise .45s cubic-bezier(.22,.8,.36,1); }
@@ -175,7 +175,7 @@ export function OnboardingPage() {
         .ob-eyebrow {
           display: inline-block; font-size: 11px; font-weight: 700;
           letter-spacing: 3px; text-transform: uppercase;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           margin-bottom: 16px;
         }
@@ -186,11 +186,11 @@ export function OnboardingPage() {
           margin-bottom: 12px;
         }
         .ob-gt {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .ob-sub {
-          font-size: 15px; color: #5A5A80; max-width: 480px; margin: 0 auto 36px;
+          font-size: 15px; color: #8E8EB4; max-width: 480px; margin: 0 auto 36px;
           font-family: var(--font-inter), 'Inter', sans-serif;
         }
 
@@ -198,19 +198,19 @@ export function OnboardingPage() {
         .ob-btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
         .ob-btn-big {
           padding: 15px 36px; border-radius: 10px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4); color: #fff;
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8); color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 15px; font-weight: 600; cursor: pointer; transition: all .28s; letter-spacing: .2px;
         }
-        .ob-btn-big:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(139,92,246,.45); }
+        .ob-btn-big:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(157,92,255,.45); }
         .ob-btn-big:disabled { opacity: .35; cursor: not-allowed; transform: none; box-shadow: none; }
         .ob-btn-quiet {
           padding: 14px 28px; border-radius: 10px;
-          border: 1px solid #272745; background: rgba(255,255,255,.02);
+          border: 1px solid #383866; background: rgba(255,255,255,.02);
           color: #C4C4E0; font-family: var(--font-inter), 'Inter', sans-serif;
           font-size: 14px; font-weight: 500; cursor: pointer; transition: all .25s;
         }
-        .ob-btn-quiet:hover { border-color: rgba(139,92,246,.4); color: #F0F0FF; }
+        .ob-btn-quiet:hover { border-color: rgba(157,92,255,.4); color: #F0F0FF; }
 
         /* ── mobile ───────────────────────────────────── */
         @media (max-width: 760px) {

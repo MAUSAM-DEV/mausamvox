@@ -81,13 +81,13 @@ export function Nav() {
                 style={{
                   fontSize: '13px',
                   fontWeight: 500,
-                  color: '#606088',
+                  color: '#9494BC',
                   textDecoration: 'none',
                   letterSpacing: '0.2px',
                   transition: 'color 0.2s',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = '#F0F0FF' }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = '#606088' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#9494BC' }}
               >
                 {link.label}
               </a>
@@ -106,7 +106,7 @@ export function Nav() {
                   padding: '8px 16px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                  background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
                   color: '#fff',
                   fontFamily: 'Inter, sans-serif',
                   fontSize: '13px',
@@ -120,7 +120,7 @@ export function Nav() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(139,92,246,.4)'
+                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(157,92,255,.4)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = ''
@@ -185,7 +185,7 @@ export function Nav() {
                 style={{
                   padding: '8px 18px',
                   borderRadius: '8px',
-                  border: '1px solid #2A2A4A',
+                  border: '1px solid #3C3C6A',
                   background: 'transparent',
                   color: '#C8C8E8',
                   fontFamily: 'Inter, sans-serif',
@@ -198,11 +198,11 @@ export function Nav() {
                   display: 'inline-block',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#8B5CF6'
+                  e.currentTarget.style.borderColor = '#9D5CFF'
                   e.currentTarget.style.color = '#F0F0FF'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#2A2A4A'
+                  e.currentTarget.style.borderColor = '#3C3C6A'
                   e.currentTarget.style.color = '#C8C8E8'
                 }}
               >
@@ -215,7 +215,7 @@ export function Nav() {
                   padding: '8px 16px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                  background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
                   color: '#fff',
                   fontFamily: 'Inter, sans-serif',
                   fontSize: '13px',
@@ -229,7 +229,7 @@ export function Nav() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(139,92,246,.4)'
+                  e.currentTarget.style.boxShadow = '0 6px 24px rgba(157,92,255,.4)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = ''
@@ -267,7 +267,7 @@ export function Nav() {
         /* avatar button */
         .nav-avatar {
           width: 34px; height: 34px; border-radius: 50%;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           color: #fff; font-size: 13px; font-weight: 700;
           border: none; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
@@ -276,14 +276,14 @@ export function Nav() {
         }
         .nav-avatar:hover {
           transform: scale(1.07);
-          box-shadow: 0 0 0 3px rgba(139,92,246,.3);
+          box-shadow: 0 0 0 3px rgba(157,92,255,.3);
         }
 
         /* dropdown */
         .nav-drop {
           position: absolute; top: calc(100% + 10px); right: 0;
           min-width: 210px;
-          background: #0E0E20; border: 1px solid #2A2A4A;
+          background: #0E0E20; border: 1px solid #3C3C6A;
           border-radius: 12px; padding: 6px;
           box-shadow: 0 20px 60px rgba(0,0,0,.7);
           animation: navDropIn 0.15s ease;
@@ -296,10 +296,10 @@ export function Nav() {
         .nav-drop-user { padding: 10px 10px 8px; }
         .nav-drop-name { font-size: 13px; font-weight: 600; color: #F0F0FF; }
         .nav-drop-email {
-          font-size: 11px; color: #5A5A80; margin-top: 2px;
+          font-size: 11px; color: #8E8EB4; margin-top: 2px;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .nav-drop-sep { height: 1px; background: #1E1E3A; margin: 4px 0; }
+        .nav-drop-sep { height: 1px; background: #2E2E56; margin: 4px 0; }
         .nav-drop-item {
           display: block; width: 100%;
           padding: 8px 10px; border-radius: 7px;
@@ -308,7 +308,7 @@ export function Nav() {
           border: none; background: none; text-align: left;
           transition: all 0.15s;
         }
-        .nav-drop-item:hover { background: rgba(139,92,246,.1); color: #F0F0FF; }
+        .nav-drop-item:hover { background: rgba(157,92,255,.1); color: #F0F0FF; }
         .nav-drop-out { color: #F87171 !important; }
         .nav-drop-out:hover { background: rgba(239,68,68,.08) !important; }
       `}</style>

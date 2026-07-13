@@ -68,7 +68,7 @@ export function WhyUs() {
       >
         Built differently.<br />From the ground up.
       </h2>
-      <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
+      <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
         We obsessed over the things other platforms got wrong — and made each one a core feature.
       </p>
 
@@ -93,7 +93,7 @@ function WhyCard({ num, title, desc }: { num: string; title: string; desc: strin
     <div
       style={{
         background: '#13132A',
-        border: '1px solid #1E1E3A',
+        border: '1px solid #2E2E56',
         borderRadius: '16px',
         padding: '36px 32px',
         display: 'flex',
@@ -103,11 +103,11 @@ function WhyCard({ num, title, desc }: { num: string; title: string; desc: strin
         cursor: 'default',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(139,92,246,.3)'
+        e.currentTarget.style.borderColor = 'rgba(157,92,255,.3)'
         e.currentTarget.style.transform = 'translateY(-3px)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#1E1E3A'
+        e.currentTarget.style.borderColor = '#2E2E56'
         e.currentTarget.style.transform = ''
       }}
     >
@@ -138,7 +138,7 @@ function WhyCard({ num, title, desc }: { num: string; title: string; desc: strin
         >
           {title}
         </h3>
-        <p style={{ fontSize: '13px', color: '#606088', lineHeight: 1.7 }}>{desc}</p>
+        <p style={{ fontSize: '13px', color: '#9494BC', lineHeight: 1.7 }}>{desc}</p>
       </div>
     </div>
   )

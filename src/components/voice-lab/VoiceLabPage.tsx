@@ -268,13 +268,13 @@ export function VoiceLabPage() {
             <div className="vl-action-bar">
               <div className="vl-ab-hint">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#8B5CF6" strokeWidth="1.5"/>
-                  <path d="M12 8v4m0 4h.01" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="10" stroke="#9D5CFF" strokeWidth="1.5"/>
+                  <path d="M12 8v4m0 4h.01" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
                 {cloneType === 'studio' ? (
-                  <span>Studio clone uses <b style={{ color: '#8B5CF6' }}>1 of 3</b> monthly slots on your Pro plan</span>
+                  <span>Studio clone uses <b style={{ color: '#9D5CFF' }}>1 of 3</b> monthly slots on your Pro plan</span>
                 ) : (
-                  <span>Express clone — <b style={{ color: '#8B5CF6' }}>same real training</b>, shorter recording, ready in ~15 minutes</span>
+                  <span>Express clone — <b style={{ color: '#9D5CFF' }}>same real training</b>, shorter recording, ready in ~15 minutes</span>
                 )}
               </div>
               {step === 2 && (
@@ -326,7 +326,7 @@ export function VoiceLabPage() {
           height: 100vh;
           overflow: hidden;
           min-width: 0;
-          border-right: 1px solid #1E1E3A;
+          border-right: 1px solid #2E2E56;
         }
         .vl-workspace {
           flex: 1;
@@ -336,13 +336,13 @@ export function VoiceLabPage() {
           flex-direction: column;
           gap: 16px;
           scrollbar-width: thin;
-          scrollbar-color: #2A2A4A transparent;
+          scrollbar-color: #3C3C6A transparent;
         }
         .vl-workspace::-webkit-scrollbar { width: 4px; }
-        .vl-workspace::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vl-workspace::-webkit-scrollbar-thumb { background: #3C3C6A; border-radius: 2px; }
         .vl-action-bar {
           flex-shrink: 0;
-          border-top: 1px solid #1E1E3A;
+          border-top: 1px solid #2E2E56;
           padding: 14px 24px;
           background: #09091A;
           display: flex;
@@ -354,17 +354,17 @@ export function VoiceLabPage() {
           align-items: center;
           gap: 7px;
           font-size: 11.5px;
-          color: #8888AA;
+          color: #A8A8CC;
           cursor: pointer;
           white-space: nowrap;
           flex-shrink: 0;
         }
-        .vl-denoise-toggle input { accent-color: #8B5CF6; cursor: pointer; }
-        .vl-denoise-toggle em { color: #5A5A80; font-style: normal; }
+        .vl-denoise-toggle input { accent-color: #9D5CFF; cursor: pointer; }
+        .vl-denoise-toggle em { color: #8E8EB4; font-style: normal; }
         .vl-denoise-toggle:hover { color: #C4C4E0; }
         .vl-ab-hint {
           font-size: 11px;
-          color: #5A5A80;
+          color: #8E8EB4;
           display: flex;
           align-items: center;
           gap: 5px;
@@ -379,7 +379,7 @@ export function VoiceLabPage() {
         .vl-btn-back {
           padding: 10px 20px;
           border-radius: 8px;
-          border: 1px solid #272745;
+          border: 1px solid #383866;
           background: transparent;
           color: #C4C4E0;
           font-size: 12px;
@@ -388,12 +388,12 @@ export function VoiceLabPage() {
           transition: all 0.2s;
           white-space: nowrap;
         }
-        .vl-btn-back:hover { border-color: #5A5A80; color: #F0F0FF; }
+        .vl-btn-back:hover { border-color: #8E8EB4; color: #F0F0FF; }
         .vl-btn-next {
           padding: 10px 24px;
           border-radius: 8px;
           border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px;
@@ -405,7 +405,7 @@ export function VoiceLabPage() {
           gap: 7px;
           white-space: nowrap;
         }
-        .vl-btn-next:hover { box-shadow: 0 8px 28px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .vl-btn-next:hover { box-shadow: 0 8px 28px rgba(157,92,255,.4); transform: translateY(-1px); }
 
         @media (max-width: 900px) {
           .vl-shell {

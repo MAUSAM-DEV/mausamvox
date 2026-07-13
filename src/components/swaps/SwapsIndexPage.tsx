@@ -125,13 +125,13 @@ export function SwapsIndexPage() {
         }
         .swl-head {
           padding: 18px 40px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
         .swl-back {
-          font-size: 13px; font-weight: 600; color: #7878A0;
+          font-size: 13px; font-weight: 600; color: #A0A0C8;
           text-decoration: none; transition: color 0.2s;
         }
         .swl-back:hover { color: #F0F0FF; }
@@ -151,17 +151,17 @@ export function SwapsIndexPage() {
           font-size: 24px; font-weight: 700; letter-spacing: -0.5px;
           color: #F0F0FF; margin: 0;
         }
-        .swl-count { font-size: 12px; color: #5A5A80; }
+        .swl-count { font-size: 12px; color: #8E8EB4; }
         .swl-sub {
-          font-size: 13px; color: #7878A0; line-height: 1.6;
+          font-size: 13px; color: #A0A0C8; line-height: 1.6;
           margin: 0 0 26px;
         }
         .swl-note {
           text-align: center; padding: 60px 0;
-          font-size: 13px; color: #5A5A80;
+          font-size: 13px; color: #8E8EB4;
         }
         .swl-empty {
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           border-radius: 16px; padding: 48px 32px; text-align: center;
         }
         .swl-empty-ico { font-size: 34px; margin-bottom: 14px; }
@@ -170,30 +170,30 @@ export function SwapsIndexPage() {
           font-size: 18px; font-weight: 700; color: #F0F0FF; margin-bottom: 8px;
         }
         .swl-empty-txt {
-          font-size: 13px; color: #7878A0; line-height: 1.7;
+          font-size: 13px; color: #A0A0C8; line-height: 1.7;
           max-width: 360px; margin: 0 auto 22px;
         }
         .swl-btn-solid {
           display: inline-block;
           padding: 11px 22px; border-radius: 9px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; text-decoration: none;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.25s;
         }
         .swl-btn-solid:hover {
-          box-shadow: 0 8px 24px rgba(139,92,246,.4);
+          box-shadow: 0 8px 24px rgba(157,92,255,.4);
           transform: translateY(-1px);
         }
         .swl-row {
           display: flex; align-items: center; gap: 14px;
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           border-radius: 12px; padding: 14px 18px; margin-bottom: 8px;
           text-decoration: none; transition: all 0.2s;
         }
         .swl-row:hover {
-          border-color: rgba(139,92,246,.35);
+          border-color: rgba(157,92,255,.35);
           transform: translateX(2px);
         }
         .swl-row-ico { font-size: 20px; flex-shrink: 0; }
@@ -202,9 +202,9 @@ export function SwapsIndexPage() {
           font-size: 14px; font-weight: 600; color: #F0F0FF;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .swl-row-meta { font-size: 12px; color: #5A5A80; }
+        .swl-row-meta { font-size: 12px; color: #8E8EB4; }
         .swl-row-open {
-          font-size: 12px; font-weight: 600; color: #8B5CF6; flex-shrink: 0;
+          font-size: 12px; font-weight: 600; color: #9D5CFF; flex-shrink: 0;
         }
         .swl-more-row {
           display: flex; justify-content: center; gap: 10px;
@@ -212,12 +212,12 @@ export function SwapsIndexPage() {
         }
         .swl-more-btn {
           padding: 10px 22px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.2s;
         }
-        .swl-more-btn:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .swl-more-btn:hover { border-color: #9D5CFF; color: #9D5CFF; }
         @media (max-width: 640px) {
           .swl-head { padding: 14px 20px; }
           .swl-main { padding-top: 28px; }

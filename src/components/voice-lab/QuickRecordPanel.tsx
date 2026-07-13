@@ -45,9 +45,9 @@ function LiveWaveCanvas({ analyser, active }: { analyser: AnalyserNode | null; a
       ctx.scale(dpr, dpr)
       ctx.clearRect(0, 0, W, H)
       const grd = ctx.createLinearGradient(0, 0, W, 0)
-      grd.addColorStop(0, '#8B5CF6')
-      grd.addColorStop(0.5, '#EC4899')
-      grd.addColorStop(1, '#06B6D4')
+      grd.addColorStop(0, '#9D5CFF')
+      grd.addColorStop(0.5, '#F9459E')
+      grd.addColorStop(1, '#0CC7E8')
       ctx.strokeStyle = grd
       ctx.lineWidth = 1.8
       ctx.beginPath()
@@ -67,7 +67,7 @@ function LiveWaveCanvas({ analyser, active }: { analyser: AnalyserNode | null; a
   return (
     <canvas
       ref={canvasRef}
-      style={{ display: 'block', width: '100%', height: 88, background: '#0E0E20', border: '1px solid #1E1E3A', borderRadius: 12 }}
+      style={{ display: 'block', width: '100%', height: 88, background: '#0E0E20', border: '1px solid #2E2E56', borderRadius: 12 }}
     />
   )
 }
@@ -212,11 +212,11 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
 
       <style suppressHydrationWarning>{`
         .qr-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-        .qr-status { font-size: 13px; color: #8B5CF6; padding: 16px 0; }
-        .qr-device { font-size: 11px; color: #5A5A80; }
+        .qr-status { font-size: 13px; color: #9D5CFF; padding: 16px 0; }
+        .qr-device { font-size: 11px; color: #8E8EB4; }
         .qr-timer { font-family: var(--font-grotesk), 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #C4C4E0; }
         .qr-timer--ok { color: #10B981; }
-        .qr-timer-min { font-size: 11px; font-weight: 400; color: #5A5A80; }
+        .qr-timer-min { font-size: 11px; font-weight: 400; color: #8E8EB4; }
         .qr-audio { width: 100%; max-width: 420px; }
         .qr-warn { font-size: 12px; color: #F59E0B; max-width: 420px; }
         .qr-error { font-size: 13px; color: #F87171; max-width: 420px; }
@@ -225,12 +225,12 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .qr-btn--main { background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4); color: #fff; }
-        .qr-btn--main:hover { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .qr-btn--main { background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8); color: #fff; }
+        .qr-btn--main:hover { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .qr-btn--stop { background: #EF4444; color: #fff; }
         .qr-btn--stop:hover { box-shadow: 0 8px 24px rgba(239,68,68,.4); }
-        .qr-btn--outline { background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0; }
-        .qr-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .qr-btn--outline { background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0; }
+        .qr-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
       `}</style>
     </div>
   )

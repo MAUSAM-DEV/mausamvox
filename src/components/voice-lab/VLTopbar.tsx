@@ -46,7 +46,7 @@ export function VLTopbar({ step, onGoStep }: VLTopbarProps) {
           padding: 0 24px;
           gap: 12px;
           background: #09091A;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
         }
         .vlt-title {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
@@ -56,15 +56,15 @@ export function VLTopbar({ step, onGoStep }: VLTopbarProps) {
           white-space: nowrap;
           flex-shrink: 0;
         }
-        .vlt-divider { width: 1px; height: 18px; background: #1E1E3A; flex-shrink: 0; }
-        .vlt-sub { font-size: 12px; color: #5A5A80; white-space: nowrap; flex-shrink: 0; }
+        .vlt-divider { width: 1px; height: 18px; background: #2E2E56; flex-shrink: 0; }
+        .vlt-sub { font-size: 12px; color: #8E8EB4; white-space: nowrap; flex-shrink: 0; }
         .vlt-steps {
           margin-left: auto;
           display: flex;
           align-items: center;
           flex-shrink: 0;
         }
-        .vlt-sep { width: 24px; height: 1px; background: #1E1E3A; flex-shrink: 0; }
+        .vlt-sep { width: 24px; height: 1px; background: #2E2E56; flex-shrink: 0; }
         .vlt-step {
           display: flex;
           align-items: center;
@@ -73,7 +73,7 @@ export function VLTopbar({ step, onGoStep }: VLTopbarProps) {
           border-radius: 6px;
           font-size: 12px;
           font-weight: 500;
-          color: #5A5A80;
+          color: #8E8EB4;
           transition: color 0.2s;
           position: relative;
         }
@@ -85,18 +85,18 @@ export function VLTopbar({ step, onGoStep }: VLTopbarProps) {
           left: 12px;
           right: 12px;
           height: 2px;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           border-radius: 1px;
           animation: vltUs 0.4s ease;
         }
         @keyframes vltUs { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-        .vlt-step--done { color: #8B5CF6; }
+        .vlt-step--done { color: #9D5CFF; }
         .vlt-step-n {
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: #1E1E3A;
-          border: 1px solid #272745;
+          background: #2E2E56;
+          border: 1px solid #383866;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -106,15 +106,15 @@ export function VLTopbar({ step, onGoStep }: VLTopbarProps) {
           transition: all 0.3s;
         }
         .vlt-step--active .vlt-step-n {
-          background: #8B5CF6;
-          border-color: #8B5CF6;
+          background: #9D5CFF;
+          border-color: #9D5CFF;
           color: #fff;
-          box-shadow: 0 0 10px rgba(139,92,246,.5);
+          box-shadow: 0 0 10px rgba(157,92,255,.5);
         }
         .vlt-step--done .vlt-step-n {
-          background: rgba(139,92,246,.12);
-          border-color: rgba(139,92,246,.3);
-          color: #8B5CF6;
+          background: rgba(157,92,255,.12);
+          border-color: rgba(157,92,255,.3);
+          color: #9D5CFF;
         }
 
         @media (max-width: 900px) {

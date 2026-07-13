@@ -110,14 +110,14 @@ const shcCss = `
   .shc-group { display: inline-flex; gap: 8px; }
   .shc-btn {
     padding: 11px 18px; border-radius: 9px;
-    border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+    border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
     font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
     font-size: 13px; font-weight: 600; cursor: pointer;
     transition: all 0.2s; white-space: nowrap;
   }
-  .shc-btn:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+  .shc-btn:hover:not(:disabled) { border-color: #9D5CFF; color: #9D5CFF; }
   .shc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  .shc-btn--live { border-color: rgba(139,92,246,.5); color: #A78BFA; }
+  .shc-btn--live { border-color: rgba(157,92,255,.5); color: #A78BFA; }
   .shc-btn--revoke { border-color: rgba(239,68,68,.3); color: #F87171; }
   .shc-btn--revoke:hover:not(:disabled) { border-color: rgba(239,68,68,.5); color: #F87171; background: rgba(239,68,68,.08); }
 `

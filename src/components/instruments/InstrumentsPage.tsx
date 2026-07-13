@@ -415,40 +415,40 @@ export function InstrumentsPage() {
           font-size: 24px; font-weight: 700; letter-spacing: -0.4px;
           color: #F0F0FF; margin: 0 0 6px;
         }
-        .in-sub { font-size: 13px; color: #7878A0; line-height: 1.6; margin: 0; }
+        .in-sub { font-size: 13px; color: #A0A0C8; line-height: 1.6; margin: 0; }
         .in-card {
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           border-radius: 16px; padding: 24px; margin-bottom: 18px;
         }
         .in-card--error { border-color: rgba(239,68,68,.3); }
         .in-err-title { font-size: 14px; font-weight: 700; color: #F87171; margin-bottom: 6px; }
-        .in-err-msg { font-size: 12px; color: #7878A0; line-height: 1.6; word-break: break-word; }
+        .in-err-msg { font-size: 12px; color: #A0A0C8; line-height: 1.6; word-break: break-word; }
         .in-lbl {
           display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-          font-size: 12px; font-weight: 600; color: #8888AA; margin: 18px 0 8px;
+          font-size: 12px; font-weight: 600; color: #A8A8CC; margin: 18px 0 8px;
         }
         .in-lbl:first-child { margin-top: 0; }
-        .in-opt { font-weight: 400; color: #5A5A80; }
-        .in-hint { font-size: 10px; font-weight: 400; color: #5A5A80; }
+        .in-opt { font-weight: 400; color: #8E8EB4; }
+        .in-hint { font-size: 10px; font-weight: 400; color: #8E8EB4; }
         .in-source-row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
         .in-drop {
           flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px;
           align-items: center; justify-content: center; text-align: center;
-          border: 1.5px dashed #2A2A4A; border-radius: 12px; padding: 18px 14px;
+          border: 1.5px dashed #3C3C6A; border-radius: 12px; padding: 18px 14px;
           font-size: 13px; font-weight: 600; color: #C4C4E0; cursor: pointer;
           transition: all 0.2s;
         }
-        .in-drop:hover { border-color: rgba(139,92,246,.5); color: #8B5CF6; }
+        .in-drop:hover { border-color: rgba(157,92,255,.5); color: #9D5CFF; }
         .in-drop--disabled { opacity: 0.5; pointer-events: none; }
-        .in-drop-hint { font-size: 10px; font-weight: 400; color: #5A5A80; }
+        .in-drop-hint { font-size: 10px; font-weight: 400; color: #8E8EB4; }
         .in-rec-btn {
-          padding: 12px 20px; border-radius: 12px; border: 1px solid #2A2A4A;
+          padding: 12px 20px; border-radius: 12px; border: 1px solid #3C3C6A;
           background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
           align-self: stretch;
         }
-        .in-rec-btn:hover:not(:disabled) { border-color: #EC4899; color: #EC4899; }
+        .in-rec-btn:hover:not(:disabled) { border-color: #F9459E; color: #F9459E; }
         .in-rec-btn--live {
           border-color: rgba(239,68,68,.5); color: #F87171;
           background: rgba(239,68,68,.08); animation: in-pulse 1.2s ease-in-out infinite;
@@ -463,16 +463,16 @@ export function InstrumentsPage() {
         .in-group { margin-bottom: 10px; }
         .in-group-lbl {
           font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
-          text-transform: uppercase; color: #5A5A80; margin: 8px 0 6px;
+          text-transform: uppercase; color: #8E8EB4; margin: 8px 0 6px;
         }
         .in-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .in-inst {
           display: flex; flex-direction: column; align-items: center; gap: 4px;
-          padding: 10px 6px; border-radius: 10px; border: 1.5px solid #1E1E3A;
+          padding: 10px 6px; border-radius: 10px; border: 1.5px solid #2E2E56;
           background: #0E0E20; cursor: pointer; transition: all 0.2s;
         }
-        .in-inst:hover:not(:disabled) { border-color: rgba(139,92,246,.35); }
-        .in-inst--active { border-color: #8B5CF6; background: rgba(139,92,246,.06); }
+        .in-inst:hover:not(:disabled) { border-color: rgba(157,92,255,.35); }
+        .in-inst--active { border-color: #9D5CFF; background: rgba(157,92,255,.06); }
         .in-inst:disabled { opacity: 0.55; cursor: not-allowed; }
         .in-inst-emoji { font-size: 18px; line-height: 1; }
         .in-inst-label {
@@ -480,46 +480,46 @@ export function InstrumentsPage() {
           text-align: center; line-height: 1.3;
         }
         .in-input {
-          width: 100%; background: #0E0E20; border: 1px solid #1E1E3A;
+          width: 100%; background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #F0F0FF;
           outline: none; transition: border-color 0.2s; font-family: inherit;
         }
-        .in-input:focus { border-color: rgba(139,92,246,.5); }
+        .in-input:focus { border-color: rgba(157,92,255,.5); }
         .in-input:disabled { opacity: 0.55; }
         .in-generate {
           display: block; width: 100%; margin-top: 20px;
           padding: 13px 22px; border-radius: 10px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.25s;
         }
-        .in-generate:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .in-generate:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .in-generate:disabled { opacity: 0.6; cursor: not-allowed; }
-        .in-fine { margin: 12px 0 0; font-size: 11px; color: #5A5A80; line-height: 1.6; }
+        .in-fine { margin: 12px 0 0; font-size: 11px; color: #8E8EB4; line-height: 1.6; }
         .in-result-head { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
         .in-result-ico { font-size: 24px; }
         .in-result-title {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 16px; font-weight: 700; color: #F0F0FF; word-break: break-word;
         }
-        .in-result-sub { font-size: 11px; color: #5A5A80; margin-top: 2px; }
+        .in-result-sub { font-size: 11px; color: #8E8EB4; margin-top: 2px; }
         .in-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
         .in-btn-solid {
           padding: 11px 22px; border-radius: 9px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
-        .in-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .in-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .in-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
         .in-btn-ghost {
           display: inline-block; padding: 11px 22px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           text-decoration: none;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .in-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .in-btn-ghost:hover { border-color: #9D5CFF; color: #9D5CFF; }
         @media (max-width: 900px) {
           .in-shell { flex-direction: column; }
           .in-main { padding: 24px 16px 60px; }

@@ -25,9 +25,9 @@ function WaveformPreview({ peaks }: { peaks: number[] }) {
     c.height = H * dpr
     ctx.scale(dpr, dpr)
     const grd = ctx.createLinearGradient(0, 0, W, 0)
-    grd.addColorStop(0, 'rgba(139,92,246,.85)')
-    grd.addColorStop(0.5, 'rgba(236,72,153,.85)')
-    grd.addColorStop(1, 'rgba(6,182,212,.85)')
+    grd.addColorStop(0, 'rgba(157,92,255,.85)')
+    grd.addColorStop(0.5, 'rgba(249,69,158,.85)')
+    grd.addColorStop(1, 'rgba(12,199,232,.85)')
     ctx.fillStyle = grd
     const bw = W / peaks.length
     peaks.forEach((p, i) => {
@@ -39,7 +39,7 @@ function WaveformPreview({ peaks }: { peaks: number[] }) {
   return (
     <canvas
       ref={canvasRef}
-      style={{ display: 'block', width: '100%', height: 64, background: '#0E0E20', border: '1px solid #1E1E3A', borderRadius: 12 }}
+      style={{ display: 'block', width: '100%', height: 64, background: '#0E0E20', border: '1px solid #2E2E56', borderRadius: 12 }}
     />
   )
 }
@@ -196,15 +196,15 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
         .ul-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
         .ul-dropzone {
           width: 100%; max-width: 420px;
-          border: 1.5px dashed #2A2A4A; border-radius: 14px;
+          border: 1.5px dashed #3C3C6A; border-radius: 14px;
           padding: 36px 20px; text-align: center; cursor: pointer;
-          transition: all 0.2s; background: rgba(139,92,246,.02);
+          transition: all 0.2s; background: rgba(157,92,255,.02);
         }
-        .ul-dropzone:hover { border-color: rgba(139,92,246,.5); background: rgba(139,92,246,.05); }
+        .ul-dropzone:hover { border-color: rgba(157,92,255,.5); background: rgba(157,92,255,.05); }
         .ul-icon { font-size: 28px; margin-bottom: 10px; }
         .ul-title { font-family: var(--font-grotesk), 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; color: #F0F0FF; margin-bottom: 4px; }
-        .ul-sub { font-size: 12px; color: #5A5A80; }
-        .ul-status { font-size: 13px; color: #8B5CF6; padding: 16px 0; }
+        .ul-sub { font-size: 12px; color: #8E8EB4; }
+        .ul-status { font-size: 13px; color: #9D5CFF; padding: 16px 0; }
         .ul-filename { font-size: 12px; color: #C4C4E0; }
         .ul-audio { width: 100%; max-width: 420px; }
         .ul-error { font-size: 13px; color: #F87171; max-width: 420px; }
@@ -213,8 +213,8 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .ul-btn--outline { background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0; }
-        .ul-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .ul-btn--outline { background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0; }
+        .ul-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
       `}</style>
     </div>
   )

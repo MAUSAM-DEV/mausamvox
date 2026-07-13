@@ -39,7 +39,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
           height: '96px',
           borderRadius: '50%',
           marginBottom: '28px',
-          background: 'radial-gradient(circle, rgba(139,92,246,.45), rgba(236,72,153,.2) 50%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(157,92,255,.45), rgba(249,69,158,.2) 50%, transparent 70%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -62,7 +62,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
         {type === 'preview' ? 'Generating Preview' : 'Processing Your Swap'}
       </div>
 
-      <div style={{ fontSize: '12px', color: '#5A5A80', marginBottom: '28px' }}>
+      <div style={{ fontSize: '12px', color: '#8E8EB4', marginBottom: '28px' }}>
         {type === 'preview'
           ? 'First 2 previews of a track are free · 50 credits after'
           : 'Studio Engine · Studio Clone'}
@@ -84,17 +84,17 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
                   s === 'done'
                     ? 'rgba(16,185,129,.04)'
                     : s === 'active'
-                    ? 'rgba(139,92,246,.06)'
+                    ? 'rgba(157,92,255,.06)'
                     : '#121225',
                 border: `1px solid ${
                   s === 'done'
                     ? 'rgba(16,185,129,.2)'
                     : s === 'active'
-                    ? 'rgba(139,92,246,.28)'
-                    : '#1E1E3A'
+                    ? 'rgba(157,92,255,.28)'
+                    : '#2E2E56'
                 }`,
                 fontSize: '12px',
-                color: s === 'pending' ? '#5A5A80' : '#F0F0FF',
+                color: s === 'pending' ? '#8E8EB4' : '#F0F0FF',
                 transition: 'all 0.4s',
               }}
             >
@@ -108,14 +108,14 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
                     s === 'done'
                       ? 'rgba(16,185,129,.18)'
                       : s === 'active'
-                      ? '#8B5CF6'
-                      : '#1E1E3A',
+                      ? '#9D5CFF'
+                      : '#2E2E56',
                   color:
                     s === 'done'
                       ? '#10B981'
                       : s === 'active'
                       ? '#fff'
-                      : '#5A5A80',
+                      : '#8E8EB4',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -135,7 +135,7 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
 
       <style suppressHydrationWarning>{`
         @keyframes ovOrb { 0%,100% { transform: scale(1); } 50% { transform: scale(1.14); } }
-        @keyframes ovPip { 0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,.4); } 50% { box-shadow: 0 0 0 4px rgba(139,92,246,.15); } }
+        @keyframes ovPip { 0%,100% { box-shadow: 0 0 0 0 rgba(157,92,255,.4); } 50% { box-shadow: 0 0 0 4px rgba(157,92,255,.15); } }
       `}</style>
     </div>
   )

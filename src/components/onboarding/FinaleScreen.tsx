@@ -90,11 +90,11 @@ export function FinaleScreen({ persona }: FinaleScreenProps) {
         }
         .obf-unlock {
           padding: 8px 16px; border-radius: 99px;
-          background: #121225; border: 1px solid #1E1E3A;
+          background: #121225; border: 1px solid #2E2E56;
           font-size: 12px; color: #C4C4E0; font-weight: 500;
           display: flex; align-items: center; gap: 7px;
         }
-        .obf-unlock b { color: #8B5CF6; }
+        .obf-unlock b { color: #9D5CFF; }
         @media (max-width: 760px) {
           .obf-unlock-row { flex-direction: column; align-items: center; }
         }

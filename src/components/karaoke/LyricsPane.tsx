@@ -584,18 +584,18 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         }
         .lyr-lang {
           padding: 10px 12px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: #0E0E20; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: #0E0E20; color: #C4C4E0;
           font-size: 13px; font-weight: 600; cursor: pointer;
         }
         .lyr-gen {
           padding: 10px 18px; border-radius: 9px; border: none; cursor: pointer;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; transition: all 0.25s;
         }
-        .lyr-gen:hover { box-shadow: 0 6px 20px rgba(139,92,246,.4); }
+        .lyr-gen:hover { box-shadow: 0 6px 20px rgba(157,92,255,.4); }
         .lyr-offer-note {
-          font-size: 11px; color: #5A5A80; line-height: 1.6; margin: 0;
+          font-size: 11px; color: #8E8EB4; line-height: 1.6; margin: 0;
           max-width: 400px; margin-left: auto; margin-right: auto;
         }
         .lyr-offer-note--lang { color: #9C9CC4; margin-bottom: 6px; }
@@ -618,7 +618,7 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
           padding: 5px 8px; border-radius: 8px;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 17px; font-weight: 600; line-height: 1.5;
-          color: #7878A0; /* upcoming */
+          color: #A0A0C8; /* upcoming */
           transition: color 0.3s, opacity 0.3s, transform 0.3s;
           word-break: break-word;
         }
@@ -626,7 +626,7 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         .lyr-line--seekable { cursor: pointer; }
         .lyr-line--seekable:hover { color: #C4C4E0; }
         /* Sung lines read as clearly "spent" — much dimmer + darker than the
-           upcoming (#7878A0) lines so the eye is pulled forward. */
+           upcoming (#A0A0C8) lines so the eye is pulled forward. */
         .lyr-line--done { color: #2B2B45; opacity: 0.4; }
         /* Current line: bright brand gradient text fill (drop-shadow, not
            text-shadow, since the fill is transparent). Scoped away from gap
@@ -636,10 +636,10 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
           -webkit-background-clip: text; background-clip: text;
           -webkit-text-fill-color: transparent; color: transparent;
           transform: scale(1.06);
-          filter: drop-shadow(0 0 16px rgba(139,92,246,.45));
+          filter: drop-shadow(0 0 16px rgba(157,92,255,.45));
         }
-        .lyr-line--gap { font-size: 14px; letter-spacing: 6px; color: #5A5A80; }
-        .lyr-line--gap.lyr-line--current { color: #8B5CF6; }
+        .lyr-line--gap { font-size: 14px; letter-spacing: 6px; color: #8E8EB4; }
+        .lyr-line--gap.lyr-line--current { color: #9D5CFF; }
         /* Current line rendered as per-word spans: turn OFF the gradient text
            fill (declared after the gradient rule so it wins at equal
            specificity) — the child word spans set their own colours. Keep the
@@ -647,11 +647,11 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         .lyr-line--current.lyr-line--words {
           background: none;
           -webkit-text-fill-color: initial;
-          color: #6E6E98;
+          color: #9A9AC0;
         }
         .lyr-word {
           display: inline-block;
-          color: #6E6E98; /* not-yet-sung word in the current line */
+          color: #9A9AC0; /* not-yet-sung word in the current line */
           -webkit-text-fill-color: currentColor; /* defeat any inherited gradient transparency */
           transition: color 0.12s ease, transform 0.12s ease, text-shadow 0.12s ease;
         }
@@ -673,16 +673,16 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         }
         .lyr-foot {
           width: 100%; display: flex; justify-content: space-between; align-items: center;
-          font-size: 11px; color: #5A5A80; margin-bottom: 14px; padding: 0 4px;
+          font-size: 11px; color: #8E8EB4; margin-bottom: 14px; padding: 0 4px;
           gap: 10px; text-align: left;
         }
         .lyr-foot-actions { display: flex; gap: 14px; flex-shrink: 0; }
         .lyr-foot-btn {
           border: none; background: transparent; cursor: pointer;
-          font-size: 11px; font-weight: 600; color: #7878A0;
+          font-size: 11px; font-weight: 600; color: #A0A0C8;
           transition: color 0.2s;
         }
-        .lyr-foot-btn:hover { color: #8B5CF6; }
+        .lyr-foot-btn:hover { color: #9D5CFF; }
         .lyr-regen-notice {
           width: 100%; font-size: 11px; color: #FBBF24;
           margin: 2px 0 6px; padding: 0 4px; text-align: left;
@@ -696,7 +696,7 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         .lyr-edit-card {
           width: 100%; max-width: 560px; max-height: 80vh;
           display: flex; flex-direction: column;
-          background: #09091A; border: 1px solid #2A2A4A; border-radius: 16px;
+          background: #09091A; border: 1px solid #3C3C6A; border-radius: 16px;
           padding: 20px; text-align: left;
         }
         .lyr-regen-card { max-width: 440px; }
@@ -708,7 +708,7 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 17px; font-weight: 700; color: #F0F0FF; margin-bottom: 2px;
         }
-        .lyr-edit-sub { font-size: 11px; color: #5A5A80; }
+        .lyr-edit-sub { font-size: 11px; color: #8E8EB4; }
         .lyr-edit-list {
           flex: 1; overflow-y: auto; min-height: 0;
           display: flex; flex-direction: column; gap: 6px;
@@ -716,17 +716,17 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         }
         .lyr-edit-row { display: flex; align-items: center; gap: 8px; }
         .lyr-edit-time {
-          font-size: 11px; font-weight: 600; color: #5A5A80;
+          font-size: 11px; font-weight: 600; color: #8E8EB4;
           font-variant-numeric: tabular-nums; width: 38px; flex-shrink: 0;
           text-align: right;
         }
         .lyr-edit-input {
           flex: 1; min-width: 0;
           padding: 8px 10px; border-radius: 8px;
-          border: 1px solid #1E1E3A; background: #0E0E20; color: #F0F0FF;
+          border: 1px solid #2E2E56; background: #0E0E20; color: #F0F0FF;
           font-size: 13px;
         }
-        .lyr-edit-input:focus { outline: none; border-color: #8B5CF6; }
+        .lyr-edit-input:focus { outline: none; border-color: #9D5CFF; }
         .lyr-edit-del {
           border: none; background: transparent; cursor: pointer;
           font-size: 14px; opacity: 0.55; transition: opacity 0.2s;
@@ -739,13 +739,13 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
         }
         .lyr-edit-cancel {
           padding: 10px 18px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-size: 13px; font-weight: 600; cursor: pointer;
         }
-        .lyr-edit-cancel:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .lyr-edit-cancel:hover:not(:disabled) { border-color: #9D5CFF; color: #9D5CFF; }
         .lyr-edit-save {
           padding: 10px 18px; border-radius: 9px; border: none; cursor: pointer;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff; font-size: 13px; font-weight: 600;
         }
         .lyr-edit-save:disabled, .lyr-edit-cancel:disabled { opacity: 0.5; cursor: not-allowed; }

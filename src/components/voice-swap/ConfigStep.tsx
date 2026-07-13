@@ -321,7 +321,7 @@ export function ConfigStep({
                     left: '50%',
                     width: `${Math.abs(pitchShift) / 12 * 50}%`,
                     transform: pitchShift < 0 ? 'translateX(-100%)' : 'none',
-                    background: 'linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4)',
+                    background: 'linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8)',
                   }}
                 />
                 <div
@@ -348,14 +348,14 @@ export function ConfigStep({
           font-weight: 700;
           letter-spacing: 2px;
           text-transform: uppercase;
-          color: #5A5A80;
+          color: #8E8EB4;
           margin-bottom: 14px;
         }
         .vs-vtabs {
           display: flex;
           gap: 4px;
           margin-bottom: 16px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           padding-bottom: 0;
         }
         .vs-vtab {
@@ -365,7 +365,7 @@ export function ConfigStep({
           background: transparent;
           font-size: 12px;
           font-weight: 500;
-          color: #5A5A80;
+          color: #8E8EB4;
           cursor: pointer;
           transition: all 0.2s;
           position: relative;
@@ -374,7 +374,7 @@ export function ConfigStep({
         .vs-vtab:hover { color: #F0F0FF; }
         .vs-vtab--active {
           color: #F0F0FF;
-          border-bottom: 2px solid #8B5CF6;
+          border-bottom: 2px solid #9D5CFF;
         }
         .vs-voice-grid {
           display: grid;
@@ -384,14 +384,14 @@ export function ConfigStep({
         }
         .vs-voice-loading {
           font-size: 12px;
-          color: #5A5A80;
+          color: #8E8EB4;
           padding: 24px 0;
           margin-bottom: 24px;
           text-align: center;
         }
         .vs-voice-card {
           background: #0E0E20;
-          border: 1.5px solid #1E1E3A;
+          border: 1.5px solid #2E2E56;
           border-radius: 12px;
           padding: 14px 10px;
           text-align: center;
@@ -399,10 +399,10 @@ export function ConfigStep({
           transition: all 0.2s;
           position: relative;
         }
-        .vs-voice-card:hover { border-color: rgba(139,92,246,.35); background: #121225; }
+        .vs-voice-card:hover { border-color: rgba(157,92,255,.35); background: #121225; }
         .vs-voice-card--selected {
-          border-color: #8B5CF6;
-          background: rgba(139,92,246,.06);
+          border-color: #9D5CFF;
+          background: rgba(157,92,255,.06);
         }
         .vs-voice-card--sample { opacity: 0.75; }
         .vs-voice-card--sample .vs-va-sub { color: #F59E0B; }
@@ -412,11 +412,11 @@ export function ConfigStep({
           align-items: center;
           justify-content: center;
           border-style: dashed;
-          border-color: #2A2A4A;
-          color: #5A5A80;
+          border-color: #3C3C6A;
+          color: #8E8EB4;
           text-decoration: none;
         }
-        .vs-voice-card--add:hover { border-color: rgba(139,92,246,.4); color: #8B5CF6; }
+        .vs-voice-card--add:hover { border-color: rgba(157,92,255,.4); color: #9D5CFF; }
         .vs-va-check {
           position: absolute;
           top: 6px;
@@ -424,7 +424,7 @@ export function ConfigStep({
           width: 16px;
           height: 16px;
           border-radius: 50%;
-          background: #8B5CF6;
+          background: #9D5CFF;
           color: #fff;
           font-size: 9px;
           font-weight: 700;
@@ -446,7 +446,7 @@ export function ConfigStep({
           width: 42px;
           height: 42px;
           border-radius: 50%;
-          border: 1.5px dashed #2A2A4A;
+          border: 1.5px dashed #3C3C6A;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -454,7 +454,7 @@ export function ConfigStep({
           margin: 0 auto 8px;
           transition: border-color 0.2s;
         }
-        .vs-voice-card--add:hover .vs-va-add-icon { border-color: rgba(139,92,246,.5); }
+        .vs-voice-card--add:hover .vs-va-add-icon { border-color: rgba(157,92,255,.5); }
         .vs-va-name {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 12px;
@@ -462,28 +462,28 @@ export function ConfigStep({
           color: #F0F0FF;
           margin-bottom: 2px;
         }
-        .vs-va-sub { font-size: 10px; color: #5A5A80; }
+        .vs-va-sub { font-size: 10px; color: #8E8EB4; }
         .vs-divider {
           height: 1px;
-          background: #1E1E3A;
+          background: #2E2E56;
           margin: 20px 0;
         }
         .vs-guided-hint {
           font-size: 12px;
-          color: #8888AA;
+          color: #A8A8CC;
           line-height: 1.5;
           margin: -6px 0 14px;
         }
         .vs-guided-note {
           font-size: 12px;
-          color: #8888AA;
+          color: #A8A8CC;
           line-height: 1.6;
           padding: 12px 14px;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 10px;
           background: #0E0E20;
         }
-        .vs-guided-note-link { color: #8B5CF6; text-decoration: none; }
+        .vs-guided-note-link { color: #9D5CFF; text-decoration: none; }
         .vs-guided-note-link:hover { text-decoration: underline; }
         .vs-controls-grid {
           display: grid;
@@ -495,7 +495,7 @@ export function ConfigStep({
         .vs-ctrl-lbl {
           font-size: 12px;
           font-weight: 600;
-          color: #8888AA;
+          color: #A8A8CC;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -504,7 +504,7 @@ export function ConfigStep({
         .vs-seg {
           display: flex;
           background: #0E0E20;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 8px;
           padding: 3px;
           gap: 2px;
@@ -519,11 +519,11 @@ export function ConfigStep({
           cursor: pointer;
           transition: all 0.2s;
           background: transparent;
-          color: #7878A0;
+          color: #A0A0C8;
         }
-        .vs-seg-btn:hover { color: #F0F0FF; background: #1E1E3A; }
+        .vs-seg-btn:hover { color: #F0F0FF; background: #2E2E56; }
         .vs-seg-btn--active {
-          background: linear-gradient(135deg,#8B5CF6,#EC4899);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E);
           color: #fff;
           font-weight: 600;
         }
@@ -532,7 +532,7 @@ export function ConfigStep({
           width: 100%;
           height: 4px;
           border-radius: 2px;
-          background: linear-gradient(to right, #8B5CF6 0%, #EC4899 var(--pct), #1E1E3A var(--pct), #1E1E3A 100%);
+          background: linear-gradient(to right, #9D5CFF 0%, #F9459E var(--pct), #2E2E56 var(--pct), #2E2E56 100%);
           outline: none;
           cursor: pointer;
         }
@@ -542,15 +542,15 @@ export function ConfigStep({
           height: 16px;
           border-radius: 50%;
           background: #fff;
-          border: 2px solid #8B5CF6;
-          box-shadow: 0 0 6px rgba(139,92,246,.5);
+          border: 2px solid #9D5CFF;
+          box-shadow: 0 0 6px rgba(157,92,255,.5);
           cursor: pointer;
         }
         .vs-range-labels {
           display: flex;
           justify-content: space-between;
           font-size: 10px;
-          color: #5A5A80;
+          color: #8E8EB4;
           margin-top: 2px;
         }
         .vs-pitch-row {
@@ -562,7 +562,7 @@ export function ConfigStep({
           width: 28px;
           height: 28px;
           border-radius: 6px;
-          border: 1px solid #2A2A4A;
+          border: 1px solid #3C3C6A;
           background: #0E0E20;
           color: #C4C4E0;
           font-size: 16px;
@@ -574,11 +574,11 @@ export function ConfigStep({
           justify-content: center;
           flex-shrink: 0;
         }
-        .vs-pitch-btn:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vs-pitch-btn:hover { border-color: #9D5CFF; color: #9D5CFF; }
         .vs-pitch-track {
           flex: 1;
           height: 4px;
-          background: #1E1E3A;
+          background: #2E2E56;
           border-radius: 2px;
           position: relative;
         }
@@ -597,8 +597,8 @@ export function ConfigStep({
           height: 16px;
           border-radius: 50%;
           background: #fff;
-          border: 2px solid #8B5CF6;
-          box-shadow: 0 0 6px rgba(139,92,246,.5);
+          border: 2px solid #9D5CFF;
+          box-shadow: 0 0 6px rgba(157,92,255,.5);
           transition: left 0.1s;
         }
 
@@ -616,16 +616,16 @@ export function ConfigStep({
           gap: 4px;
           padding: 12px;
           border-radius: 10px;
-          border: 1.5px solid #1E1E3A;
+          border: 1.5px solid #2E2E56;
           background: #0E0E20;
           cursor: pointer;
           transition: all 0.2s;
           text-align: left;
         }
-        .vs-duet-mode-card:hover { border-color: rgba(139,92,246,.35); background: #121225; }
+        .vs-duet-mode-card:hover { border-color: rgba(157,92,255,.35); background: #121225; }
         .vs-duet-mode-card--active {
-          border-color: #8B5CF6;
-          background: rgba(139,92,246,.07);
+          border-color: #9D5CFF;
+          background: rgba(157,92,255,.07);
         }
         .vs-dmcard-icon { font-size: 18px; line-height: 1; }
         .vs-dmcard-label {
@@ -636,7 +636,7 @@ export function ConfigStep({
         }
         .vs-dmcard-sub {
           font-size: 10px;
-          color: #5A5A80;
+          color: #8E8EB4;
           line-height: 1.4;
         }
 
@@ -651,7 +651,7 @@ export function ConfigStep({
         .vs-duet-sub-lbl {
           font-size: 11px;
           font-weight: 600;
-          color: #8888AA;
+          color: #A8A8CC;
           flex-shrink: 0;
         }
         .vs-duet-warn {

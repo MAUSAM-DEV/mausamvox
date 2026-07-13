@@ -107,28 +107,28 @@ export function MagicMomentScreen({ persona, onNext }: MagicMomentScreenProps) {
       <style suppressHydrationWarning>{`
         .obm-result-stage {
           max-width: 560px; margin: 0 auto 28px;
-          background: #121225; border: 1px solid #1E1E3A; border-radius: 16px;
+          background: #121225; border: 1px solid #2E2E56; border-radius: 16px;
           padding: 30px 28px; position: relative; overflow: hidden;
         }
         .obm-result-stage::before {
           content: ''; position: absolute; top: -90px; left: 50%; transform: translateX(-50%);
           width: 400px; height: 220px; border-radius: 50%;
-          background: radial-gradient(ellipse, rgba(139,92,246,.14), transparent 70%);
+          background: radial-gradient(ellipse, rgba(157,92,255,.14), transparent 70%);
           pointer-events: none;
         }
         .obm-preview-tag {
           position: absolute; top: 12px; right: 12px;
           font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
           padding: 3px 9px; border-radius: 99px;
-          background: rgba(90,90,128,.15); color: #7878A0;
-          border: 1px solid rgba(90,90,128,.3);
+          background: rgba(142,142,180,.15); color: #A0A0C8;
+          border: 1px solid rgba(142,142,180,.3);
         }
         .obm-result-head {
           display: flex; align-items: center; gap: 12px; margin-bottom: 18px; position: relative;
         }
         .obm-cover {
           width: 52px; height: 52px; border-radius: 12px; flex-shrink: 0;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           display: flex; align-items: center; justify-content: center; font-size: 22px;
         }
         .obm-track {
@@ -136,9 +136,9 @@ export function MagicMomentScreen({ persona, onNext }: MagicMomentScreenProps) {
           font-size: 16px; font-weight: 600; text-align: left; color: #F0F0FF;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .obm-by { font-size: 11px; color: #5A5A80; text-align: left; margin-top: 2px; }
+        .obm-by { font-size: 11px; color: #8E8EB4; text-align: left; margin-top: 2px; }
         .obm-by b {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           font-weight: 600;
         }
@@ -148,7 +148,7 @@ export function MagicMomentScreen({ persona, onNext }: MagicMomentScreenProps) {
         }
         .obm-bar {
           width: 2.5px; flex-shrink: 0; border-radius: 1px;
-          background: linear-gradient(180deg, rgba(139,92,246,.85), rgba(236,72,153,.85));
+          background: linear-gradient(180deg, rgba(157,92,255,.85), rgba(249,69,158,.85));
         }
         @media (max-width: 760px) { .obm-result-stage { padding: 22px 16px; } }
       `}</style>

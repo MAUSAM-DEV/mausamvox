@@ -144,21 +144,21 @@ export function VLSidebar() {
         <div className="vls-foot">
           <div className="vls-credits-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '11px', color: '#5A5A80' }}>Credits</span>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: hasCredits ? '#C4C4E0' : '#5A5A80' }}>
+              <span style={{ fontSize: '11px', color: '#8E8EB4' }}>Credits</span>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: hasCredits ? '#C4C4E0' : '#8E8EB4' }}>
                 {creditsRemaining === null ? '…' : fmtN(creditsRemaining)} / {creditsTotal === null ? '…' : fmtN(creditsTotal)}
               </span>
             </div>
-            <div style={{ height: '4px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${remainingPct}%`, borderRadius: '2px', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)' }} />
+            <div style={{ height: '4px', background: '#2E2E56', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${remainingPct}%`, borderRadius: '2px', background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)' }} />
             </div>
           </div>
 
           <div className="vls-user-row">
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{userInitial || '·'}</div>
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{userInitial || '·'}</div>
             <div className="vls-uinfo">
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>{userName || '…'}</div>
-              <div style={{ fontSize: '11px', color: '#5A5A80' }}>{planLabel(plan)}</div>
+              <div style={{ fontSize: '11px', color: '#8E8EB4' }}>{planLabel(plan)}</div>
             </div>
           </div>
         </div>
@@ -167,7 +167,7 @@ export function VLSidebar() {
       <style suppressHydrationWarning>{`
         .vls-sidebar {
           background: #09091A;
-          border-right: 1px solid #1E1E3A;
+          border-right: 1px solid #2E2E56;
           display: flex;
           flex-direction: column;
           height: 100vh;
@@ -180,7 +180,7 @@ export function VLSidebar() {
           align-items: center;
           gap: 10px;
           padding: 18px 16px 16px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           flex-shrink: 0;
         }
         .vls-wordmark {
@@ -202,7 +202,7 @@ export function VLSidebar() {
           font-weight: 700;
           letter-spacing: 2.5px;
           text-transform: uppercase;
-          color: #5A5A80;
+          color: #8E8EB4;
           padding: 10px 8px 6px;
         }
         .vls-link {
@@ -214,7 +214,7 @@ export function VLSidebar() {
           margin-bottom: 1px;
           font-size: 13px;
           font-weight: 500;
-          color: #7878A0;
+          color: #A0A0C8;
           cursor: pointer;
           transition: all 0.2s;
           text-decoration: none;
@@ -222,39 +222,39 @@ export function VLSidebar() {
         }
         .vls-link:hover { background: #0E0E20; color: #F0F0FF; }
         .vls-link--active {
-          background: rgba(139,92,246,.1);
-          border-color: rgba(139,92,246,.18);
+          background: rgba(157,92,255,.1);
+          border-color: rgba(157,92,255,.18);
           color: #F0F0FF;
         }
-        .vls-link--active:hover { background: rgba(139,92,246,.15); }
+        .vls-link--active:hover { background: rgba(157,92,255,.15); }
         .vls-ico { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
         .vls-lbl { flex: 1; }
         .vls-badge {
           margin-left: auto;
-          background: rgba(139,92,246,.15);
-          color: #8B5CF6;
+          background: rgba(157,92,255,.15);
+          color: #9D5CFF;
           font-size: 10px;
           font-weight: 700;
           padding: 1px 7px;
           border-radius: 99px;
         }
         .vls-link--soon { opacity: 0.5; cursor: default; }
-        .vls-link--soon:hover { background: transparent; color: #7878A0; }
+        .vls-link--soon:hover { background: transparent; color: #A0A0C8; }
         .vls-badge--soon {
           background: rgba(255,255,255,.05);
-          color: #5A5A80;
+          color: #8E8EB4;
           font-size: 9px;
           letter-spacing: 1px;
           text-transform: uppercase;
         }
         .vls-foot {
-          border-top: 1px solid #1E1E3A;
+          border-top: 1px solid #2E2E56;
           padding: 12px;
           flex-shrink: 0;
         }
         .vls-credits-box {
           background: #0E0E20;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 10px;
           padding: 12px;
           margin-bottom: 10px;
@@ -273,7 +273,7 @@ export function VLSidebar() {
             width: 100% !important;
             height: auto !important;
             border-right: none !important;
-            border-bottom: 1px solid #1E1E3A;
+            border-bottom: 1px solid #2E2E56;
           }
           .vls-nav {
             display: flex !important;

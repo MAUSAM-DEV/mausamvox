@@ -15,7 +15,7 @@ function MiniWave({ seed }: { seed: number }) {
             width: '2px',
             height: `${Math.min(16, (h + (seed + i * 3) % 7) * 0.75)}px`,
             borderRadius: '1px',
-            background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+            background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
             flexShrink: 0,
           }}
         />
@@ -180,11 +180,11 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
 
         <div className="vs-rp-storage">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
-            <span style={{ color: '#5A5A80' }}>Storage</span>
-            <span style={{ color: '#5A5A80', fontWeight: 600 }}>—</span>
+            <span style={{ color: '#8E8EB4' }}>Storage</span>
+            <span style={{ color: '#8E8EB4', fontWeight: 600 }}>—</span>
           </div>
-          <div style={{ height: '3px', background: '#1E1E3A', borderRadius: '2px', overflow: 'hidden' }} />
-          <div style={{ fontSize: '10px', color: '#5A5A80', marginTop: '6px' }}>
+          <div style={{ height: '3px', background: '#2E2E56', borderRadius: '2px', overflow: 'hidden' }} />
+          <div style={{ fontSize: '10px', color: '#8E8EB4', marginTop: '6px' }}>
             Storage tracking coming soon · Pro
           </div>
         </div>
@@ -193,44 +193,44 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
       <style suppressHydrationWarning>{`
         .vs-rpanel {
           width: 252px; flex-shrink: 0;
-          background: #09091A; border-left: 1px solid #1E1E3A;
+          background: #09091A; border-left: 1px solid #2E2E56;
           display: flex; flex-direction: column;
           height: 100vh; overflow: hidden;
         }
         .vs-rp-header {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 16px; border-bottom: 1px solid #1E1E3A; flex-shrink: 0;
+          padding: 14px 16px; border-bottom: 1px solid #2E2E56; flex-shrink: 0;
         }
         .vs-rp-title {
           font-size: 11px; font-weight: 700; letter-spacing: 2px;
-          text-transform: uppercase; color: #5A5A80;
+          text-transform: uppercase; color: #8E8EB4;
         }
         .vs-rp-new {
           padding: 4px 12px; border-radius: 6px;
-          border: 1px solid rgba(139,92,246,.3); background: rgba(139,92,246,.08);
-          color: #8B5CF6; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+          border: 1px solid rgba(157,92,255,.3); background: rgba(157,92,255,.08);
+          color: #9D5CFF; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .vs-rp-new:hover { background: rgba(139,92,246,.16); }
+        .vs-rp-new:hover { background: rgba(157,92,255,.16); }
         .vs-rp-list {
           flex: 1; overflow-y: auto; padding: 8px;
-          scrollbar-width: thin; scrollbar-color: #2A2A4A transparent;
+          scrollbar-width: thin; scrollbar-color: #3C3C6A transparent;
         }
         .vs-rp-list::-webkit-scrollbar { width: 4px; }
-        .vs-rp-list::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vs-rp-list::-webkit-scrollbar-thumb { background: #3C3C6A; border-radius: 2px; }
         .vs-rp-empty {
-          font-size: 11px; color: #5A5A80; text-align: center; padding: 28px 12px; line-height: 1.6;
+          font-size: 11px; color: #8E8EB4; text-align: center; padding: 28px 12px; line-height: 1.6;
         }
 
         /* ── Swap card ── */
         .vs-rp-item {
-          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 10px;
+          background: #0E0E20; border: 1px solid #2E2E56; border-radius: 10px;
           padding: 10px; margin-bottom: 6px; cursor: pointer;
           transition: border-color 0.2s, background 0.2s;
           display: flex; flex-direction: column; gap: 8px;
         }
-        .vs-rp-item:hover { border-color: rgba(139,92,246,.28); background: #121225; }
+        .vs-rp-item:hover { border-color: rgba(157,92,255,.28); background: #121225; }
         .vs-rp-item--deleting { opacity: 0.45; pointer-events: none; }
-        .vs-rp-item--expanded { border-color: rgba(139,92,246,.4); background: #121225; cursor: default; }
+        .vs-rp-item--expanded { border-color: rgba(157,92,255,.4); background: #121225; cursor: default; }
         .vs-rp-item-top { display: flex; align-items: center; gap: 8px; }
         .vs-rp-emoji { font-size: 18px; flex-shrink: 0; }
         .vs-rp-info { flex: 1; min-width: 0; }
@@ -238,7 +238,7 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
           font-size: 12px; font-weight: 600; color: #F0F0FF;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .vs-rp-voice { font-size: 10px; color: #5A5A80; margin-top: 2px; }
+        .vs-rp-voice { font-size: 10px; color: #8E8EB4; margin-top: 2px; }
         .vs-rp-score {
           font-size: 11px; font-weight: 700; padding: 2px 7px;
           border-radius: 99px; flex-shrink: 0;
@@ -250,7 +250,7 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         .vs-rp-del-btn {
           width: 24px; height: 24px; flex-shrink: 0;
           border-radius: 5px; border: none;
-          background: transparent; color: #5A5A80;
+          background: transparent; color: #8E8EB4;
           display: flex; align-items: center; justify-content: center;
           cursor: pointer; padding: 0; margin-left: 2px;
           opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -266,7 +266,7 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         }
         .vs-rp-confirm-msg { font-size: 12px; color: #C4C4E0; line-height: 1.5; }
         .vs-rp-confirm-msg b { color: #F0F0FF; }
-        .vs-rp-confirm-sub { display: block; margin-top: 4px; font-size: 10px; color: #5A5A80; }
+        .vs-rp-confirm-sub { display: block; margin-top: 4px; font-size: 10px; color: #8E8EB4; }
         .vs-rp-confirm-btns { display: flex; gap: 6px; }
         .vs-rp-confirm-del {
           flex: 1; padding: 5px 0; border-radius: 6px; border: none;
@@ -276,7 +276,7 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         .vs-rp-confirm-del:hover { background: rgba(239,68,68,.25); }
         .vs-rp-confirm-cancel {
           flex: 1; padding: 5px 0; border-radius: 6px;
-          border: 1px solid #2A2A4A; background: transparent; color: #5A5A80;
+          border: 1px solid #3C3C6A; background: transparent; color: #8E8EB4;
           font-size: 11px; font-weight: 600; cursor: pointer; transition: color 0.15s;
         }
         .vs-rp-confirm-cancel:hover { color: #C4C4E0; }
@@ -284,9 +284,9 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         /* ── Expanded inline player wrapper ── */
         .vs-rp-player { display: flex; flex-direction: column; gap: 0; }
         .vs-rp-expired {
-          font-size: 11px; color: #5A5A80;
+          font-size: 11px; color: #8E8EB4;
           background: #0E0E20;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 10px;
           padding: 14px;
           text-align: center;
@@ -305,11 +305,11 @@ export function RightPanel({ onToast, onNewSwap, swaps, swapsLoading, onDeleteSw
         }
 
         .vs-rp-storage {
-          padding: 12px 16px; border-top: 1px solid #1E1E3A; flex-shrink: 0;
+          padding: 12px 16px; border-top: 1px solid #2E2E56; flex-shrink: 0;
         }
 
         @media (max-width: 900px) {
-          .vs-rpanel { width: 100% !important; height: auto !important; border-left: none !important; border-top: 1px solid #1E1E3A; }
+          .vs-rpanel { width: 100% !important; height: auto !important; border-left: none !important; border-top: 1px solid #2E2E56; }
           .vs-rp-list { max-height: 280px; }
         }
       `}</style>

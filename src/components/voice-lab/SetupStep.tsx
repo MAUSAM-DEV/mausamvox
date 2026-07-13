@@ -70,7 +70,7 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
         }
         .vlst-card {
           background: #121225;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           padding: 28px 24px;
           cursor: pointer;
@@ -82,45 +82,45 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
           content: '';
           position: absolute;
           inset: 0;
-          background: radial-gradient(ellipse at 50% 0%, rgba(139,92,246,.08), transparent 60%);
+          background: radial-gradient(ellipse at 50% 0%, rgba(157,92,255,.08), transparent 60%);
           opacity: 0;
           transition: opacity 0.3s;
         }
-        .vlst-card:hover { border-color: rgba(139,92,246,.35); transform: translateY(-3px); }
+        .vlst-card:hover { border-color: rgba(157,92,255,.35); transform: translateY(-3px); }
         .vlst-card:hover::before { opacity: 1; }
-        .vlst-card--on { border-color: #8B5CF6 !important; background: rgba(139,92,246,.05) !important; }
+        .vlst-card--on { border-color: #9D5CFF !important; background: rgba(157,92,255,.05) !important; }
         .vlst-card--on::after {
           content: '✓ Selected';
           position: absolute;
           top: 14px; right: 14px;
-          font-size: 10px; font-weight: 700; color: #8B5CF6;
+          font-size: 10px; font-weight: 700; color: #9D5CFF;
           padding: 3px 10px;
           border-radius: 99px;
-          background: rgba(139,92,246,.12);
-          border: 1px solid rgba(139,92,246,.25);
+          background: rgba(157,92,255,.12);
+          border: 1px solid rgba(157,92,255,.25);
         }
         .vlst-card--soon {
           cursor: not-allowed;
           opacity: 0.55;
         }
-        .vlst-card--soon:hover { border-color: #1E1E3A; transform: none; }
+        .vlst-card--soon:hover { border-color: #2E2E56; transform: none; }
         .vlst-card--soon:hover::before { opacity: 0; }
         .vlst-soon-badge {
           position: absolute;
           top: 14px; right: 14px;
           font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
-          color: #06B6D4;
+          color: #0CC7E8;
           padding: 3px 10px;
           border-radius: 99px;
-          background: rgba(6,182,212,.1);
-          border: 1px solid rgba(6,182,212,.25);
+          background: rgba(12,199,232,.1);
+          border: 1px solid rgba(12,199,232,.25);
           z-index: 1;
         }
         .vlst-icon {
           width: 48px; height: 48px;
           border-radius: 13px;
-          background: rgba(139,92,246,.1);
-          border: 1px solid rgba(139,92,246,.18);
+          background: rgba(157,92,255,.1);
+          border: 1px solid rgba(157,92,255,.18);
           display: flex; align-items: center; justify-content: center;
           font-size: 22px;
           margin-bottom: 16px;
@@ -132,29 +132,29 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
         }
         .vlst-time {
           font-size: 12px; font-weight: 600;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           margin-bottom: 12px;
         }
-        .vlst-desc { font-size: 12px; color: #5A5A80; line-height: 1.65; margin-bottom: 16px; }
+        .vlst-desc { font-size: 12px; color: #8E8EB4; line-height: 1.65; margin-bottom: 16px; }
         .vlst-feats { list-style: none; display: flex; flex-direction: column; gap: 6px; }
         .vlst-feats li {
           font-size: 12px; color: #C4C4E0;
           display: flex; gap: 7px; align-items: flex-start;
         }
-        .vlst-feats li::before { content: '✓'; color: #8B5CF6; font-weight: 700; flex-shrink: 0; }
-        .vlst-feat-dim { color: #5A5A80 !important; }
-        .vlst-feat-dim::before { content: '–' !important; color: #272745 !important; }
+        .vlst-feats li::before { content: '✓'; color: #9D5CFF; font-weight: 700; flex-shrink: 0; }
+        .vlst-feat-dim { color: #8E8EB4 !important; }
+        .vlst-feat-dim::before { content: '–' !important; color: #383866 !important; }
         .vlst-tip {
           display: flex; gap: 12px; align-items: flex-start;
-          background: rgba(6,182,212,.04);
-          border: 1px solid rgba(6,182,212,.15);
+          background: rgba(12,199,232,.04);
+          border: 1px solid rgba(12,199,232,.15);
           border-radius: 12px;
           padding: 14px 16px;
         }
         .vlst-tip-ico { font-size: 18px; flex-shrink: 0; line-height: 1.4; }
         .vlst-tip-txt { font-size: 12px; color: #C4C4E0; line-height: 1.6; }
-        .vlst-tip-txt b { color: #06B6D4; font-weight: 600; }
+        .vlst-tip-txt b { color: #0CC7E8; font-weight: 600; }
 
         @media (max-width: 900px) {
           .vlst-grid { grid-template-columns: 1fr; }

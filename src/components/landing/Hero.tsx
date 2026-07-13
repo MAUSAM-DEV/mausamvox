@@ -24,9 +24,9 @@ function WaveCanvas() {
     window.addEventListener('resize', resize)
 
     const layers = [
-      { amp: 24, f: 0.016, spd: 0.038, alpha: 1,   lw: 2.2, color: 'rgba(139,92,246,' },
-      { amp: 15, f: 0.027, spd: 0.062, alpha: 0.55, lw: 1.5, color: 'rgba(236,72,153,' },
-      { amp: 9,  f: 0.04,  spd: 0.09,  alpha: 0.3,  lw: 1,   color: 'rgba(6,182,212,' },
+      { amp: 24, f: 0.016, spd: 0.038, alpha: 1,   lw: 2.2, color: 'rgba(157,92,255,' },
+      { amp: 15, f: 0.027, spd: 0.062, alpha: 0.55, lw: 1.5, color: 'rgba(249,69,158,' },
+      { amp: 9,  f: 0.04,  spd: 0.09,  alpha: 0.3,  lw: 1,   color: 'rgba(12,199,232,' },
     ]
 
     function frame() {
@@ -108,7 +108,7 @@ export function Hero() {
           height: '700px',
           borderRadius: '50%',
           background:
-            'radial-gradient(ellipse at 40% 35%, rgba(139,92,246,.28) 0%, rgba(236,72,153,.18) 35%, rgba(6,182,212,.12) 65%, transparent 80%)',
+            'radial-gradient(ellipse at 40% 35%, rgba(157,92,255,.28) 0%, rgba(249,69,158,.18) 35%, rgba(12,199,232,.12) 65%, transparent 80%)',
           filter: 'blur(48px)',
           animation: 'orbPulse 7s ease-in-out infinite',
           pointerEvents: 'none',
@@ -125,7 +125,7 @@ export function Hero() {
           width: '400px',
           height: '400px',
           borderRadius: '50%',
-          background: 'radial-gradient(ellipse, rgba(6,182,212,.15) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse, rgba(12,199,232,.15) 0%, transparent 70%)',
           filter: 'blur(60px)',
           animation: 'orbPulse 9s 2s ease-in-out infinite reverse',
           pointerEvents: 'none',
@@ -158,13 +158,13 @@ export function Hero() {
             gap: '8px',
             padding: '6px 16px',
             borderRadius: '999px',
-            border: '1px solid rgba(139,92,246,.35)',
-            background: 'rgba(139,92,246,.08)',
+            border: '1px solid rgba(157,92,255,.35)',
+            background: 'rgba(157,92,255,.08)',
             fontSize: '11px',
             fontWeight: 600,
             letterSpacing: '1.5px',
             textTransform: 'uppercase',
-            color: '#8B5CF6',
+            color: '#9D5CFF',
             marginBottom: '36px',
             animation: 'fadeUp 0.6s ease both',
           }}
@@ -174,8 +174,8 @@ export function Hero() {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: '#8B5CF6',
-              boxShadow: '0 0 8px #8B5CF6',
+              background: '#9D5CFF',
+              boxShadow: '0 0 8px #9D5CFF',
               animation: 'blip 2s ease infinite',
               display: 'inline-block',
               flexShrink: 0,
@@ -225,7 +225,7 @@ export function Hero() {
               fontWeight: 600,
               letterSpacing: '2px',
               textTransform: 'uppercase',
-              color: 'rgba(139,92,246,.5)',
+              color: 'rgba(157,92,255,.5)',
               textAlign: 'center',
             }}
           >
@@ -238,7 +238,7 @@ export function Hero() {
           style={{
             fontSize: '18px',
             fontWeight: 300,
-            color: '#606088',
+            color: '#9494BC',
             maxWidth: '580px',
             margin: '24px auto 0',
             lineHeight: 1.75,
@@ -269,7 +269,7 @@ export function Hero() {
               padding: '15px 38px',
               borderRadius: '10px',
               border: 'none',
-              background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+              background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
               color: '#fff',
               fontFamily: 'var(--font-grotesk), "Space Grotesk", sans-serif',
               fontSize: '15px',
@@ -282,7 +282,7 @@ export function Hero() {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 16px 44px rgba(139,92,246,.45)'
+              e.currentTarget.style.boxShadow = '0 16px 44px rgba(157,92,255,.45)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = ''
@@ -297,7 +297,7 @@ export function Hero() {
             style={{
               padding: '14px 34px',
               borderRadius: '10px',
-              border: '1px solid #2A2A4A',
+              border: '1px solid #3C3C6A',
               background: 'rgba(255,255,255,.03)',
               color: '#F0F0FF',
               fontFamily: 'var(--font-grotesk), "Space Grotesk", sans-serif',
@@ -311,12 +311,12 @@ export function Hero() {
               textDecoration: 'none',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(139,92,246,.5)'
+              e.currentTarget.style.borderColor = 'rgba(157,92,255,.5)'
               e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.background = 'rgba(139,92,246,.06)'
+              e.currentTarget.style.background = 'rgba(157,92,255,.06)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#2A2A4A'
+              e.currentTarget.style.borderColor = '#3C3C6A'
               e.currentTarget.style.transform = ''
               e.currentTarget.style.background = 'rgba(255,255,255,.03)'
             }}
@@ -370,7 +370,7 @@ function TrustChip({ label }: { label: string }) {
       style={{
         fontSize: '12px',
         fontWeight: 500,
-        color: '#606088',
+        color: '#9494BC',
         display: 'flex',
         alignItems: 'center',
         gap: '7px',

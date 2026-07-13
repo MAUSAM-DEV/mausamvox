@@ -444,86 +444,86 @@ export function SongStudioPage() {
           font-size: 24px; font-weight: 700; letter-spacing: -0.4px;
           color: #F0F0FF; margin: 0 0 6px;
         }
-        .ss-sub { font-size: 13px; color: #7878A0; line-height: 1.6; margin: 0; }
+        .ss-sub { font-size: 13px; color: #A0A0C8; line-height: 1.6; margin: 0; }
         .ss-card {
-          background: #09091A; border: 1px solid #1E1E3A;
+          background: #09091A; border: 1px solid #2E2E56;
           border-radius: 16px; padding: 24px; margin-bottom: 18px;
         }
         .ss-card--error { border-color: rgba(239,68,68,.3); }
         .ss-err-title { font-size: 14px; font-weight: 700; color: #F87171; margin-bottom: 6px; }
-        .ss-err-msg { font-size: 12px; color: #7878A0; line-height: 1.6; word-break: break-word; }
+        .ss-err-msg { font-size: 12px; color: #A0A0C8; line-height: 1.6; word-break: break-word; }
         .ss-lbl {
           display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-          font-size: 12px; font-weight: 600; color: #8888AA; margin: 16px 0 7px;
+          font-size: 12px; font-weight: 600; color: #A8A8CC; margin: 16px 0 7px;
         }
         .ss-lbl:first-child { margin-top: 0; }
-        .ss-opt { font-weight: 400; color: #5A5A80; }
-        .ss-hint { font-size: 10px; font-weight: 400; color: #5A5A80; text-align: right; }
+        .ss-opt { font-weight: 400; color: #8E8EB4; }
+        .ss-hint { font-size: 10px; font-weight: 400; color: #8E8EB4; text-align: right; }
         .ss-input, .ss-textarea {
-          width: 100%; background: #0E0E20; border: 1px solid #1E1E3A;
+          width: 100%; background: #0E0E20; border: 1px solid #2E2E56;
           border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #F0F0FF;
           outline: none; transition: border-color 0.2s; font-family: inherit;
         }
-        .ss-input:focus, .ss-textarea:focus { border-color: rgba(139,92,246,.5); }
+        .ss-input:focus, .ss-textarea:focus { border-color: rgba(157,92,255,.5); }
         .ss-input:disabled, .ss-textarea:disabled { opacity: 0.55; }
         .ss-textarea { resize: vertical; min-height: 160px; line-height: 1.6; }
         .ss-ai-toggle {
           align-self: flex-start;
           margin: 2px 0 4px;
           padding: 8px 14px; border-radius: 8px;
-          border: 1px solid rgba(139,92,246,.4); background: rgba(139,92,246,.08);
+          border: 1px solid rgba(157,92,255,.4); background: rgba(157,92,255,.08);
           color: #C4B5FD; font-family: Inter, sans-serif;
           font-size: 12px; font-weight: 600; cursor: pointer;
           transition: all 0.2s;
         }
-        .ss-ai-toggle:hover:not(:disabled) { border-color: #8B5CF6; background: rgba(139,92,246,.14); }
+        .ss-ai-toggle:hover:not(:disabled) { border-color: #9D5CFF; background: rgba(157,92,255,.14); }
         .ss-ai-toggle:disabled { opacity: 0.5; cursor: default; }
         .ss-ai-panel {
           display: flex; flex-direction: column; gap: 4px;
-          border: 1px solid rgba(139,92,246,.25); border-radius: 12px;
+          border: 1px solid rgba(157,92,255,.25); border-radius: 12px;
           padding: 14px 16px; margin-bottom: 8px;
-          background: rgba(139,92,246,.04);
+          background: rgba(157,92,255,.04);
         }
         .ss-ai-row { display: flex; gap: 10px; }
         .ss-ai-go {
           align-self: flex-start;
           margin-top: 10px;
           padding: 10px 20px; border-radius: 9px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: opacity 0.2s;
         }
         .ss-ai-go:disabled { opacity: 0.45; cursor: default; }
-        .ss-ai-note { font-size: 11px; color: #5A5A80; line-height: 1.6; margin: 10px 0 0; }
+        .ss-ai-note { font-size: 11px; color: #8E8EB4; line-height: 1.6; margin: 10px 0 0; }
         @media (max-width: 640px) { .ss-ai-row { flex-direction: column; } }
         .ss-durations { display: flex; gap: 8px; flex-wrap: wrap; }
         .ss-dur-btn {
-          padding: 8px 16px; border-radius: 8px; border: 1px solid #1E1E3A;
-          background: #0E0E20; color: #7878A0; font-size: 12px; font-weight: 600;
+          padding: 8px 16px; border-radius: 8px; border: 1px solid #2E2E56;
+          background: #0E0E20; color: #A0A0C8; font-size: 12px; font-weight: 600;
           cursor: pointer; transition: all 0.2s;
         }
-        .ss-dur-btn:hover:not(:disabled) { color: #F0F0FF; border-color: rgba(139,92,246,.35); }
+        .ss-dur-btn:hover:not(:disabled) { color: #F0F0FF; border-color: rgba(157,92,255,.35); }
         .ss-dur-btn--active {
-          background: linear-gradient(135deg,#8B5CF6,#EC4899); color: #fff;
+          background: linear-gradient(135deg,#9D5CFF,#F9459E); color: #fff;
           border-color: transparent;
         }
         .ss-dur-btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .ss-generate {
           display: block; width: 100%; margin-top: 20px;
           padding: 13px 22px; border-radius: 10px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.25s;
         }
-        .ss-generate:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .ss-generate:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .ss-generate:disabled { opacity: 0.7; cursor: progress; }
         .ss-progress-note {
-          margin-top: 10px; font-size: 12px; color: #7878A0; text-align: center;
+          margin-top: 10px; font-size: 12px; color: #A0A0C8; text-align: center;
         }
         .ss-disclaimer {
-          margin: 14px 0 0; font-size: 11px; color: #5A5A80; line-height: 1.6;
-          border-top: 1px solid #1E1E3A; padding-top: 12px;
+          margin: 14px 0 0; font-size: 11px; color: #8E8EB4; line-height: 1.6;
+          border-top: 1px solid #2E2E56; padding-top: 12px;
         }
         .ss-result-head { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
         .ss-result-ico { font-size: 24px; }
@@ -531,24 +531,24 @@ export function SongStudioPage() {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 16px; font-weight: 700; color: #F0F0FF; word-break: break-word;
         }
-        .ss-result-sub { font-size: 11px; color: #5A5A80; margin-top: 2px; }
+        .ss-result-sub { font-size: 11px; color: #8E8EB4; margin-top: 2px; }
         .ss-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
         .ss-btn-solid {
           padding: 11px 22px; border-radius: 9px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
-        .ss-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .ss-btn-solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .ss-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
         .ss-btn-ghost {
           display: inline-block; padding: 11px 22px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           text-decoration: none;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .ss-btn-ghost:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .ss-btn-ghost:hover { border-color: #9D5CFF; color: #9D5CFF; }
         @media (max-width: 900px) {
           .ss-shell { flex-direction: column; }
           .ss-main { padding: 24px 16px 60px; }

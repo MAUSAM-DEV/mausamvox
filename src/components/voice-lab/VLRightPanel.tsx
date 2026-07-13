@@ -67,7 +67,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
       <div className="vlrp">
         <div className="vlrp-head">
           <span className="vlrp-title">My Voices</span>
-          <span style={{ fontSize: 11, color: '#5A5A80' }}>{voices.length} saved</span>
+          <span style={{ fontSize: 11, color: '#8E8EB4' }}>{voices.length} saved</span>
         </div>
 
         <div className="vlrp-body">
@@ -238,7 +238,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
         }
         .vlrp-head {
           padding: 14px 16px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -250,58 +250,58 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
         }
         .vlrp-body {
           flex: 1; overflow-y: auto; padding: 10px;
-          scrollbar-width: thin; scrollbar-color: #2A2A4A transparent;
+          scrollbar-width: thin; scrollbar-color: #3C3C6A transparent;
         }
         .vlrp-body::-webkit-scrollbar { width: 4px; }
-        .vlrp-body::-webkit-scrollbar-thumb { background: #2A2A4A; border-radius: 2px; }
+        .vlrp-body::-webkit-scrollbar-thumb { background: #3C3C6A; border-radius: 2px; }
         .vlrp-item {
           background: #121225;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 10px; padding: 12px;
           margin-bottom: 8px; cursor: pointer;
           transition: all 0.25s;
           position: relative;
         }
-        .vlrp-item:hover { border-color: rgba(139,92,246,.28); transform: translateX(-2px); }
+        .vlrp-item:hover { border-color: rgba(157,92,255,.28); transform: translateX(-2px); }
         .vlrp-vi-top { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
         .vlrp-vi-av {
           width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-          background: linear-gradient(135deg, rgba(139,92,246,.3), rgba(236,72,153,.2));
-          border: 1px solid rgba(139,92,246,.25);
+          background: linear-gradient(135deg, rgba(157,92,255,.3), rgba(249,69,158,.2));
+          border: 1px solid rgba(157,92,255,.25);
           display: flex; align-items: center; justify-content: center; font-size: 14px;
         }
         .vlrp-vi-name { font-size: 12px; font-weight: 600; color: #F0F0FF; }
-        .vlrp-vi-type { font-size: 10px; color: #5A5A80; margin-top: 1px; }
+        .vlrp-vi-type { font-size: 10px; color: #8E8EB4; margin-top: 1px; }
         .vlrp-vi-badge {
           padding: 2px 8px; border-radius: 4px;
           font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
           text-transform: uppercase; flex-shrink: 0;
         }
         .vlrp-vi-badge--studio {
-          background: rgba(139,92,246,.1); color: #8B5CF6;
-          border: 1px solid rgba(139,92,246,.2);
+          background: rgba(157,92,255,.1); color: #9D5CFF;
+          border: 1px solid rgba(157,92,255,.2);
         }
         .vlrp-vi-badge--express {
-          background: rgba(6,182,212,.08); color: #06B6D4;
-          border: 1px solid rgba(6,182,212,.18);
+          background: rgba(12,199,232,.08); color: #0CC7E8;
+          border: 1px solid rgba(12,199,232,.18);
         }
-        .vlrp-vi-meta { font-size: 10px; color: #5A5A80; display: flex; gap: 10px; }
+        .vlrp-vi-meta { font-size: 10px; color: #8E8EB4; display: flex; gap: 10px; }
         .vlrp-vi-meta b { color: #C4C4E0; font-weight: 600; }
         .vlrp-vi-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
         .vlrp-vi-status--pending { color: #F59E0B; }
-        .vlrp-vi-status--training { color: #06B6D4; }
+        .vlrp-vi-status--training { color: #0CC7E8; }
         .vlrp-vi-status--ready { color: #10B981; }
         .vlrp-vi-status--failed { color: #EF4444; }
-        .vlrp-empty { font-size: 11px; color: #5A5A80; text-align: center; padding: 24px 8px; line-height: 1.6; }
-        .vlrp-foot { border-top: 1px solid #1E1E3A; padding: 10px; flex-shrink: 0; }
-        .vlrp-note { font-size: 10px; color: #5A5A80; text-align: center; line-height: 1.6; padding: 4px; }
-        .vlrp-note b { color: #8B5CF6; }
+        .vlrp-empty { font-size: 11px; color: #8E8EB4; text-align: center; padding: 24px 8px; line-height: 1.6; }
+        .vlrp-foot { border-top: 1px solid #2E2E56; padding: 10px; flex-shrink: 0; }
+        .vlrp-note { font-size: 10px; color: #8E8EB4; text-align: center; line-height: 1.6; padding: 4px; }
+        .vlrp-note b { color: #9D5CFF; }
 
         /* ── Delete button ── */
         .vlrp-del-btn {
           width: 26px; height: 26px; flex-shrink: 0;
           border-radius: 6px; border: none;
-          background: transparent; color: #5A5A80;
+          background: transparent; color: #8E8EB4;
           display: flex; align-items: center; justify-content: center;
           cursor: pointer; padding: 0; margin-left: 2px;
           opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -321,7 +321,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
           margin-bottom: 12px;
           display: flex; flex-direction: column; gap: 4px;
         }
-        .vlrp-confirm-sub { font-size: 10px; color: #5A5A80; }
+        .vlrp-confirm-sub { font-size: 10px; color: #8E8EB4; }
         .vlrp-confirm-btns { display: flex; gap: 8px; }
         .vlrp-confirm-del {
           padding: 7px 16px; border-radius: 6px; border: none;
@@ -332,15 +332,15 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
         .vlrp-confirm-del:hover { background: #DC2626; }
         .vlrp-confirm-cancel {
           padding: 7px 14px; border-radius: 6px;
-          border: 1px solid #272745; background: transparent;
+          border: 1px solid #383866; background: transparent;
           color: #C4C4E0; font-size: 12px; font-weight: 500; cursor: pointer;
           transition: border-color 0.2s, color 0.2s;
         }
-        .vlrp-confirm-cancel:hover { border-color: #5A5A80; color: #F0F0FF; }
+        .vlrp-confirm-cancel:hover { border-color: #8E8EB4; color: #F0F0FF; }
 
         /* ── Deleting state ── */
         .vlrp-item--deleting { opacity: 0.45; cursor: default; pointer-events: none; }
-        .vlrp-item--deleting:hover { border-color: #1E1E3A; transform: none; }
+        .vlrp-item--deleting:hover { border-color: #2E2E56; transform: none; }
 
         /* ── Voice Library publish ── */
         .vlrp-pub-btn {
@@ -353,32 +353,32 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
           transition: opacity 0.15s, filter 0.15s, background 0.15s;
         }
         .vlrp-item:hover .vlrp-pub-btn { opacity: 1; }
-        .vlrp-pub-btn:hover { filter: none; background: rgba(139,92,246,.12); }
+        .vlrp-pub-btn:hover { filter: none; background: rgba(157,92,255,.12); }
         .vlrp-pub-btn--on { opacity: 1; filter: none; }
-        .vlrp-vi-public { font-size: 10px; font-weight: 700; color: #8B5CF6; letter-spacing: 0.3px; }
+        .vlrp-vi-public { font-size: 10px; font-weight: 700; color: #9D5CFF; letter-spacing: 0.3px; }
         .vlrp-item--pub {
           cursor: default;
-          border-color: rgba(139,92,246,.3);
-          background: rgba(139,92,246,.04);
+          border-color: rgba(157,92,255,.3);
+          background: rgba(157,92,255,.04);
         }
-        .vlrp-item--pub:hover { transform: none; border-color: rgba(139,92,246,.35); }
+        .vlrp-item--pub:hover { transform: none; border-color: rgba(157,92,255,.35); }
         .vlrp-pub-bio {
           width: 100%; box-sizing: border-box; margin-bottom: 10px;
-          background: #0D0D22; border: 1px solid #2A2A4A; border-radius: 7px;
+          background: #0D0D22; border: 1px solid #3C3C6A; border-radius: 7px;
           padding: 8px 10px; color: #F0F0FF; font-size: 11px;
           font-family: Inter, sans-serif; outline: none;
         }
-        .vlrp-pub-bio:focus { border-color: #8B5CF6; }
-        .vlrp-pub-bio::placeholder { color: #4A4A6A; }
+        .vlrp-pub-bio:focus { border-color: #9D5CFF; }
+        .vlrp-pub-bio::placeholder { color: #6E6E96; }
         .vlrp-pub-consent {
           display: flex; gap: 8px; align-items: flex-start;
           font-size: 10px; color: #C4C4E0; line-height: 1.5;
           margin-bottom: 12px; cursor: pointer;
         }
-        .vlrp-pub-consent input { margin-top: 1px; accent-color: #8B5CF6; cursor: pointer; }
+        .vlrp-pub-consent input { margin-top: 1px; accent-color: #9D5CFF; cursor: pointer; }
         .vlrp-pub-go {
           padding: 7px 16px; border-radius: 6px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
           transition: opacity 0.2s;
         }
@@ -388,7 +388,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
           .vlrp {
             width: 100% !important;
             height: auto !important;
-            border-top: 1px solid #1E1E3A;
+            border-top: 1px solid #2E2E56;
           }
           .vlrp-body { max-height: 300px; }
         }

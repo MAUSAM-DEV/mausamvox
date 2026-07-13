@@ -174,7 +174,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
       <style suppressHydrationWarning>{`
         .vlrec-card {
           background: #121225;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           overflow: hidden;
           animation: vlFadeUp 0.3s ease;
@@ -191,7 +191,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         .vlrec-tabs {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
         }
         .vlrec-tab {
           padding: 16px 14px;
@@ -205,17 +205,17 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
           text-align: left;
           border-bottom: 2px solid transparent;
         }
-        .vlrec-tab:hover { background: rgba(139,92,246,.04); }
-        .vlrec-tab--active { background: rgba(139,92,246,.06); border-bottom-color: #8B5CF6; }
+        .vlrec-tab:hover { background: rgba(157,92,255,.04); }
+        .vlrec-tab--active { background: rgba(157,92,255,.06); border-bottom-color: #9D5CFF; }
         .vlrec-tab-label {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; color: #F0F0FF;
         }
-        .vlrec-tab-desc { font-size: 11px; color: #5A5A80; }
+        .vlrec-tab-desc { font-size: 11px; color: #8E8EB4; }
         .vlrec-body { padding: 32px 24px; }
         .vlrec-script {
           margin: 0 auto 16px; max-width: 560px;
-          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 12px;
+          background: #0E0E20; border: 1px solid #2E2E56; border-radius: 12px;
           padding: 12px 14px;
         }
         .vlrec-script-head {
@@ -227,11 +227,11 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
           font-size: 12px; font-weight: 600; color: #A78BFA; letter-spacing: 0.2px;
         }
         .vlrec-script-shuffle {
-          border: 1px solid #2A2A4A; background: transparent; color: #8B5CF6;
+          border: 1px solid #3C3C6A; background: transparent; color: #9D5CFF;
           font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
-        .vlrec-script-shuffle:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.5); }
+        .vlrec-script-shuffle:hover { background: rgba(157,92,255,.1); border-color: rgba(157,92,255,.5); }
         .vlrec-script-text {
           margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: #E2E2F5;
         }
@@ -242,25 +242,25 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         .vlrec-script-tip strong { color: #C4B5FD; font-weight: 600; }
         .vlrec-save-row {
           display: flex; gap: 10px; padding: 16px 24px;
-          border-top: 1px solid #1E1E3A; background: rgba(139,92,246,.02);
+          border-top: 1px solid #2E2E56; background: rgba(157,92,255,.02);
           flex-wrap: wrap;
         }
         .vlrec-name-input {
           flex: 1; min-width: 160px;
-          background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 8px;
+          background: #0E0E20; border: 1px solid #2E2E56; border-radius: 8px;
           padding: 10px 12px; font-size: 13px; color: #F0F0FF; outline: none;
           transition: border-color 0.2s;
         }
-        .vlrec-name-input:focus { border-color: rgba(139,92,246,.5); }
+        .vlrec-name-input:focus { border-color: rgba(157,92,255,.5); }
         .vlrec-save-btn {
           padding: 10px 22px; border-radius: 8px; border: none;
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
           white-space: nowrap;
         }
-        .vlrec-save-btn:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .vlrec-save-btn:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .vlrec-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .vlrec-save-error { padding: 0 24px 16px; font-size: 12px; color: #F87171; }
 

@@ -31,7 +31,7 @@ export function LangStrip() {
           fontWeight: 600,
           letterSpacing: '2.5px',
           textTransform: 'uppercase',
-          color: '#606088',
+          color: '#9494BC',
           marginBottom: '28px',
         }}
       >
@@ -52,7 +52,7 @@ function LangPill({ label }: { label: string }) {
       style={{
         padding: '7px 18px',
         borderRadius: '999px',
-        border: '1px solid #1E1E3A',
+        border: '1px solid #2E2E56',
         background: '#0F0F22',
         fontSize: '13px',
         fontWeight: 500,
@@ -62,12 +62,12 @@ function LangPill({ label }: { label: string }) {
         display: 'inline-block',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#8B5CF6'
+        e.currentTarget.style.borderColor = '#9D5CFF'
         e.currentTarget.style.color = '#F0F0FF'
-        e.currentTarget.style.background = 'rgba(139,92,246,.08)'
+        e.currentTarget.style.background = 'rgba(157,92,255,.08)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#1E1E3A'
+        e.currentTarget.style.borderColor = '#2E2E56'
         e.currentTarget.style.color = '#C8C8E8'
         e.currentTarget.style.background = '#0F0F22'
       }}

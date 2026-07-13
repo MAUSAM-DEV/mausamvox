@@ -99,7 +99,7 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
       <style suppressHydrationWarning>{`
         .vltr-stage {
           background: #121225;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 14px;
           padding: 44px 32px;
           display: flex;
@@ -119,13 +119,13 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
           position: absolute;
           top: -100px; left: 50%; transform: translateX(-50%);
           width: 480px; height: 280px; border-radius: 50%;
-          background: radial-gradient(ellipse, rgba(139,92,246,.14), transparent 70%);
+          background: radial-gradient(ellipse, rgba(157,92,255,.14), transparent 70%);
           pointer-events: none;
         }
         .vltr-orb {
           width: 110px; height: 110px; border-radius: 50%;
           margin-bottom: 20px; position: relative;
-          background: radial-gradient(circle, rgba(139,92,246,.4), rgba(236,72,153,.18) 55%, transparent 75%);
+          background: radial-gradient(circle, rgba(157,92,255,.4), rgba(249,69,158,.18) 55%, transparent 75%);
           animation: vltrOrb 3.2s ease-in-out infinite;
         }
         .vltr-orb--err {
@@ -142,8 +142,8 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
         .vltr-orb--err::after { content: '⚠️'; }
         .vltr-tier {
           font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
-          color: #8B5CF6; background: rgba(139,92,246,.1);
-          border: 1px solid rgba(139,92,246,.22);
+          color: #9D5CFF; background: rgba(157,92,255,.1);
+          border: 1px solid rgba(157,92,255,.22);
           padding: 3px 10px; border-radius: 99px;
           margin-bottom: 12px; position: relative;
         }
@@ -152,7 +152,7 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
           font-size: 20px; font-weight: 600; color: #F0F0FF;
           margin-bottom: 6px; position: relative;
         }
-        .vltr-sub { font-size: 12px; color: #5A5A80; margin-bottom: 28px; position: relative; }
+        .vltr-sub { font-size: 12px; color: #8E8EB4; margin-bottom: 28px; position: relative; }
         .vltr-quality { width: 100%; max-width: 420px; position: relative; }
 
         .vltr-stages {
@@ -164,31 +164,31 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
           width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
           display: flex; align-items: center; justify-content: center;
           font-size: 11px; font-weight: 700;
-          border: 1px solid #272745; background: #1E1E3A; color: #5A5A80;
+          border: 1px solid #383866; background: #2E2E56; color: #8E8EB4;
           transition: all 0.3s;
         }
-        .vltr-stg--pending { color: #5A5A80; }
+        .vltr-stg--pending { color: #8E8EB4; }
         .vltr-stg--done { color: #C4C4E0; }
         .vltr-stg--done .vltr-stg-dot {
           background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); color: #10B981;
         }
         .vltr-stg--active { color: #F0F0FF; font-weight: 600; }
         .vltr-stg--active .vltr-stg-dot {
-          background: #8B5CF6; border-color: #8B5CF6; color: #fff;
-          box-shadow: 0 0 0 0 rgba(139,92,246,.5);
+          background: #9D5CFF; border-color: #9D5CFF; color: #fff;
+          box-shadow: 0 0 0 0 rgba(157,92,255,.5);
           animation: vltrPulse 1.6s ease-in-out infinite;
         }
         @keyframes vltrPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.5); }
-          50%      { box-shadow: 0 0 0 6px rgba(139,92,246,0); }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(157,92,255,.5); }
+          50%      { box-shadow: 0 0 0 6px rgba(157,92,255,0); }
         }
 
         .vltr-bar {
-          height: 6px; background: #1E1E3A; border-radius: 3px; overflow: hidden; position: relative;
+          height: 6px; background: #2E2E56; border-radius: 3px; overflow: hidden; position: relative;
         }
         .vltr-bar-ind {
           position: absolute; top: 0; left: 0; height: 100%; width: 40%; border-radius: 3px;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           animation: vltrSlide 1.4s ease-in-out infinite;
         }
         @keyframes vltrSlide {
@@ -196,7 +196,7 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
           100% { left: 100%; }
         }
 
-        .vltr-tq-note { font-size: 11px; color: #5A5A80; margin-top: 16px; line-height: 1.6; }
+        .vltr-tq-note { font-size: 11px; color: #8E8EB4; margin-top: 16px; line-height: 1.6; }
         .vltr-tq-note b { color: #C4C4E0; }
 
         .vltr-err-box { width: 100%; max-width: 420px; position: relative; }
@@ -208,22 +208,22 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
         }
         .vltr-retry {
           padding: 11px 28px; border-radius: 8px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s;
         }
-        .vltr-retry:hover { box-shadow: 0 8px 26px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .vltr-retry:hover { box-shadow: 0 8px 26px rgba(157,92,255,.4); transform: translateY(-1px); }
 
         .vltr-tip {
           display: flex; gap: 12px; align-items: flex-start;
-          background: rgba(6,182,212,.04);
-          border: 1px solid rgba(6,182,212,.15);
+          background: rgba(12,199,232,.04);
+          border: 1px solid rgba(12,199,232,.15);
           border-radius: 12px; padding: 14px 16px;
         }
         .vltr-tip-ico { font-size: 18px; flex-shrink: 0; line-height: 1.4; }
         .vltr-tip-txt { font-size: 12px; color: #C4C4E0; line-height: 1.6; }
-        .vltr-tip-txt b { color: #06B6D4; font-weight: 600; }
+        .vltr-tip-txt b { color: #0CC7E8; font-weight: 600; }
 
         @media (max-width: 900px) {
           .vltr-stage { padding: 32px 18px; }

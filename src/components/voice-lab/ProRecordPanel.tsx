@@ -216,22 +216,22 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
 
       <style suppressHydrationWarning>{`
         .pr-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-        .pr-status { font-size: 13px; color: #8B5CF6; padding: 16px 0; }
+        .pr-status { font-size: 13px; color: #9D5CFF; padding: 16px 0; }
         .pr-select-wrap { position: relative; width: 100%; max-width: 360px; }
         .pr-select {
-          width: 100%; background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 8px;
+          width: 100%; background: #0E0E20; border: 1px solid #2E2E56; border-radius: 8px;
           padding: 9px 28px 9px 12px; font-size: 13px; color: #C4C4E0; outline: none;
           cursor: pointer; appearance: none; transition: border-color 0.2s;
         }
-        .pr-select:focus { border-color: rgba(139,92,246,.5); }
+        .pr-select:focus { border-color: rgba(157,92,255,.5); }
         .pr-select:disabled { opacity: 0.6; cursor: not-allowed; }
-        .pr-select-arrow { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #5A5A80; pointer-events: none; font-size: 11px; }
-        .pr-meta { font-size: 11px; color: #5A5A80; }
-        .pr-meter-track { width: 100%; max-width: 360px; height: 10px; background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 5px; overflow: hidden; }
+        .pr-select-arrow { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #8E8EB4; pointer-events: none; font-size: 11px; }
+        .pr-meta { font-size: 11px; color: #8E8EB4; }
+        .pr-meter-track { width: 100%; max-width: 360px; height: 10px; background: #0E0E20; border: 1px solid #2E2E56; border-radius: 5px; overflow: hidden; }
         .pr-meter-fill { height: 100%; transition: width 0.08s linear, background 0.15s; }
         .pr-timer { font-family: var(--font-grotesk), 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #C4C4E0; }
         .pr-timer--ok { color: #10B981; }
-        .pr-timer-min { font-size: 11px; font-weight: 400; color: #5A5A80; }
+        .pr-timer-min { font-size: 11px; font-weight: 400; color: #8E8EB4; }
         .pr-audio { width: 100%; max-width: 420px; }
         .pr-warn { font-size: 12px; color: #F59E0B; max-width: 420px; }
         .pr-error { font-size: 13px; color: #F87171; max-width: 420px; }
@@ -240,12 +240,12 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
         }
-        .pr-btn--main { background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4); color: #fff; }
-        .pr-btn--main:hover { box-shadow: 0 8px 24px rgba(139,92,246,.4); transform: translateY(-1px); }
+        .pr-btn--main { background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8); color: #fff; }
+        .pr-btn--main:hover { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .pr-btn--stop { background: #EF4444; color: #fff; }
         .pr-btn--stop:hover { box-shadow: 0 8px 24px rgba(239,68,68,.4); }
-        .pr-btn--outline { background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0; }
-        .pr-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .pr-btn--outline { background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0; }
+        .pr-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
       `}</style>
     </div>
   )

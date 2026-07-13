@@ -16,12 +16,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         }
         .au-orb1 {
           width: 520px; height: 520px; top: -160px; left: -100px;
-          background: radial-gradient(circle, rgba(139,92,246,.15), transparent 70%);
+          background: radial-gradient(circle, rgba(157,92,255,.15), transparent 70%);
           animation: auDrift1 11s ease-in-out infinite;
         }
         .au-orb2 {
           width: 420px; height: 420px; bottom: -120px; right: -80px;
-          background: radial-gradient(circle, rgba(236,72,153,.1), transparent 70%);
+          background: radial-gradient(circle, rgba(249,69,158,.1), transparent 70%);
           animation: auDrift2 13s ease-in-out infinite;
         }
         @keyframes auDrift1 {
@@ -55,7 +55,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         /* ── card ──────────────────────────────────────── */
         .au-card {
           width: 100%; max-width: 420px;
-          background: #0D0D1F; border: 1px solid #1E1E3A; border-radius: 20px;
+          background: #0D0D1F; border: 1px solid #2E2E56; border-radius: 20px;
           padding: 40px 36px;
           animation: auSlide .45s cubic-bezier(.22,.8,.36,1);
         }
@@ -77,7 +77,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           margin-bottom: 6px; text-align: center;
         }
         .au-subtitle {
-          font-size: 14px; color: #5A5A80; text-align: center; margin-bottom: 28px;
+          font-size: 14px; color: #8E8EB4; text-align: center; margin-bottom: 28px;
           font-family: var(--font-inter), 'Inter', sans-serif;
         }
 
@@ -93,13 +93,13 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         }
         .au-input {
           width: 100%; padding: 13px 16px; border-radius: 10px;
-          background: #080814; border: 1px solid #1E1E3A; color: #F0F0FF;
+          background: #080814; border: 1px solid #2E2E56; color: #F0F0FF;
           font-family: var(--font-inter), 'Inter', sans-serif;
           font-size: 14px; outline: none; transition: border-color .2s;
           box-sizing: border-box;
         }
-        .au-input:focus { border-color: rgba(139,92,246,.6); }
-        .au-input::placeholder { color: #3A3A60; }
+        .au-input:focus { border-color: rgba(157,92,255,.6); }
+        .au-input::placeholder { color: #4A4A7A; }
 
         /* ── password show/hide ────────────────────────── */
         .au-pw-wrap { position: relative; }
@@ -107,7 +107,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         .au-pw-toggle {
           position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
           background: none; border: none; padding: 0; cursor: pointer;
-          color: #3A3A60; transition: color .2s; display: flex; align-items: center;
+          color: #4A4A7A; transition: color .2s; display: flex; align-items: center;
           line-height: 0;
         }
         .au-pw-toggle:hover { color: #C4C4E0; }
@@ -115,26 +115,26 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         /* ── button ────────────────────────────────────── */
         .au-btn {
           width: 100%; padding: 14px; border-radius: 10px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 15px; font-weight: 600; cursor: pointer; transition: all .28s;
           letter-spacing: .2px; margin-top: 4px;
         }
-        .au-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(139,92,246,.4); }
+        .au-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(157,92,255,.4); }
         .au-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
 
         /* ── links ─────────────────────────────────────── */
         .au-link {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           font-weight: 600; text-decoration: none;
         }
         .au-link-sm {
-          font-size: 12px; color: #5A5A80; text-decoration: none; transition: color .2s;
+          font-size: 12px; color: #8E8EB4; text-decoration: none; transition: color .2s;
         }
-        .au-link-sm:hover { color: #8B5CF6; }
+        .au-link-sm:hover { color: #9D5CFF; }
         .au-footer-link {
-          font-size: 13px; color: #5A5A80; text-align: center; margin-top: 22px;
+          font-size: 13px; color: #8E8EB4; text-align: center; margin-top: 22px;
           font-family: var(--font-inter), 'Inter', sans-serif;
         }
 
@@ -162,7 +162,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           font-size: 20px; font-weight: 700; color: #F0F0FF; margin-bottom: 10px;
         }
         .au-sent-sub {
-          font-size: 13px; color: #5A5A80; line-height: 1.65;
+          font-size: 13px; color: #8E8EB4; line-height: 1.65;
           font-family: var(--font-inter), 'Inter', sans-serif;
         }
 

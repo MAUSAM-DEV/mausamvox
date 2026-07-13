@@ -172,9 +172,9 @@ function UploadWaveCanvas() {
       const W = canvas.offsetWidth
       const H = canvas.offsetHeight
       const grd = ctx.createLinearGradient(0, 0, W, 0)
-      grd.addColorStop(0, 'rgba(139,92,246,.7)')
-      grd.addColorStop(0.5, 'rgba(236,72,153,.7)')
-      grd.addColorStop(1, 'rgba(6,182,212,.7)')
+      grd.addColorStop(0, 'rgba(157,92,255,.7)')
+      grd.addColorStop(0.5, 'rgba(249,69,158,.7)')
+      grd.addColorStop(1, 'rgba(12,199,232,.7)')
       ctx.fillStyle = grd
       const step = 3.5
       for (let i = 0; i < W / step; i++) {
@@ -195,7 +195,7 @@ function UploadWaveCanvas() {
         height: '48px',
         borderRadius: '8px',
         background: '#0E0E20',
-        border: '1px solid #1E1E3A',
+        border: '1px solid #2E2E56',
       }}
     />
   )
@@ -999,13 +999,13 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           font-size: 20px; font-weight: 700; color: #F0F0FF;
           letter-spacing: -0.5px; margin-bottom: 4px;
         }
-        .vs-panel-sub { font-size: 13px; color: #5A5A80; margin-bottom: 28px; }
+        .vs-panel-sub { font-size: 13px; color: #8E8EB4; margin-bottom: 28px; }
 
         /* ── upload mode toggle ── */
         .vs-upload-mode {
           display: flex;
           background: #0E0E20;
-          border: 1px solid #1E1E3A;
+          border: 1px solid #2E2E56;
           border-radius: 8px;
           padding: 3px;
           gap: 2px;
@@ -1021,20 +1021,20 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           cursor: pointer;
           transition: all 0.2s;
           background: transparent;
-          color: #7878A0;
+          color: #A0A0C8;
         }
-        .vs-upload-mode-btn:hover { color: #F0F0FF; background: #1E1E3A; }
+        .vs-upload-mode-btn:hover { color: #F0F0FF; background: #2E2E56; }
         .vs-upload-mode-btn--active {
-          background: linear-gradient(135deg,#8B5CF6,#EC4899);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E);
           color: #fff;
           font-weight: 600;
         }
 
         /* ── detected stems summary ── */
-        .vs-uz-folder-link { color: #8B5CF6; text-decoration: underline; cursor: pointer; }
+        .vs-uz-folder-link { color: #9D5CFF; text-decoration: underline; cursor: pointer; }
         .vs-detected-card {
-          border: 1px solid #1E1E3A; border-radius: 12px;
-          padding: 14px; margin: 14px 0; background: rgba(139,92,246,.02);
+          border: 1px solid #2E2E56; border-radius: 12px;
+          padding: 14px; margin: 14px 0; background: rgba(157,92,255,.02);
         }
         .vs-detected-missing {
           font-size: 12px; color: #F59E0B; margin-bottom: 10px;
@@ -1043,159 +1043,159 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         .vs-detected-row {
           display: flex; align-items: center; gap: 10px;
           padding: 9px 10px; border-radius: 8px;
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
         }
         .vs-detected-row--error { border-color: rgba(239,68,68,.35); }
         .vs-detected-icon { font-size: 16px; flex-shrink: 0; }
         .vs-detected-info { flex: 1; min-width: 0; }
         .vs-detected-name { font-size: 12px; font-weight: 600; color: #F0F0FF; overflow-wrap: anywhere; }
-        .vs-detected-sub { font-size: 10px; color: #5A5A80; }
+        .vs-detected-sub { font-size: 10px; color: #8E8EB4; }
         .vs-detected-row--error .vs-detected-sub { color: #F87171; }
         .vs-detected-badge {
           padding: 3px 9px; border-radius: 99px;
           font-size: 10px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
-          background: #1E1E3A; color: #C4C4E0;
+          background: #2E2E56; color: #C4C4E0;
         }
         .vs-detected-badge--vocals,
         .vs-detected-badge--instrumental {
-          background: rgba(139,92,246,.12); color: #8B5CF6;
+          background: rgba(157,92,255,.12); color: #9D5CFF;
         }
         .vs-detected-badge--unknown { background: rgba(239,68,68,.1); color: #F87171; }
         .vs-detected-select {
-          background: #0E0E20; border: 1px solid rgba(139,92,246,.5); border-radius: 6px;
+          background: #0E0E20; border: 1px solid rgba(157,92,255,.5); border-radius: 6px;
           padding: 4px 6px; font-size: 11px; color: #F0F0FF; flex-shrink: 0;
         }
         .vs-detected-edit, .vs-detected-remove {
-          width: 22px; height: 22px; border-radius: 6px; border: 1px solid #2A2A4A;
-          background: transparent; color: #7878A0; font-size: 11px; cursor: pointer;
+          width: 22px; height: 22px; border-radius: 6px; border: 1px solid #3C3C6A;
+          background: transparent; color: #A0A0C8; font-size: 11px; cursor: pointer;
           flex-shrink: 0; display: flex; align-items: center; justify-content: center;
           transition: all 0.2s;
         }
-        .vs-detected-edit:hover, .vs-detected-remove:hover { border-color: #8B5CF6; color: #8B5CF6; }
+        .vs-detected-edit:hover, .vs-detected-remove:hover { border-color: #9D5CFF; color: #9D5CFF; }
 
         /* ── drop zone ── */
         .vs-upload-zone {
-          border: 1.5px dashed #2A2A4A; border-radius: 14px;
+          border: 1.5px dashed #3C3C6A; border-radius: 14px;
           padding: 48px 24px; text-align: center; cursor: pointer;
-          transition: all 0.2s; background: rgba(139,92,246,.02);
+          transition: all 0.2s; background: rgba(157,92,255,.02);
         }
         .vs-upload-zone:hover,
         .vs-upload-zone--drag {
-          border-color: rgba(139,92,246,.5);
-          background: rgba(139,92,246,.05);
+          border-color: rgba(157,92,255,.5);
+          background: rgba(157,92,255,.05);
         }
         .vs-uz-icon { font-size: 32px; margin-bottom: 12px; }
         .vs-uz-title {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 16px; font-weight: 600; color: #F0F0FF; margin-bottom: 6px;
         }
-        .vs-uz-sub { font-size: 13px; color: #5A5A80; margin-bottom: 8px; }
-        .vs-uz-formats { font-size: 11px; color: #3A3A60; letter-spacing: 0.5px; }
+        .vs-uz-sub { font-size: 13px; color: #8E8EB4; margin-bottom: 8px; }
+        .vs-uz-formats { font-size: 11px; color: #4A4A7A; letter-spacing: 0.5px; }
 
         /* ── progress zone ── */
         .vs-progress-zone {
-          border: 1px solid #1E1E3A; border-radius: 14px;
-          padding: 40px 24px; text-align: center; background: rgba(139,92,246,.02);
+          border: 1px solid #2E2E56; border-radius: 14px;
+          padding: 40px 24px; text-align: center; background: rgba(157,92,255,.02);
           display: flex; flex-direction: column; align-items: center; gap: 10px;
         }
         .vs-prog-spinner {
           width: 36px; height: 36px; border-radius: 50%;
-          border: 3px solid #1E1E3A;
-          border-top-color: #8B5CF6;
+          border: 3px solid #2E2E56;
+          border-top-color: #9D5CFF;
           animation: vsSpin 0.8s linear infinite;
         }
-        .vs-prog-spinner--purple { border-top-color: #EC4899; }
+        .vs-prog-spinner--purple { border-top-color: #F9459E; }
         @keyframes vsSpin { to { transform: rotate(360deg); } }
         .vs-prog-file { font-size: 13px; font-weight: 600; color: #F0F0FF; margin-top: 4px; }
-        .vs-prog-label { font-size: 13px; color: #8B5CF6; }
-        .vs-prog-sub { font-size: 11px; color: #5A5A80; }
+        .vs-prog-label { font-size: 13px; color: #9D5CFF; }
+        .vs-prog-sub { font-size: 11px; color: #8E8EB4; }
 
         /* ── loaded zone ── */
         .vs-loaded-zone {
-          border: 1px solid #2A2A4A; border-radius: 14px;
-          padding: 18px; background: rgba(139,92,246,.03);
+          border: 1px solid #3C3C6A; border-radius: 14px;
+          padding: 18px; background: rgba(157,92,255,.03);
           display: flex; flex-direction: column; gap: 14px;
         }
         .vs-file-header { display: flex; align-items: center; gap: 12px; }
         .vs-file-ico { font-size: 22px; flex-shrink: 0; }
         .vs-file-name { font-size: 14px; font-weight: 600; color: #F0F0FF; margin-bottom: 2px; }
-        .vs-file-meta { font-size: 11px; color: #5A5A80; }
+        .vs-file-meta { font-size: 11px; color: #8E8EB4; }
         .vs-file-remove {
-          margin-left: auto; font-size: 13px; color: #5A5A80; cursor: pointer;
+          margin-left: auto; font-size: 13px; color: #8E8EB4; cursor: pointer;
           padding: 4px 8px; border-radius: 4px; transition: all 0.2s;
         }
-        .vs-file-remove:hover { color: #F0F0FF; background: #1E1E3A; }
+        .vs-file-remove:hover { color: #F0F0FF; background: #2E2E56; }
 
         /* ── stem cards ── */
         .vs-stems { display: flex; flex-direction: column; gap: 8px; }
         .vs-stem-card {
           display: flex; align-items: center; gap: 12px;
           padding: 12px 14px; border-radius: 10px;
-          background: #0E0E20; border: 1px solid #1E1E3A;
+          background: #0E0E20; border: 1px solid #2E2E56;
           cursor: pointer;
           transition: border-color 0.2s, background 0.2s;
         }
-        .vs-stem-card:hover { border-color: rgba(139,92,246,.4); background: rgba(139,92,246,.04); }
+        .vs-stem-card:hover { border-color: rgba(157,92,255,.4); background: rgba(157,92,255,.04); }
         .vs-stem-card--active {
-          border-color: #8B5CF6;
-          background: rgba(139,92,246,.07);
+          border-color: #9D5CFF;
+          background: rgba(157,92,255,.07);
         }
         .vs-stem-icon { font-size: 20px; flex-shrink: 0; }
         .vs-stem-name { font-size: 13px; font-weight: 600; color: #F0F0FF; margin-bottom: 1px; }
-        .vs-stem-hint { font-size: 11px; color: #5A5A80; }
+        .vs-stem-hint { font-size: 11px; color: #8E8EB4; }
         .vs-stem-actions {
           margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0;
         }
         .vs-stem-play-ico {
           width: 28px; height: 28px; border-radius: 50%;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff; font-size: 10px;
           display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 2px 8px rgba(139,92,246,.35);
+          box-shadow: 0 2px 8px rgba(157,92,255,.35);
           transition: transform 0.15s, box-shadow 0.15s;
           flex-shrink: 0;
         }
         .vs-stem-card:hover .vs-stem-play-ico {
           transform: scale(1.08);
-          box-shadow: 0 4px 12px rgba(139,92,246,.5);
+          box-shadow: 0 4px 12px rgba(157,92,255,.5);
         }
         .vs-stem-card--active .vs-stem-play-ico {
-          background: linear-gradient(135deg, #EC4899, #8B5CF6);
+          background: linear-gradient(135deg, #F9459E, #9D5CFF);
         }
         .vs-stem-dl {
-          font-size: 14px; color: #5A5A80;
+          font-size: 14px; color: #8E8EB4;
           width: 28px; height: 28px; border-radius: 6px;
-          background: #1A1A30; border: 1px solid #2A2A4A;
+          background: #1A1A30; border: 1px solid #3C3C6A;
           display: flex; align-items: center; justify-content: center;
           flex-shrink: 0; transition: color 0.2s, border-color 0.2s;
           text-decoration: none;
         }
-        .vs-stem-dl:hover { color: #C4C4E0; border-color: rgba(139,92,246,.4); }
+        .vs-stem-dl:hover { color: #C4C4E0; border-color: rgba(157,92,255,.4); }
         .vs-stem-pending {
           display: flex; align-items: center; gap: 10px;
           padding: 12px 14px; border-radius: 10px;
-          background: #0E0E20; border: 1px dashed rgba(139,92,246,.25);
+          background: #0E0E20; border: 1px dashed rgba(157,92,255,.25);
         }
         .vs-stem-pending-spin {
           width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;
-          border: 2px solid rgba(139,92,246,.2); border-top-color: #8B5CF6;
+          border: 2px solid rgba(157,92,255,.2); border-top-color: #9D5CFF;
           animation: vsSpin 0.8s linear infinite;
         }
-        .vs-stem-pending-label { font-size: 12px; font-weight: 600; color: #8B5CF6; }
-        .vs-stem-pending-sub { font-size: 10px; color: #5A5A80; margin-top: 2px; }
+        .vs-stem-pending-label { font-size: 12px; font-weight: 600; color: #9D5CFF; }
+        .vs-stem-pending-sub { font-size: 10px; color: #8E8EB4; margin-top: 2px; }
 
         /* ── zip download button ── */
         .vs-zip-btn {
           width: 100%; padding: 10px; border-radius: 10px;
-          border: 1px solid #2A2A4A;
-          background: #0E0E20; color: #8B5CF6;
+          border: 1px solid #3C3C6A;
+          background: #0E0E20; color: #9D5CFF;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.2s; letter-spacing: 0.2px;
         }
         .vs-zip-btn:hover:not(:disabled) {
-          border-color: rgba(139,92,246,.5);
-          background: rgba(139,92,246,.06);
+          border-color: rgba(157,92,255,.5);
+          background: rgba(157,92,255,.06);
         }
         .vs-zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1203,34 +1203,34 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         .vs-duet-toggle {
           display: flex; align-items: center; gap: 10px;
           padding: 10px 14px; margin-top: 10px;
-          border-radius: 10px; border: 1px solid #1E1E3A;
-          background: rgba(236,72,153,.03); cursor: pointer;
+          border-radius: 10px; border: 1px solid #2E2E56;
+          background: rgba(249,69,158,.03); cursor: pointer;
           user-select: none; transition: border-color 0.2s, background 0.2s;
         }
         .vs-duet-toggle:hover {
-          border-color: rgba(236,72,153,.3);
-          background: rgba(236,72,153,.06);
+          border-color: rgba(249,69,158,.3);
+          background: rgba(249,69,158,.06);
         }
-        .vs-duet-toggle-check { accent-color: #EC4899; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
+        .vs-duet-toggle-check { accent-color: #F9459E; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
         .vs-duet-toggle-text { font-size: 13px; color: #C4C4E0; flex: 1; }
         .vs-duet-toggle-gate {
-          font-size: 10px; font-weight: 600; color: #8B5CF6;
-          background: rgba(139,92,246,.12); padding: 2px 7px; border-radius: 99px; flex-shrink: 0;
+          font-size: 10px; font-weight: 600; color: #9D5CFF;
+          background: rgba(157,92,255,.12); padding: 2px 7px; border-radius: 99px; flex-shrink: 0;
         }
-        .vs-duet-toggle-cost { font-size: 11px; color: #EC4899; flex-shrink: 0; }
+        .vs-duet-toggle-cost { font-size: 11px; color: #F9459E; flex-shrink: 0; }
 
         /* ── duet split button (post-upload fallback) ── */
         .vs-duet-btn {
           width: 100%; margin-top: 8px; padding: 10px; border-radius: 10px;
-          border: 1px solid rgba(236,72,153,.4);
-          background: rgba(236,72,153,.06); color: #EC4899;
+          border: 1px solid rgba(249,69,158,.4);
+          background: rgba(249,69,158,.06); color: #F9459E;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.2s; letter-spacing: 0.2px;
         }
         .vs-duet-btn:hover:not(:disabled) {
-          border-color: rgba(236,72,153,.7);
-          background: rgba(236,72,153,.12);
+          border-color: rgba(249,69,158,.7);
+          background: rgba(249,69,158,.12);
         }
         .vs-duet-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .vs-duet-reason {
@@ -1253,7 +1253,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         /* ── continue button ── */
         .vs-continue-btn {
           width: 100%; padding: 12px; border-radius: 10px; border: none;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           color: #fff;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 14px; font-weight: 600; cursor: pointer;
@@ -1261,7 +1261,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         }
         .vs-continue-btn:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 10px 30px rgba(139,92,246,.4);
+          box-shadow: 0 10px 30px rgba(157,92,255,.4);
         }
         .vs-continue-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .vs-continue-btn--warn {
@@ -1295,8 +1295,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         .vs-supported-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 20px; }
         .vs-fmt-chip {
           padding: 4px 12px; border-radius: 99px;
-          background: #121225; border: 1px solid #1E1E3A;
-          font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #5A5A80;
+          background: #121225; border: 1px solid #2E2E56;
+          font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #8E8EB4;
         }
       `}</style>
     </>

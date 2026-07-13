@@ -42,7 +42,7 @@ export function LegalPage({ title, updated, children }: {
         }
         .lg-head {
           padding: 18px 40px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
         }
         .lg-main {
           flex: 1;
@@ -61,7 +61,7 @@ export function LegalPage({ title, updated, children }: {
         }
         .lg-updated {
           font-size: 12px;
-          color: #5A5A80;
+          color: #8E8EB4;
           margin: 0 0 36px;
         }
         .lg-main h2 {
@@ -82,10 +82,10 @@ export function LegalPage({ title, updated, children }: {
           padding-left: 22px;
         }
         .lg-main li { margin-bottom: 4px; }
-        .lg-main a { color: #8B5CF6; text-decoration: none; }
+        .lg-main a { color: #9D5CFF; text-decoration: none; }
         .lg-main a:hover { text-decoration: underline; }
         .lg-foot {
-          border-top: 1px solid #1E1E3A;
+          border-top: 1px solid #2E2E56;
           padding: 20px 40px;
           display: flex;
           align-items: center;
@@ -93,10 +93,10 @@ export function LegalPage({ title, updated, children }: {
           flex-wrap: wrap;
           gap: 12px;
           font-size: 12px;
-          color: #606088;
+          color: #9494BC;
         }
         .lg-foot-links { display: flex; gap: 20px; }
-        .lg-foot-links a { color: #606088; text-decoration: none; }
+        .lg-foot-links a { color: #9494BC; text-decoration: none; }
         .lg-foot-links a:hover { color: #F0F0FF; }
         @media (max-width: 640px) {
           .lg-head, .lg-foot { padding-left: 20px; padding-right: 20px; }

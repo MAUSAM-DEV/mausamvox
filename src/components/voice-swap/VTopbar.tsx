@@ -46,7 +46,7 @@ export function VTopbar({ step, onGoStep, labels }: VTopbarProps) {
       <style suppressHydrationWarning>{`
         .vs-topbar {
           height: 58px;
-          border-bottom: 1px solid #1E1E3A;
+          border-bottom: 1px solid #2E2E56;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -74,11 +74,11 @@ export function VTopbar({ step, onGoStep, labels }: VTopbarProps) {
           position: absolute;
           right: -4px;
           font-size: 16px;
-          color: #2A2A4A;
+          color: #3C3C6A;
         }
         .vs-step:last-child::after { display: none; }
-        .vs-step--pending { color: #5A5A80; }
-        .vs-step--done { color: #8B5CF6; }
+        .vs-step--pending { color: #8E8EB4; }
+        .vs-step--done { color: #9D5CFF; }
         .vs-step--active {
           color: #F0F0FF;
           font-weight: 600;
@@ -90,7 +90,7 @@ export function VTopbar({ step, onGoStep, labels }: VTopbarProps) {
           left: 16px;
           right: 16px;
           height: 2px;
-          background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
           border-radius: 2px 2px 0 0;
         }
         .vs-step-num {
@@ -107,17 +107,17 @@ export function VTopbar({ step, onGoStep, labels }: VTopbarProps) {
           transition: all 0.2s;
         }
         .vs-step--active .vs-step-num {
-          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          background: linear-gradient(135deg, #9D5CFF, #F9459E);
           color: #fff;
         }
         .vs-step--done .vs-step-num {
-          background: rgba(139,92,246,.15);
-          color: #8B5CF6;
+          background: rgba(157,92,255,.15);
+          color: #9D5CFF;
         }
         .vs-topbar-actions { display: flex; align-items: center; gap: 12px; }
         .vs-tb-back {
           font-size: 12px;
-          color: #5A5A80;
+          color: #8E8EB4;
           text-decoration: none;
           transition: color 0.2s;
         }

@@ -5,24 +5,24 @@
 /* ── scrollbar ── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: #05050F; }
-::-webkit-scrollbar-thumb { background: #8B5CF6; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #9D5CFF; border-radius: 2px; }
 
 /* ── gradient text utility ── */
 @layer utilities {
   .grad-text {
-    background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+    background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .grad-bg {
-    background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+    background: linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8);
   }
 
   .grad-border {
     background: linear-gradient(#13132A, #13132A) padding-box,
-                linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4) border-box;
+                linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8) border-box;
     border: 1px solid transparent;
   }
 }
@@ -40,7 +40,7 @@ input[type="range"] {
   -webkit-appearance: none;
   width: 100%;
   height: 4px;
-  background: #1E1E3A;
+  background: #2E2E56;
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -50,11 +50,11 @@ input[type="range"]::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #8B5CF6;
+  background: #9D5CFF;
   cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(157, 92, 255, 0.2);
   transition: box-shadow 0.2s;
 }
 input[type="range"]::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 0 5px rgba(157, 92, 255, 0.3);
 }

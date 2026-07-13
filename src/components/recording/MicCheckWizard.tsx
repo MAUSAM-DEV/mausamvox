@@ -58,22 +58,22 @@ const WIZARD_CSS = `
   .mcw-panel {
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     width: 100%; max-width: 360px; padding: 14px;
-    background: #0E0E20; border: 1px solid #1E1E3A; border-radius: 12px;
+    background: #0E0E20; border: 1px solid #2E2E56; border-radius: 12px;
     text-align: center;
   }
   .mcw-status { font-size: 13px; color: #C4C4E0; line-height: 1.5; }
-  .mcw-hint { font-size: 11px; color: #5A5A80; line-height: 1.5; }
+  .mcw-hint { font-size: 11px; color: #8E8EB4; line-height: 1.5; }
   .mcw-warn { font-size: 12px; color: #F59E0B; line-height: 1.5; }
   .mcw-error { font-size: 12px; color: #F87171; line-height: 1.5; }
   .mcw-meter-track {
     width: 100%; height: 10px; background: #05050F;
-    border: 1px solid #1E1E3A; border-radius: 5px; overflow: hidden;
+    border: 1px solid #2E2E56; border-radius: 5px; overflow: hidden;
   }
   .mcw-meter-fill { height: 100%; transition: width 0.08s linear, background 0.15s; }
   .mcw-count {
     font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
     font-size: 44px; font-weight: 700; line-height: 1;
-    background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+    background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .mcw-btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -82,12 +82,12 @@ const WIZARD_CSS = `
     font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
     cursor: pointer; transition: all 0.2s; border: none;
   }
-  .mcw-btn--solid { background: linear-gradient(135deg,#8B5CF6,#EC4899); color: #fff; }
-  .mcw-btn--solid:hover { box-shadow: 0 6px 18px rgba(139,92,246,.4); }
-  .mcw-btn--outline { background: transparent; border: 1px solid #2A2A4A; color: #C4C4E0; }
-  .mcw-btn--outline:hover { border-color: #8B5CF6; color: #8B5CF6; }
+  .mcw-btn--solid { background: linear-gradient(135deg,#9D5CFF,#F9459E); color: #fff; }
+  .mcw-btn--solid:hover { box-shadow: 0 6px 18px rgba(157,92,255,.4); }
+  .mcw-btn--outline { background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0; }
+  .mcw-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
   .mcw-cancel {
-    font-size: 11px; color: #5A5A80; background: none; border: none;
+    font-size: 11px; color: #8E8EB4; background: none; border: none;
     cursor: pointer; text-decoration: underline;
   }
   .mcw-cancel:hover { color: #C4C4E0; }
@@ -315,7 +315,7 @@ export function RecordingQualityMonitor({ meter }: { meter: MicMeter | null }) {
         .mcw-warn { font-size: 12px; color: #F59E0B; line-height: 1.5; text-align: center; }
         .mcw-meter-track {
           width: 100%; height: 10px; background: #05050F;
-          border: 1px solid #1E1E3A; border-radius: 5px; overflow: hidden;
+          border: 1px solid #2E2E56; border-radius: 5px; overflow: hidden;
         }
         .mcw-meter-fill { height: 100%; transition: width 0.08s linear, background 0.15s; }
       `}</style>

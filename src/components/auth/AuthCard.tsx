@@ -26,7 +26,7 @@ export function AuthCard({ children }: { children: ReactNode }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #3A3A60;
+          color: #4A4A7A;
           text-decoration: none;
           transition: color 0.2s, background 0.2s;
         }

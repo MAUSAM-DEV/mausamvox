@@ -30,7 +30,7 @@ export function CtaBand() {
           width: '600px',
           height: '300px',
           borderRadius: '50%',
-          background: 'radial-gradient(ellipse, rgba(139,92,246,.18), rgba(236,72,153,.1) 40%, transparent 70%)',
+          background: 'radial-gradient(ellipse, rgba(157,92,255,.18), rgba(249,69,158,.1) 40%, transparent 70%)',
           filter: 'blur(48px)',
           pointerEvents: 'none',
         }}
@@ -58,7 +58,7 @@ export function CtaBand() {
           Your voice.<br />
           <span className="grad-text">Anywhere in the world.</span>
         </h2>
-        <p style={{ fontSize: '16px', color: '#606088', maxWidth: '440px', margin: '0 auto 40px', lineHeight: 1.7 }}>
+        <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '440px', margin: '0 auto 40px', lineHeight: 1.7 }}>
           Clone it. Swap it. Share it. Start free — no card needed, no commitment.
         </p>
         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -68,7 +68,7 @@ export function CtaBand() {
               padding: '15px 38px',
               borderRadius: '10px',
               border: 'none',
-              background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+              background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
               color: '#fff',
               fontFamily: 'var(--font-grotesk), "Space Grotesk", sans-serif',
               fontSize: '15px',
@@ -81,7 +81,7 @@ export function CtaBand() {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 16px 44px rgba(139,92,246,.45)'
+              e.currentTarget.style.boxShadow = '0 16px 44px rgba(157,92,255,.45)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = ''
@@ -95,7 +95,7 @@ export function CtaBand() {
             style={{
               padding: '14px 34px',
               borderRadius: '10px',
-              border: '1px solid #2A2A4A',
+              border: '1px solid #3C3C6A',
               background: 'rgba(255,255,255,.03)',
               color: '#F0F0FF',
               fontFamily: 'var(--font-grotesk), "Space Grotesk", sans-serif',
@@ -107,12 +107,12 @@ export function CtaBand() {
               display: 'inline-block',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(139,92,246,.5)'
+              e.currentTarget.style.borderColor = 'rgba(157,92,255,.5)'
               e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.background = 'rgba(139,92,246,.06)'
+              e.currentTarget.style.background = 'rgba(157,92,255,.06)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#2A2A4A'
+              e.currentTarget.style.borderColor = '#3C3C6A'
               e.currentTarget.style.transform = ''
               e.currentTarget.style.background = 'rgba(255,255,255,.03)'
             }}

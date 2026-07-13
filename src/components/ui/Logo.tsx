@@ -17,9 +17,9 @@ export function LogoMark({ size = 38, className }: LogoProps) {
     >
       <defs>
         <linearGradient id="logoGrad" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#8B5CF6" />
-          <stop offset=".5" stopColor="#EC4899" />
-          <stop offset="1" stopColor="#06B6D4" />
+          <stop stopColor="#9D5CFF" />
+          <stop offset=".5" stopColor="#F9459E" />
+          <stop offset="1" stopColor="#0CC7E8" />
         </linearGradient>
       </defs>
       <rect x="1"  y="23" width="5" height="11" rx="2.5" fill="url(#logoGrad)" opacity=".45" />

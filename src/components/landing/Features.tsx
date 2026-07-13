@@ -72,9 +72,9 @@ const features = [
 ]
 
 const tagColors: Record<string, { bg: string; color: string; border: string }> = {
-  v: { bg: 'rgba(139,92,246,.1)',  color: '#8B5CF6', border: 'rgba(139,92,246,.2)' },
-  c: { bg: 'rgba(6,182,212,.08)',  color: '#06B6D4', border: 'rgba(6,182,212,.2)'  },
-  p: { bg: 'rgba(236,72,153,.08)', color: '#EC4899', border: 'rgba(236,72,153,.2)' },
+  v: { bg: 'rgba(157,92,255,.1)',  color: '#9D5CFF', border: 'rgba(157,92,255,.2)' },
+  c: { bg: 'rgba(12,199,232,.08)',  color: '#0CC7E8', border: 'rgba(12,199,232,.2)'  },
+  p: { bg: 'rgba(249,69,158,.08)', color: '#F9459E', border: 'rgba(249,69,158,.2)' },
   g: { bg: 'rgba(16,185,129,.08)', color: '#10B981', border: 'rgba(16,185,129,.2)' },
 }
 
@@ -111,7 +111,7 @@ export function Features() {
       >
         Everything you need<br />to own your sound.
       </h2>
-      <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
+      <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
         10 professional-grade tools built with quality controls, honest previews, and global language support.
       </p>
 
@@ -170,7 +170,7 @@ function FeatureCard({
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = '#0F0F22'
-        e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(139,92,246,.35)'
+        e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(157,92,255,.35)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = '#13132A'
@@ -187,8 +187,8 @@ function FeatureCard({
           justifyContent: 'center',
           fontSize: '22px',
           marginBottom: '22px',
-          background: 'rgba(139,92,246,.1)',
-          border: '1px solid rgba(139,92,246,.18)',
+          background: 'rgba(157,92,255,.1)',
+          border: '1px solid rgba(157,92,255,.18)',
         }}
       >
         {icon}
@@ -205,7 +205,7 @@ function FeatureCard({
       >
         {title}
       </h3>
-      <p style={{ fontSize: '13px', color: '#606088', lineHeight: 1.7 }}>{desc}</p>
+      <p style={{ fontSize: '13px', color: '#9494BC', lineHeight: 1.7 }}>{desc}</p>
 
       {pills && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '16px' }}>
@@ -216,9 +216,9 @@ function FeatureCard({
                 padding: '4px 10px',
                 borderRadius: '4px',
                 background: 'rgba(255,255,255,.04)',
-                border: '1px solid #1E1E3A',
+                border: '1px solid #2E2E56',
                 fontSize: '11px',
-                color: '#606088',
+                color: '#9494BC',
               }}
             >
               {p}

@@ -129,25 +129,25 @@ export function ShareVideoButton({ swapId, songName, onToast }: ShareVideoButton
       <style suppressHydrationWarning>{`
         .svb-btn {
           padding: 11px 18px; border-radius: 9px;
-          border: 1px solid #2A2A4A; background: transparent; color: #C4C4E0;
+          border: 1px solid #3C3C6A; background: transparent; color: #C4C4E0;
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 13px; font-weight: 600; cursor: pointer;
           transition: all 0.2s; white-space: nowrap;
         }
-        .svb-btn:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; }
+        .svb-btn:hover:not(:disabled) { border-color: #9D5CFF; color: #9D5CFF; }
         .svb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .svb-btn--solid {
-          background: linear-gradient(135deg,#8B5CF6,#EC4899,#06B6D4);
+          background: linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8);
           border: none; color: #fff;
         }
-        .svb-btn--solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(139,92,246,.4); color: #fff; }
+        .svb-btn--solid:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); color: #fff; }
         .svb-overlay {
           position: fixed; inset: 0; z-index: 1000;
           background: rgba(5,5,15,.8); backdrop-filter: blur(4px);
           display: flex; align-items: center; justify-content: center; padding: 20px;
         }
         .svb-modal {
-          background: #121225; border: 1px solid #2A2A4A; border-radius: 16px;
+          background: #121225; border: 1px solid #3C3C6A; border-radius: 16px;
           padding: 16px; width: 100%; max-width: 340px;
           display: flex; flex-direction: column; gap: 12px;
           max-height: 92vh; overflow-y: auto;
@@ -158,7 +158,7 @@ export function ShareVideoButton({ swapId, songName, onToast }: ShareVideoButton
           font-size: 15px; font-weight: 700; color: #F0F0FF;
         }
         .svb-close {
-          border: none; background: transparent; color: #5A5A80;
+          border: none; background: transparent; color: #8E8EB4;
           font-size: 15px; cursor: pointer; padding: 4px 8px;
         }
         .svb-close:hover { color: #F0F0FF; }
@@ -167,7 +167,7 @@ export function ShareVideoButton({ swapId, songName, onToast }: ShareVideoButton
           background: #05050F; display: block;
         }
         .svb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .svb-fine { margin: 0; font-size: 11px; color: #5A5A80; line-height: 1.5; }
+        .svb-fine { margin: 0; font-size: 11px; color: #8E8EB4; line-height: 1.5; }
       `}</style>
     </>
   )

@@ -124,7 +124,7 @@ export function Pricing() {
       >
         Simple, honest pricing.<br />Global &amp; India tiers.
       </h2>
-      <p style={{ fontSize: '16px', color: '#606088', maxWidth: '480px', lineHeight: 1.75 }}>
+      <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
         Prorated upgrades. 7-day refund. UPI + card support. No surprises.
       </p>
 
@@ -150,14 +150,14 @@ function PriceCard({ plan }: { plan: Plan }) {
     <div
       style={{
         background: '#13132A',
-        border: plan.popular ? 'none' : '1px solid #1E1E3A',
+        border: plan.popular ? 'none' : '1px solid #2E2E56',
         borderRadius: '16px',
         padding: '32px 28px',
         transition: 'transform 0.3s',
         position: 'relative',
         ...(plan.popular
           ? {
-              background: 'linear-gradient(#13132A, #13132A) padding-box, linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4) border-box',
+              background: 'linear-gradient(#13132A, #13132A) padding-box, linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8) border-box',
               border: '1px solid transparent',
             }
           : {}),
@@ -174,7 +174,7 @@ function PriceCard({ plan }: { plan: Plan }) {
             transform: 'translateX(-50%)',
             padding: '4px 16px',
             borderRadius: '999px',
-            background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+            background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
             color: '#fff',
             fontSize: '10px',
             fontWeight: 700,
@@ -187,7 +187,7 @@ function PriceCard({ plan }: { plan: Plan }) {
         </div>
       )}
 
-      <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#606088', marginBottom: '16px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#9494BC', marginBottom: '16px' }}>
         {plan.tier}
       </div>
 
@@ -204,7 +204,7 @@ function PriceCard({ plan }: { plan: Plan }) {
         >
           <sup style={{ fontSize: '22px', verticalAlign: 'super', letterSpacing: 0 }}>{plan.currency}</sup>
           {plan.price}
-          <sub style={{ fontSize: '14px', fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#606088', letterSpacing: 0 }}>
+          <sub style={{ fontSize: '14px', fontFamily: 'Inter, sans-serif', fontWeight: 400, color: '#9494BC', letterSpacing: 0 }}>
             {plan.period}
           </sub>
         </div>
@@ -224,17 +224,17 @@ function PriceCard({ plan }: { plan: Plan }) {
       )}
 
       {plan.india && (
-        <div style={{ fontSize: '13px', color: '#606088', marginTop: '6px', marginBottom: '20px' }}>
+        <div style={{ fontSize: '13px', color: '#9494BC', marginTop: '6px', marginBottom: '20px' }}>
           {plan.india}
         </div>
       )}
       {!plan.india && (
-        <div style={{ fontSize: '13px', color: '#606088', marginTop: '6px', marginBottom: '20px' }}>
+        <div style={{ fontSize: '13px', color: '#9494BC', marginTop: '6px', marginBottom: '20px' }}>
           Try before you buy
         </div>
       )}
 
-      <div style={{ height: '1px', background: '#1E1E3A', margin: '18px 0' }} />
+      <div style={{ height: '1px', background: '#2E2E56', margin: '18px 0' }} />
 
       <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '9px' }}>
         {plan.features.map((f) => (
@@ -242,13 +242,13 @@ function PriceCard({ plan }: { plan: Plan }) {
             key={f.text}
             style={{
               fontSize: '13px',
-              color: f.dim ? '#606088' : '#C8C8E8',
+              color: f.dim ? '#9494BC' : '#C8C8E8',
               display: 'flex',
               alignItems: 'flex-start',
               gap: '8px',
             }}
           >
-            <span style={{ color: f.dim ? '#1E1E3A' : '#8B5CF6', fontWeight: 700, flexShrink: 0, marginTop: '1px' }}>
+            <span style={{ color: f.dim ? '#2E2E56' : '#9D5CFF', fontWeight: 700, flexShrink: 0, marginTop: '1px' }}>
               {f.dim ? '–' : '✓'}
             </span>
             {f.text}
@@ -276,29 +276,29 @@ function PriceCard({ plan }: { plan: Plan }) {
           ...(plan.btnVariant === 'solid'
             ? {
                 border: 'none',
-                background: 'linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4)',
+                background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
                 color: '#fff',
               }
             : {
                 background: 'transparent',
                 color: '#F0F0FF',
-                border: '1px solid #2A2A4A',
+                border: '1px solid #3C3C6A',
               }),
         }}
         onMouseEnter={(e) => {
           if (plan.btnVariant === 'solid') {
-            e.currentTarget.style.boxShadow = '0 10px 30px rgba(139,92,246,.4)'
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(157,92,255,.4)'
             e.currentTarget.style.transform = 'translateY(-1px)'
           } else {
-            e.currentTarget.style.borderColor = '#8B5CF6'
-            e.currentTarget.style.color = '#8B5CF6'
+            e.currentTarget.style.borderColor = '#9D5CFF'
+            e.currentTarget.style.color = '#9D5CFF'
           }
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.boxShadow = ''
           e.currentTarget.style.transform = ''
           if (plan.btnVariant === 'ghost') {
-            e.currentTarget.style.borderColor = '#2A2A4A'
+            e.currentTarget.style.borderColor = '#3C3C6A'
             e.currentTarget.style.color = '#F0F0FF'
           }
         }}
