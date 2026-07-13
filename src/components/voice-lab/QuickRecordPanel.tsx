@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { formatTime, pickRecorderMimeType, MIN_DURATION_SEC } from './audioUtils'
+import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
+import type { MicMeter } from '@/components/recording/micMeter'
 
-type Phase = 'idle' | 'requesting' | 'recording' | 'recorded' | 'error'
+// 'requesting' is handled inside MicCheckWizard now (permission → room noise
+// check → countdown); this panel takes over at 'recording'.
+type Phase = 'idle' | 'recording' | 'recorded' | 'error'
 
 interface QuickRecordPanelProps {
   onCaptured: (blob: Blob, mimeType: string, durationSec: number) => void
@@ -78,8 +82,9 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
-  const audioCtxRef = useRef<AudioContext | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
+  // Metering (level/clip/spike + the waveform's AnalyserNode) comes from the
+  // MicCheckWizard's MicMeter — this panel no longer builds its own AudioContext.
+  const meterRef = useRef<MicMeter | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval>>()
   const secondsRef = useRef(0)
   const mimeTypeRef = useRef<string>('audio/webm')
@@ -88,35 +93,20 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
     clearInterval(timerRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
-    audioCtxRef.current?.close().catch(() => {})
-    audioCtxRef.current = null
-    analyserRef.current = null
+    meterRef.current?.close()
+    meterRef.current = null
   }
 
   useEffect(() => () => cleanupStream(), [])
 
-  async function handleStart() {
-    if (typeof MediaRecorder === 'undefined') {
-      setPhase('error')
-      setErrorMsg('Recording isn’t supported in this browser — try Upload Recording instead.')
-      return
-    }
-
-    setPhase('requesting')
+  // The wizard already got permission, checked the room and counted the user
+  // in — it hands over a live stream + meter, and recording starts immediately.
+  function beginRecording(stream: MediaStream, meter: MicMeter) {
     setErrorMsg('')
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
+      meterRef.current = meter
       setDeviceLabel(stream.getAudioTracks()[0]?.label || 'Default microphone')
-
-      const audioCtx = new AudioContext()
-      const source = audioCtx.createMediaStreamSource(stream)
-      const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 2048
-      source.connect(analyser)
-      audioCtxRef.current = audioCtx
-      analyserRef.current = analyser
 
       const mimeType = pickRecorderMimeType()
       mimeTypeRef.current = mimeType ?? ''
@@ -143,16 +133,10 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
         secondsRef.current += 1
         setSeconds((s) => s + 1)
       }, 1000)
-    } catch (err) {
+    } catch {
+      cleanupStream()
       setPhase('error')
-      const name = err instanceof DOMException ? err.name : ''
-      setErrorMsg(
-        name === 'NotAllowedError'
-          ? 'Microphone access was denied. Allow mic access in your browser settings and try again.'
-          : name === 'NotFoundError'
-          ? 'No microphone was found on this device.'
-          : 'Could not access the microphone.'
-      )
+      setErrorMsg('Could not start recording in this browser — try Upload Recording instead.')
     }
   }
 
@@ -174,27 +158,33 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
   return (
     <div className="qr-panel">
       {phase === 'idle' && (
-        <button className="qr-btn qr-btn--main" onClick={handleStart}>
-          ⏺ Start Recording
-        </button>
-      )}
-
-      {phase === 'requesting' && (
-        <div className="qr-status">Requesting microphone access…</div>
+        typeof MediaRecorder === 'undefined' ? (
+          <div className="qr-error">Recording isn’t supported in this browser — try Upload Recording instead.</div>
+        ) : (
+          <MicCheckWizard
+            audio={true}
+            onReady={beginRecording}
+            triggerLabel="⏺ Start Recording"
+            triggerClassName="qr-btn qr-btn--main"
+          />
+        )
       )}
 
       {(phase === 'recording' || phase === 'recorded') && (
         <>
           {deviceLabel && <div className="qr-device">🎙️ Using: {deviceLabel}</div>}
-          <LiveWaveCanvas analyser={analyserRef.current} active={phase === 'recording'} />
+          <LiveWaveCanvas analyser={meterRef.current?.analyser ?? null} active={phase === 'recording'} />
           <div className={`qr-timer ${phase === 'recording' && meetsMinimum ? 'qr-timer--ok' : ''}`}>
             {formatTime(seconds)} <span className="qr-timer-min">/ 0:{MIN_DURATION_SEC} minimum</span>
           </div>
 
           {phase === 'recording' && (
-            <button className="qr-btn qr-btn--stop" onClick={handleStop}>
-              ⏹ Stop Recording
-            </button>
+            <>
+              <RecordingQualityMonitor meter={meterRef.current} />
+              <button className="qr-btn qr-btn--stop" onClick={handleStop}>
+                ⏹ Stop Recording
+              </button>
+            </>
           )}
 
           {phase === 'recorded' && previewUrl && (
@@ -214,7 +204,7 @@ export function QuickRecordPanel({ onCaptured, onReset }: QuickRecordPanelProps)
       {phase === 'error' && (
         <div className="qr-error">
           {errorMsg}
-          <button className="qr-btn qr-btn--outline" onClick={handleStart} style={{ marginTop: 10 }}>
+          <button className="qr-btn qr-btn--outline" onClick={() => setPhase('idle')} style={{ marginTop: 10 }}>
             Try Again
           </button>
         </div>

@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { formatTime, encodeWav, concatFloat32, rms, MIN_DURATION_SEC } from './audioUtils'
+import { formatTime, encodeWav, concatFloat32, MIN_DURATION_SEC } from './audioUtils'
+import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
+import type { MicMeter } from '@/components/recording/micMeter'
 
 type Phase = 'idle' | 'detecting' | 'ready' | 'recording' | 'recorded' | 'error'
 
@@ -10,18 +12,11 @@ interface ProRecordPanelProps {
   onReset: () => void
 }
 
-function levelColor(level: number) {
-  if (level > 0.5) return '#EF4444'
-  if (level > 0.25) return '#F59E0B'
-  return '#10B981'
-}
-
 export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
   const [seconds, setSeconds] = useState(0)
-  const [level, setLevel] = useState(0)
   const [sampleRate, setSampleRate] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -31,6 +26,9 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const silentGainRef = useRef<GainNode | null>(null)
+  // Level/clip/spike monitoring — handed over by the MicCheckWizard. Separate
+  // from the 48 kHz recording context below (metering never touches capture).
+  const meterRef = useRef<MicMeter | null>(null)
   const chunksRef = useRef<Float32Array[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval>>()
 
@@ -46,6 +44,8 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
     streamRef.current = null
     audioCtxRef.current?.close().catch(() => {})
     audioCtxRef.current = null
+    meterRef.current?.close()
+    meterRef.current = null
   }
 
   useEffect(() => () => teardownAudioGraph(), [])
@@ -75,15 +75,13 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
     }
   }
 
-  async function handleStart() {
+  // The MicCheckWizard opened the stream (same constraints as before), checked
+  // the room and counted the user in — build the WAV capture graph on it.
+  function beginRecording(stream: MediaStream, meter: MicMeter) {
     setErrorMsg('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: selectedDeviceId
-          ? { deviceId: { exact: selectedDeviceId }, sampleRate: 48000 }
-          : { sampleRate: 48000 },
-      })
       streamRef.current = stream
+      meterRef.current = meter
 
       const audioCtx = new AudioContext({ sampleRate: 48000 })
       const source = audioCtx.createMediaStreamSource(stream)
@@ -98,7 +96,6 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
       processor.onaudioprocess = (e) => {
         const channelData = e.inputBuffer.getChannelData(0)
         chunksRef.current.push(new Float32Array(channelData))
-        setLevel(rms(channelData))
       }
 
       audioCtxRef.current = audioCtx
@@ -109,14 +106,10 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
       setSeconds(0)
       setPhase('recording')
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
-    } catch (err) {
+    } catch {
+      teardownAudioGraph()
       setPhase('error')
-      const name = err instanceof DOMException ? err.name : ''
-      setErrorMsg(
-        name === 'NotAllowedError'
-          ? 'Microphone access was denied. Allow mic access in your browser settings and try again.'
-          : 'Could not start recording with the selected device.'
-      )
+      setErrorMsg('Could not start recording with the selected device.')
     }
   }
 
@@ -129,7 +122,6 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
     const blob = encodeWav(samples, sr)
     const url = URL.createObjectURL(blob)
     setPreviewUrl(url)
-    setLevel(0)
     setPhase('recorded')
     onCaptured(blob, 'audio/wav', seconds)
   }
@@ -173,9 +165,14 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
           </div>
 
           {phase === 'ready' && (
-            <button className="pr-btn pr-btn--main" onClick={handleStart}>
-              ⏺ Start Recording
-            </button>
+            <MicCheckWizard
+              audio={selectedDeviceId
+                ? { deviceId: { exact: selectedDeviceId }, sampleRate: 48000 }
+                : { sampleRate: 48000 }}
+              onReady={beginRecording}
+              triggerLabel="⏺ Start Recording"
+              triggerClassName="pr-btn pr-btn--main"
+            />
           )}
 
           {(phase === 'recording' || phase === 'recorded') && sampleRate && (
@@ -184,9 +181,7 @@ export function ProRecordPanel({ onCaptured, onReset }: ProRecordPanelProps) {
 
           {phase === 'recording' && (
             <>
-              <div className="pr-meter-track">
-                <div className="pr-meter-fill" style={{ width: `${Math.min(100, level * 140)}%`, background: levelColor(level) }} />
-              </div>
+              <RecordingQualityMonitor meter={meterRef.current} />
               <div className={`pr-timer ${meetsMinimum ? 'pr-timer--ok' : ''}`}>
                 {formatTime(seconds)} <span className="pr-timer-min">/ 0:{MIN_DURATION_SEC} minimum</span>
               </div>

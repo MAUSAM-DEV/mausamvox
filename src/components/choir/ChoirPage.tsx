@@ -9,6 +9,8 @@ import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { ShareControl } from '@/components/share/ShareControl'
 import { CHOIR_CREDITS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
+import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
+import type { MicMeter } from '@/components/recording/micMeter'
 
 // Choir Composer — DSP vocal harmonizer. HONEST FRAMING everywhere: the
 // output is the user's own voice pitch-shifted into stacked harmony layers,
@@ -55,6 +57,8 @@ export function ChoirPage() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recChunksRef = useRef<Blob[]>([])
   const recStreamRef = useRef<MediaStream | null>(null)
+  // Level/clip/spike meter handed over by the MicCheckWizard for the take.
+  const recMeterRef = useRef<MicMeter | null>(null)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -131,13 +135,13 @@ export function ChoirPage() {
     setVocalSource(file, file.name, file.name)
   }
 
-  async function startRecording() {
+  // Stream + meter come from the MicCheckWizard (permission → quiet-room check
+  // → countdown), opened with the SAME raw constraints as before — no
+  // echo-cancel/AGC coloring (Voice Lab's mic settings). Capture is unchanged.
+  function startRecording(stream: MediaStream, meter: MicMeter) {
     try {
-      // Raw take — no echo-cancel/AGC coloring (Voice Lab's mic settings).
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      })
       recStreamRef.current = stream
+      recMeterRef.current = meter
       recChunksRef.current = []
       const rec = new MediaRecorder(stream)
       rec.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
@@ -147,13 +151,19 @@ export function ChoirPage() {
         if (blob.size > 0) setVocalSource(blob, `recording.${ext}`, 'Mic recording')
         stream.getTracks().forEach((t) => t.stop())
         recStreamRef.current = null
+        recMeterRef.current?.close()
+        recMeterRef.current = null
       }
       recorderRef.current = rec
       rec.start()
       setRecording(true)
     } catch (err) {
-      console.error('[choir] mic failed:', err)
-      showToast('Microphone unavailable — check browser permissions.')
+      console.error('[choir] recorder failed:', err)
+      stream.getTracks().forEach((t) => t.stop())
+      meter.close()
+      recStreamRef.current = null
+      recMeterRef.current = null
+      showToast('Recording failed to start — try again.')
     }
   }
 
@@ -162,7 +172,10 @@ export function ChoirPage() {
     recorderRef.current = null
     setRecording(false)
   }
-  useEffect(() => () => { recStreamRef.current?.getTracks().forEach((t) => t.stop()) }, [])
+  useEffect(() => () => {
+    recStreamRef.current?.getTracks().forEach((t) => t.stop())
+    recMeterRef.current?.close()
+  }, [])
 
   async function handleGenerate() {
     if (phase === 'uploading' || phase === 'generating') return
@@ -281,16 +294,21 @@ export function ChoirPage() {
                 ⬆ Upload a vocal
                 <span className="ch-drop-hint">MP3 / WAV / M4A / WEBM · max 25 MB · works best on a clean solo take</span>
               </label>
-              <button
-                className={`ch-rec-btn${recording ? ' ch-rec-btn--live' : ''}`}
-                onClick={recording ? stopRecording : startRecording}
-                disabled={busy}
-              >
-                {recording
-                  ? `■ Stop (${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, '0')})`
-                  : '● Record'}
-              </button>
+              {recording ? (
+                <button className="ch-rec-btn ch-rec-btn--live" onClick={stopRecording} disabled={busy}>
+                  ■ Stop ({Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')})
+                </button>
+              ) : (
+                <MicCheckWizard
+                  audio={{ echoCancellation: false, noiseSuppression: false, autoGainControl: false }}
+                  onReady={startRecording}
+                  triggerLabel="● Record"
+                  triggerClassName="ch-rec-btn"
+                  disabled={busy}
+                />
+              )}
             </div>
+            {recording && <RecordingQualityMonitor meter={recMeterRef.current} />}
             {vocal && !recording && (
               <div className="ch-vocal-picked">
                 <span className="ch-vocal-name">🎤 {vocal.label}</span>

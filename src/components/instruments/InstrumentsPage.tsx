@@ -14,6 +14,8 @@ import {
   INSTRUMENTS_MAX_SECONDS,
   type InstrumentDef,
 } from '@/lib/instruments'
+import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
+import type { MicMeter } from '@/components/recording/micMeter'
 
 // Instruments — voice → instrument. HONEST FRAMING: we transcribe the melody
 // of the user's vocal (notes + timing) and REPLAY it on the chosen instrument;
@@ -58,6 +60,8 @@ export function InstrumentsPage() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recChunksRef = useRef<Blob[]>([])
   const recStreamRef = useRef<MediaStream | null>(null)
+  // Level/clip/spike meter handed over by the MicCheckWizard for the take.
+  const recMeterRef = useRef<MicMeter | null>(null)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -131,12 +135,13 @@ export function InstrumentsPage() {
     setVocalSource(file, file.name, file.name)
   }
 
-  async function startRecording() {
+  // Stream + meter come from the MicCheckWizard (permission → quiet-room check
+  // → countdown), opened with the SAME raw constraints as before. Capture is
+  // unchanged — the wizard only decides when recording starts.
+  function startRecording(stream: MediaStream, meter: MicMeter) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      })
       recStreamRef.current = stream
+      recMeterRef.current = meter
       recChunksRef.current = []
       const rec = new MediaRecorder(stream)
       rec.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
@@ -146,13 +151,19 @@ export function InstrumentsPage() {
         if (blob.size > 0) setVocalSource(blob, `recording.${ext}`, 'Mic recording')
         stream.getTracks().forEach((t) => t.stop())
         recStreamRef.current = null
+        recMeterRef.current?.close()
+        recMeterRef.current = null
       }
       recorderRef.current = rec
       rec.start()
       setRecording(true)
     } catch (err) {
-      console.error('[instruments] mic failed:', err)
-      showToast('Microphone unavailable — check browser permissions.')
+      console.error('[instruments] recorder failed:', err)
+      stream.getTracks().forEach((t) => t.stop())
+      meter.close()
+      recStreamRef.current = null
+      recMeterRef.current = null
+      showToast('Recording failed to start — try again.')
     }
   }
 
@@ -161,7 +172,10 @@ export function InstrumentsPage() {
     recorderRef.current = null
     setRecording(false)
   }
-  useEffect(() => () => { recStreamRef.current?.getTracks().forEach((t) => t.stop()) }, [])
+  useEffect(() => () => {
+    recStreamRef.current?.getTracks().forEach((t) => t.stop())
+    recMeterRef.current?.close()
+  }, [])
 
   async function handleGenerate() {
     if (phase === 'uploading' || phase === 'generating') return
@@ -284,16 +298,21 @@ export function InstrumentsPage() {
                 ⬆ Upload audio
                 <span className="in-drop-hint">MP3 / WAV / M4A / WEBM · max 15 MB · a clean solo hum or la-la works best</span>
               </label>
-              <button
-                className={`in-rec-btn${recording ? ' in-rec-btn--live' : ''}`}
-                onClick={recording ? stopRecording : startRecording}
-                disabled={busy}
-              >
-                {recording
-                  ? `■ Stop (${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, '0')})`
-                  : '● Record'}
-              </button>
+              {recording ? (
+                <button className="in-rec-btn in-rec-btn--live" onClick={stopRecording} disabled={busy}>
+                  ■ Stop ({Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')})
+                </button>
+              ) : (
+                <MicCheckWizard
+                  audio={{ echoCancellation: false, noiseSuppression: false, autoGainControl: false }}
+                  onReady={startRecording}
+                  triggerLabel="● Record"
+                  triggerClassName="in-rec-btn"
+                  disabled={busy}
+                />
+              )}
             </div>
+            {recording && <RecordingQualityMonitor meter={recMeterRef.current} />}
             {vocal && !recording && (
               <div className="in-vocal-picked">
                 <span className="in-vocal-name">🎤 {vocal.label}</span>
