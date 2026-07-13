@@ -9,6 +9,13 @@ import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { ShareControl } from '@/components/share/ShareControl'
 import { SONG_STUDIO_CREDITS } from '@/lib/song-engine'
+import {
+  LYRICS_GEN_CREDITS,
+  LYRICS_THEME_MAX,
+  LYRICS_MOOD_MAX,
+  LYRICS_GEN_LANGUAGES,
+  LYRICS_GEN_STRUCTURES,
+} from '@/lib/lyrics-gen'
 
 // Song Studio — AI full-song generation (music + optional vocals) via
 // ACE-Step. Server route charges SONG_STUDIO_CREDITS atomically up front and
@@ -49,6 +56,14 @@ export function SongStudioPage() {
   const [stylePrompt, setStylePrompt] = useState('')
   const [lyrics, setLyrics] = useState('')
   const [duration, setDuration] = useState(60)
+
+  // AI lyrics writer (inline panel above the lyrics box).
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiTheme, setAiTheme] = useState('')
+  const [aiLang, setAiLang] = useState<string>('english')
+  const [aiMood, setAiMood] = useState('')
+  const [aiStructure, setAiStructure] = useState<string>('auto')
+  const [aiBusy, setAiBusy] = useState(false)
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [elapsed, setElapsed] = useState(0)
@@ -92,6 +107,36 @@ export function SongStudioPage() {
     const t = setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => clearInterval(t)
   }, [phase])
+
+  // AI lyrics draft → fills the editable lyrics box. Server charges
+  // LYRICS_GEN_CREDITS atomically and refunds itself on failure.
+  async function handleWriteLyrics() {
+    if (aiBusy || generating) return
+    const theme = aiTheme.trim()
+    if (theme.length < 3) { showToast('Give the song a theme — a few words is enough.'); return }
+    if (!isAdmin && creditsRemaining !== null && creditsRemaining < LYRICS_GEN_CREDITS) {
+      showToast(`Not enough credits — writing lyrics costs ${LYRICS_GEN_CREDITS}.`)
+      return
+    }
+    setAiBusy(true)
+    try {
+      const res = await fetch('/api/lyrics-gen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme, language: aiLang, mood: aiMood.trim(), structure: aiStructure }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error ?? `Lyrics generation failed (${res.status})`)
+      setLyrics(String(d.lyrics ?? ''))
+      setAiOpen(false)
+      refetchCredits() // server deducted — reflect it
+      showToast('Lyrics drafted — read and edit them before generating the song.')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Lyrics generation failed')
+    } finally {
+      setAiBusy(false)
+    }
+  }
 
   async function handleGenerate() {
     if (phase === 'generating') return
@@ -221,6 +266,84 @@ export function SongStudioPage() {
               Lyrics
               <span className="ss-hint">use [verse] / [chorus] / [bridge] — or [instrumental] for no vocals</span>
             </label>
+
+            <button
+              type="button"
+              className="ss-ai-toggle"
+              onClick={() => setAiOpen((o) => !o)}
+              disabled={generating}
+            >
+              ✨ Write lyrics with AI · {isAdmin ? 'free (founder)' : `${LYRICS_GEN_CREDITS} cr`} {aiOpen ? '▴' : '▾'}
+            </button>
+
+            {aiOpen && (
+              <div className="ss-ai-panel">
+                <label className="ss-lbl" htmlFor="ss-ai-theme">Theme</label>
+                <input
+                  id="ss-ai-theme"
+                  className="ss-input"
+                  value={aiTheme}
+                  onChange={(e) => setAiTheme(e.target.value)}
+                  placeholder="missing home during the monsoon"
+                  maxLength={LYRICS_THEME_MAX}
+                  disabled={aiBusy}
+                />
+                <div className="ss-ai-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="ss-lbl" htmlFor="ss-ai-lang">Language</label>
+                    <select
+                      id="ss-ai-lang"
+                      className="ss-input"
+                      value={aiLang}
+                      onChange={(e) => setAiLang(e.target.value)}
+                      disabled={aiBusy}
+                    >
+                      {LYRICS_GEN_LANGUAGES.map((l) => (
+                        <option key={l.id} value={l.id}>{l.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="ss-lbl" htmlFor="ss-ai-structure">Structure</label>
+                    <select
+                      id="ss-ai-structure"
+                      className="ss-input"
+                      value={aiStructure}
+                      onChange={(e) => setAiStructure(e.target.value)}
+                      disabled={aiBusy}
+                    >
+                      {LYRICS_GEN_STRUCTURES.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <label className="ss-lbl" htmlFor="ss-ai-mood">Mood / style <span className="ss-hint">optional</span></label>
+                <input
+                  id="ss-ai-mood"
+                  className="ss-input"
+                  value={aiMood}
+                  onChange={(e) => setAiMood(e.target.value)}
+                  placeholder="nostalgic, acoustic"
+                  maxLength={LYRICS_MOOD_MAX}
+                  disabled={aiBusy}
+                />
+                <button
+                  type="button"
+                  className="ss-ai-go"
+                  onClick={handleWriteLyrics}
+                  disabled={aiBusy || aiTheme.trim().length < 3}
+                >
+                  {aiBusy ? '⏳ Writing…' : `✨ Write lyrics · ${isAdmin ? 'free (founder)' : `${LYRICS_GEN_CREDITS} cr`}`}
+                </button>
+                <p className="ss-ai-note">
+                  Fills the lyrics box below (replaces what&rsquo;s there). AI lyrics are a
+                  starting point — they may need editing, and they must not copy existing
+                  songs. You&rsquo;re responsible for what you use.
+                </p>
+              </div>
+            )}
+
             <textarea
               id="ss-lyrics"
               className="ss-textarea"
@@ -332,6 +455,36 @@ export function SongStudioPage() {
         .ss-input:focus, .ss-textarea:focus { border-color: rgba(139,92,246,.5); }
         .ss-input:disabled, .ss-textarea:disabled { opacity: 0.55; }
         .ss-textarea { resize: vertical; min-height: 160px; line-height: 1.6; }
+        .ss-ai-toggle {
+          align-self: flex-start;
+          margin: 2px 0 4px;
+          padding: 8px 14px; border-radius: 8px;
+          border: 1px solid rgba(139,92,246,.4); background: rgba(139,92,246,.08);
+          color: #C4B5FD; font-family: Inter, sans-serif;
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .ss-ai-toggle:hover:not(:disabled) { border-color: #8B5CF6; background: rgba(139,92,246,.14); }
+        .ss-ai-toggle:disabled { opacity: 0.5; cursor: default; }
+        .ss-ai-panel {
+          display: flex; flex-direction: column; gap: 4px;
+          border: 1px solid rgba(139,92,246,.25); border-radius: 12px;
+          padding: 14px 16px; margin-bottom: 8px;
+          background: rgba(139,92,246,.04);
+        }
+        .ss-ai-row { display: flex; gap: 10px; }
+        .ss-ai-go {
+          align-self: flex-start;
+          margin-top: 10px;
+          padding: 10px 20px; border-radius: 9px; border: none;
+          background: linear-gradient(135deg, #8B5CF6, #EC4899);
+          color: #fff; font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: opacity 0.2s;
+        }
+        .ss-ai-go:disabled { opacity: 0.45; cursor: default; }
+        .ss-ai-note { font-size: 11px; color: #5A5A80; line-height: 1.6; margin: 10px 0 0; }
+        @media (max-width: 640px) { .ss-ai-row { flex-direction: column; } }
         .ss-durations { display: flex; gap: 8px; flex-wrap: wrap; }
         .ss-dur-btn {
           padding: 8px 16px; border-radius: 8px; border: 1px solid #1E1E3A;
