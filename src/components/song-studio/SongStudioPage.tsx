@@ -153,17 +153,29 @@ export function SongStudioPage() {
     setErrorMsg('')
     setResult(null)
     try {
+      const songTitle = title.trim() || (trimmedStyle.split(',')[0] || 'Song Studio track')
       const startRes = await fetch('/api/song-studio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration }),
+        // title is used by the synchronous (elevenlabs) engine, which persists
+        // inside POST; the acestep engine takes it on the poll as before.
+        body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle }),
       })
       const startData = await startRes.json().catch(() => ({}))
       if (!startRes.ok) throw new Error(startData.error ?? `Failed to start (${startRes.status})`)
-      const predictionId: string = startData.predictionId
       refetchCredits() // server deducted up front — reflect it
 
-      const songTitle = title.trim() || (trimmedStyle.split(',')[0] || 'Song Studio track')
+      // Synchronous engine (elevenlabs): POST already carries the finished
+      // song — no polling.
+      if (startData.status === 'succeeded' && startData.swapId) {
+        setResult({ swapId: startData.swapId, url: startData.url, title: songTitle })
+        setPhase('done')
+        showToast('Your song is ready — saved to Saved Tracks.')
+        return
+      }
+
+      const predictionId: string = startData.predictionId
+      if (!predictionId) throw new Error('No prediction id returned')
       const pollQs = new URLSearchParams({ id: predictionId, title: songTitle, style: trimmedStyle })
       const deadline = Date.now() + POLL_CEILING_MS
 

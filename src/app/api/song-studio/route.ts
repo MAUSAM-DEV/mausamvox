@@ -4,17 +4,25 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import {
+  songEngine,
   ACE_STEP_VERSION,
   SONG_STUDIO_CREDITS,
   SONG_MIN_SECONDS,
   SONG_MAX_SECONDS,
 } from '@/lib/song-engine'
+import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
 import { normalizeLoudness } from '@/lib/loudness'
 
-// Song Studio: AI full-song generation via ACE-Step (see song-engine.ts).
+// Song Studio: AI full-song generation — engine selected by SONG_ENGINE (see
+// song-engine.ts): 'elevenlabs' (default) or 'acestep' (instant rollback).
 //
-// POST creates the prediction and returns immediately; GET is the status poll
-// (stem-split's create+poll shape, so the client never hits a 504).
+// elevenlabs: the API returns audio bytes synchronously, so POST does the
+// whole job (charge → compose → persist) and returns the finished song; the
+// client skips polling when POST already carries status='succeeded'.
+//
+// acestep: POST creates the Replicate prediction and returns immediately;
+// GET is the status poll (stem-split's create+poll shape, so the client
+// never hits a 504). The GET path is ACE-Step-only.
 //
 // Credits follow the gender-split charge+refund pattern: deduct_credits()
 // atomically BEFORE the paid Replicate work (each run costs real money), and
@@ -75,8 +83,13 @@ export async function POST(req: NextRequest) {
     if (!adminConfigured) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
-    if (!process.env.REPLICATE_API_TOKEN) {
+    const engine = songEngine()
+    // Config gates BEFORE any charge — a misconfigured engine must cost nothing.
+    if (engine === 'acestep' && !process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
+    }
+    if (engine === 'elevenlabs' && !process.env.ELEVENLABS_API_KEY) {
+      return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured (or set SONG_ENGINE=acestep)' }, { status: 500 })
     }
 
     const sessionClient = await createClient()
@@ -85,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    let body: { lyrics?: string; stylePrompt?: string; duration?: number }
+    let body: { lyrics?: string; stylePrompt?: string; duration?: number; title?: string }
     try {
       body = await req.json()
     } catch {
@@ -95,6 +108,9 @@ export async function POST(req: NextRequest) {
     const lyrics = (body.lyrics ?? '').trim()
     const stylePrompt = (body.stylePrompt ?? '').trim()
     const duration = body.duration
+    // Used by the synchronous elevenlabs path (the acestep path receives the
+    // title on the GET poll instead — unchanged).
+    const title = (body.title ?? '').trim().slice(0, MAX_TITLE_CHARS) || 'Song Studio track'
 
     if (!lyrics) {
       return NextResponse.json({ error: 'Lyrics are required — use [instrumental] for a song without vocals' }, { status: 400 })
@@ -132,6 +148,48 @@ export async function POST(req: NextRequest) {
       chargedUserId = user.id
     }
 
+    // ── elevenlabs (default): synchronous compose → persist → done ──────────
+    if (engine === 'elevenlabs') {
+      const audioBuffer = await composeSongElevenLabs(
+        { stylePrompt, lyrics, durationSeconds: duration },
+        '[song-studio]'
+      )
+      // No loudness pass here (deliberate): ElevenLabs output is already
+      // mastered — running loudnorm again risks double-compression. The
+      // normalizeLoudness helper stays for the ACE-Step path below.
+
+      const swapId = crypto.randomUUID()
+      const swapPath = `${user.id}/${swapId}.mp3`
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('voice-swaps')
+        .upload(swapPath, audioBuffer, { contentType: 'audio/mpeg', upsert: true })
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
+
+      const { error: insertError } = await insertSwapRow({
+        id: swapId,
+        user_id: user.id,
+        song_name: title,
+        voice_used: stylePrompt ? `AI generated · ${stylePrompt}` : 'AI generated',
+        result_path: swapPath,
+        // Satisfies the column + its unique index; 'el-' namespace can never
+        // collide with real Replicate prediction ids.
+        replicate_prediction_id: `el-${swapId}`,
+        kind: 'song_studio',
+      })
+      if (insertError) {
+        await supabaseAdmin.storage.from('voice-swaps').remove([swapPath]).catch(() => {})
+        throw new Error(`Could not save the song: ${insertError.message}`)
+      }
+
+      console.log(`[song-studio] elevenlabs song persisted as swap ${swapId} (${audioBuffer.length} bytes, user ${user.id})`)
+      return NextResponse.json({
+        status: 'succeeded',
+        swapId,
+        url: `/api/voice-swaps/${swapId}/result.mp3`,
+      })
+    }
+
+    // ── acestep (SONG_ENGINE=acestep rollback): create + poll via GET ───────
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
     const prediction = await replicate.predictions.create({
       version: ACE_STEP_VERSION,
@@ -153,13 +211,17 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[song-studio] create error:', msg)
-    // The create threw before a job started — refund the charge.
+    // Any failure after the debit (elevenlabs compose/persist, or the acestep
+    // create throwing before a job started) — refund the charge.
     if (chargedUserId) await refundCredits(chargedUserId)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: msg, refunded: chargedUserId !== null }, { status: 500 })
   }
 }
 
 // ── GET: poll → on success persist + return the durable proxy URL ───────────
+// ACE-Step (Replicate) predictions only — the elevenlabs engine finishes
+// inside POST and never polls. Kept fully intact for SONG_ENGINE=acestep and
+// for any prediction still in flight across an engine flip.
 // Query: id (prediction id), title (song name for the saved row).
 export async function GET(req: NextRequest) {
   try {
