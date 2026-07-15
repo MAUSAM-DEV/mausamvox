@@ -21,6 +21,14 @@ import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 // needs a real font file; shipped via outputFileTracingIncludes), and the MP4
 // bytes are returned directly — rendered on demand, nothing stored, no DB
 // changes. Render time is logged (`[share-video] render ms=`) for tuning.
+//
+// ffmpeg-static is PINNED to 5.2.0 (binary release b6.0): the 5.3.0/b6.1.1
+// linux-x64 binary is built WITHOUT the drawtext filter, which broke this
+// route on Vercel ("No such filter: 'drawtext'") while working locally
+// (the darwin build has it). Before upgrading ffmpeg-static, confirm the
+// linux-x64 binary of the new release still has drawtext. If it's ever
+// missing anyway, the render degrades to a textless waveform video below
+// instead of failing.
 export const maxDuration = 60
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -142,19 +150,19 @@ export async function POST(req: NextRequest) {
       const H = VIDEO_H
       const waveW = Math.round((W * 8) / 10)
       const waveH = Math.round((H * 28) / 100)
-      const filter = [
+      const buildFilter = (withText: boolean) => [
         // Slowly-animated brand gradient background.
         `gradients=s=${W}x${H}:d=${CLIP_SECONDS}:speed=0.03:c0=${BG_TOP}:c1=${BG_BOTTOM}:x0=${W / 2}:y0=0:x1=${W / 2}:y1=${H}[bg]`,
         // Animated waveform of the actual audio.
         `[0:a]showwaves=s=${waveW}x${waveH}:mode=cline:rate=${FPS}:colors=${WAVE_COLORS}[wv]`,
-        `[bg][wv]overlay=(W-w)/2:(H-h)/2:shortest=1[v1]`,
-        `[v1]drawtext=fontfile=${fontFile}:textfile=${titleFile}:expansion=none:fontcolor=${TITLE_COLOR}:fontsize=${Math.round(W * 0.075)}:x=(w-text_w)/2:y=${Math.round(H * 0.22)}[v2]`,
-        `[v2]drawtext=fontfile=${fontFile}:textfile=${subFile}:expansion=none:fontcolor=${SUB_COLOR}:fontsize=${Math.round(W * 0.042)}:x=(w-text_w)/2:y=${Math.round(H * 0.29)}[v3]`,
-        `[v3]drawtext=fontfile=${fontFile}:textfile=${tagFile}:expansion=none:fontcolor=${TAG_COLOR}:fontsize=${Math.round(W * 0.05)}:x=(w-text_w)/2:y=${Math.round(H * 0.88)}[vout]`,
+        `[bg][wv]overlay=(W-w)/2:(H-h)/2:shortest=1[${withText ? 'v1' : 'vout'}]`,
+        ...(withText ? [
+          `[v1]drawtext=fontfile=${fontFile}:textfile=${titleFile}:expansion=none:fontcolor=${TITLE_COLOR}:fontsize=${Math.round(W * 0.075)}:x=(w-text_w)/2:y=${Math.round(H * 0.22)}[v2]`,
+          `[v2]drawtext=fontfile=${fontFile}:textfile=${subFile}:expansion=none:fontcolor=${SUB_COLOR}:fontsize=${Math.round(W * 0.042)}:x=(w-text_w)/2:y=${Math.round(H * 0.29)}[v3]`,
+          `[v3]drawtext=fontfile=${fontFile}:textfile=${tagFile}:expansion=none:fontcolor=${TAG_COLOR}:fontsize=${Math.round(W * 0.05)}:x=(w-text_w)/2:y=${Math.round(H * 0.88)}[vout]`,
+        ] : []),
       ].join(';')
-
-      const renderStart = Date.now()
-      await execFileAsync(ffmpegPath, [
+      const ffmpegArgs = (filter: string) => [
         '-v', 'error', '-y',
         '-t', String(CLIP_SECONDS), '-i', inFile,
         '-filter_complex', filter,
@@ -165,11 +173,37 @@ export async function POST(req: NextRequest) {
         '-c:a', 'aac', '-b:a', '160k',
         '-movflags', '+faststart',
         outFile,
-      ], { timeout: FFMPEG_TIMEOUT_MS })
+      ]
+
+      // Text overlays need both the drawtext filter (missing from some
+      // ffmpeg-static builds) and the bundled TTF (missing if file tracing
+      // ever drops it). Either failure degrades to a textless render —
+      // waveform + audio still beat a hard error for the user.
+      let withText = await fs.access(fontFile).then(() => true, () => false)
+      if (!withText) {
+        console.error(`[share-video] font not found at ${fontFile} — rendering without text overlays`)
+      }
+
+      const renderStart = Date.now()
+      try {
+        await execFileAsync(ffmpegPath, ffmpegArgs(buildFilter(withText)), { timeout: FFMPEG_TIMEOUT_MS })
+      } catch (renderErr) {
+        const stderr = (renderErr as { stderr?: string })?.stderr ?? ''
+        console.error('[share-video] ffmpeg failed:', stderr || renderErr)
+        // Filtergraph parse failures surface in well under a second, so a
+        // text-related failure leaves plenty of budget for one retry.
+        if (withText && /drawtext|font/i.test(stderr)) {
+          console.error('[share-video] retrying without text overlays')
+          withText = false
+          await execFileAsync(ffmpegPath, ffmpegArgs(buildFilter(false)), { timeout: FFMPEG_TIMEOUT_MS })
+        } else {
+          throw renderErr
+        }
+      }
 
       const video = await fs.readFile(outFile)
       if (video.length === 0) throw new Error('Render produced an empty file')
-      console.log(`[share-video] render ms=${Date.now() - renderStart} bytes=${video.length} clip=${CLIP_SECONDS}s res=${W}x${H}`)
+      console.log(`[share-video] render ms=${Date.now() - renderStart} bytes=${video.length} clip=${CLIP_SECONDS}s res=${W}x${H} text=${withText}`)
 
       const safeName = (swap.song_name || 'track').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'track'
       return new NextResponse(new Uint8Array(video), {
@@ -184,8 +218,11 @@ export async function POST(req: NextRequest) {
       await fs.rm(workDir, { recursive: true, force: true }).catch(() => {})
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error('[share-video] render failed:', msg)
-    return NextResponse.json({ error: `Video render failed: ${msg}` }, { status: 500 })
+    // Full detail (ffmpeg command + stderr) goes to the server log only —
+    // never to the client, where it would leak paths and internals into the UI.
+    const stderr = (err as { stderr?: string })?.stderr
+    console.error('[share-video] render failed:', err instanceof Error ? err.message : err)
+    if (stderr) console.error('[share-video] ffmpeg stderr:', stderr)
+    return NextResponse.json({ error: 'Couldn’t create the video — please try again' }, { status: 500 })
   }
 }
