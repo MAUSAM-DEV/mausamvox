@@ -1,10 +1,24 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-07-15 · Branch: `main` · Status: Active development (pre-launch)_
+_Last updated: 2026-08-14 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 
 MausamVox is an AI voice & music creation platform: clone voices, swap vocals on a track, split stems, and (planned) generate SATB choirs — with hard controls, free previews, honest billing, and Indian-language support.
+
+---
+
+## 🚀 PRE-LAUNCH MODE — sign-ups closed (2026-08-14, `674792f`)
+
+**Public registration is gated behind `NEXT_PUBLIC_SIGNUPS_OPEN`.** Default (unset or anything other than the exact string `"true"`) = **closed**. Login and every existing account are unaffected — only new registration is blocked.
+
+**To launch:** set `NEXT_PUBLIC_SIGNUPS_OPEN=true` in Vercel → Project Settings → Environment Variables → **redeploy**. `NEXT_PUBLIC_` values are inlined at build time, so an env-var save alone does nothing until a new build runs. No code change is needed either way.
+
+**⚠️ MIGRATION NOT APPLIED:** run `supabase/migrations/20260814000000_waitlist.sql` in the founder SQL Editor before testing the waitlist — until then `POST /api/waitlist` 500s with `[waitlist] insert failed` in the Vercel log and the visitor sees "Could not save your email right now."
+
+**What closed mode changes:** `/auth/sign-up` shows the waitlist capture instead of the registration form; `POST /api/auth/sign-up` returns 403 (the real gate — the hidden form is only cosmetic); Nav / Hero / CtaBand / all four Pricing buttons / the sign-in footer link all read "Join the Waitlist". Landing page and all marketing content stay fully visible.
+
+**Read the waitlist:** `select email, created_at from public.waitlist order by created_at desc;` (service-role only — no anon/authenticated grants, RLS on with zero policies).
 
 ---
 
