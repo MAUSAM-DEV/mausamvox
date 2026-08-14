@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 
 const navLinks = [
   { href: '#features', label: 'Features' },
@@ -236,7 +237,7 @@ export function Nav() {
                   e.currentTarget.style.boxShadow = ''
                 }}
               >
-                Try for Free
+                {SIGNUPS_OPEN ? 'Try for Free' : '🚀 Join the Waitlist'}
               </Link>
             </>
           )}

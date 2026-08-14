@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useReveal } from './useReveal'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 
 export function CtaBand() {
   const { ref, visible } = useReveal()
@@ -59,7 +60,9 @@ export function CtaBand() {
           <span className="grad-text">Anywhere in the world.</span>
         </h2>
         <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '440px', margin: '0 auto 40px', lineHeight: 1.7 }}>
-          Clone it. Swap it. Share it. Start free — no card needed, no commitment.
+          {SIGNUPS_OPEN
+            ? 'Clone it. Swap it. Share it. Start free — no card needed, no commitment.'
+            : 'Clone it. Swap it. Share it. We open the doors soon — leave your email and you’ll hear it here first.'}
         </p>
         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link
@@ -88,7 +91,7 @@ export function CtaBand() {
               e.currentTarget.style.boxShadow = ''
             }}
           >
-            Create Your Voice — Free
+            {SIGNUPS_OPEN ? 'Create Your Voice — Free' : '🚀 Join the Waitlist'}
           </Link>
           <a
             href="#features"

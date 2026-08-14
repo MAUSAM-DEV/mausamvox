@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import isEmail from 'validator/lib/isEmail'
 import { AuthCard } from './AuthCard'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 import { PasswordInput } from './PasswordInput'
 
 function SignInInner() {
@@ -87,9 +88,9 @@ function SignInInner() {
       </form>
 
       <div className="au-footer-link">
-        Don&apos;t have an account?{' '}
+        {SIGNUPS_OPEN ? "Don't have an account? " : 'Not launched yet — '}
         <Link href="/auth/sign-up" className="au-link">
-          Sign up →
+          {SIGNUPS_OPEN ? 'Sign up →' : 'join the waitlist →'}
         </Link>
       </div>
     </AuthCard>

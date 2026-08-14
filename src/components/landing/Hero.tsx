@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef } from 'react'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 
 function WaveCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -289,7 +290,7 @@ export function Hero() {
               e.currentTarget.style.boxShadow = ''
             }}
           >
-            Start Free — No Card Needed
+            {SIGNUPS_OPEN ? 'Start Free — No Card Needed' : '🚀 Launching Soon — Join the Waitlist'}
           </Link>
 
           <a

@@ -1,11 +1,26 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit } from '@/lib/rate-limit'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 10
 
 export async function POST(request: NextRequest) {
+  // ── 0. Pre-launch gate ─────────────────────────────────────────
+  // Hiding the form in the UI is NOT a gate — this endpoint is the real
+  // one. Without this check anyone could POST here directly and create an
+  // account while sign-ups are meant to be closed.
+  if (!SIGNUPS_OPEN) {
+    return NextResponse.json(
+      {
+        error:
+          'Sign-ups are closed for now — MausamVox is launching soon. Join the waitlist at /auth/sign-up and we will email you the day it opens.',
+      },
+      { status: 403 }
+    )
+  }
+
   // ── 1. Rate limit by IP ────────────────────────────────────────
   const ip =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??

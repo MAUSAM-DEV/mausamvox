@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useReveal } from './useReveal'
+import { SIGNUPS_OPEN } from '@/lib/signups'
 
 type PlanFeature = { text: string; dim?: boolean }
 
@@ -303,7 +304,7 @@ function PriceCard({ plan }: { plan: Plan }) {
           }
         }}
       >
-        {plan.btnLabel}
+        {SIGNUPS_OPEN ? plan.btnLabel : '🚀 Join the Waitlist'}
       </Link>
     </div>
   )
