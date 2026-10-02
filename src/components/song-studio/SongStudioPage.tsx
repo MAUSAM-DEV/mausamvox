@@ -19,6 +19,15 @@ import {
 } from '@/lib/song-engine'
 import { MINIMAX_MAX_LYRICS_CHARS } from '@/lib/song-engine-minimax'
 import {
+  clearPending,
+  isNetworkError,
+  loadPending,
+  pollUntilDone,
+  ResumableError,
+  savePending,
+  type PendingSong,
+} from '@/lib/song-poll'
+import {
   LYRICS_GEN_CREDITS,
   LYRICS_THEME_MAX,
   LYRICS_MOOD_MAX,
@@ -34,9 +43,6 @@ import {
 // shareable, deletable).
 
 type Phase = 'idle' | 'generating' | 'done' | 'error'
-
-const POLL_INTERVAL_MS = 4000
-const POLL_CEILING_MS = 6 * 60 * 1000 // generation is ~30s-2min; 6 min is generous
 
 const DURATIONS: { seconds: number; label: string }[] = [
   { seconds: 30, label: '30 sec' },
@@ -172,13 +178,20 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
     setResult(null)
     try {
       const songTitle = title.trim() || (trimmedStyle.split(',')[0] || 'Song Studio track')
-      const startRes = await fetch('/api/song-studio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // title is used by the synchronous (elevenlabs) engine, which persists
-        // inside POST; the acestep engine takes it on the poll as before.
-        body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle, vocals }),
-      })
+      let startRes: Response
+      try {
+        startRes = await fetch('/api/song-studio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // title is used by the synchronous (elevenlabs) engine, which persists
+          // inside POST; the acestep engine takes it on the poll as before.
+          body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle, vocals }),
+        })
+      } catch (err) {
+        if (!isNetworkError(err)) throw err
+        // We can't know whether the server received it — say so honestly.
+        throw new Error('Couldn’t reach MausamVox — check your connection. Before trying again, look in Saved Tracks: if the request got through, your song may already be on its way.')
+      }
       const startData = await startRes.json().catch(() => ({}))
       if (!startRes.ok) throw new Error(startData.error ?? `Failed to start (${startRes.status})`)
       refetchCredits() // server deducted up front — reflect it
@@ -195,26 +208,9 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
       const predictionId: string = startData.predictionId
       if (!predictionId) throw new Error('No prediction id returned')
       // style labels the saved row — the same vocal-prefixed text the server sent.
-      const pollQs = new URLSearchParams({ id: predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals) })
-      const deadline = Date.now() + POLL_CEILING_MS
-
-      for (;;) {
-        if (Date.now() > deadline) throw new Error('Generation timed out — if credits were taken they were refunded on failure; try again')
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        const pollRes = await fetch(`/api/song-studio?${pollQs}`)
-        const poll = await pollRes.json().catch(() => ({}))
-        if (!pollRes.ok) throw new Error(poll.error ?? `Poll failed (${pollRes.status})`)
-        if (poll.status === 'succeeded') {
-          setResult({ swapId: poll.swapId, url: poll.url, title: songTitle })
-          setPhase('done')
-          showToast('Your song is ready — saved to Saved Tracks.')
-          return
-        }
-        if (poll.status === 'failed' || poll.status === 'canceled') {
-          refetchCredits() // refund landed server-side
-          throw new Error(`Generation failed${poll.refunded ? ' — your credits were refunded' : ''}. ${poll.error ?? ''}`)
-        }
-      }
+      const pending: PendingSong = { predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals), startedAt: Date.now() }
+      savePending(pending)
+      await runPoll(pending)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[song-studio] generate failed:', msg)
@@ -223,6 +219,42 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
       refetchCredits()
     }
   }
+
+  // Polls a started generation to the end. Shared by Generate and by the
+  // resume-on-open effect below.
+  async function runPoll(p: PendingSong) {
+    try {
+      const done = await pollUntilDone(p)
+      clearPending()
+      setResult({ swapId: done.swapId, url: done.url, title: p.title })
+      setPhase('done')
+      showToast('Your song is ready — saved to Saved Tracks.')
+    } catch (err) {
+      // Keep the pending entry only when the job may still be running.
+      if (!(err instanceof ResumableError)) clearPending()
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[song-studio] poll ended without a song:', msg)
+      setErrorMsg(msg)
+      setPhase('error')
+    } finally {
+      refetchCredits() // a refund (failure) or nothing changed — reflect it
+    }
+  }
+
+  // Resume a generation interrupted by a dropped connection, reload or closed
+  // tab (ref-guarded so React dev StrictMode can't start two poll loops).
+  const resumedRef = useRef(false)
+  useEffect(() => {
+    if (resumedRef.current) return
+    resumedRef.current = true
+    const pending = loadPending()
+    if (!pending) return
+    setPhase('generating')
+    setErrorMsg('')
+    showToast('Picking up your song from earlier…')
+    void runPoll(pending)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Proxy 307s to cross-origin storage where <a download> is ignored —
   // download via fetch → blob (SavedSwapPage pattern).

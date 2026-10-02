@@ -2,22 +2,40 @@
 // rvc-engine.ts pattern.
 //
 //   elevenlabs — ElevenLabs Music (music_v2), synchronous compose → mp3 bytes.
-//                Default. Integration lives in song-engine-elevenlabs.ts;
-//                needs ELEVENLABS_API_KEY.
-//   acestep    — lucataco/ace-step on Replicate (create+poll), the previous
-//                engine, kept fully intact as an instant rollback: set
-//                SONG_ENGINE=acestep in Vercel + redeploy.
+//                Integration lives in song-engine-elevenlabs.ts; needs
+//                ELEVENLABS_API_KEY. Set SONG_ENGINE=elevenlabs.
+//   acestep    — lucataco/ace-step on Replicate (create+poll). Also the
+//                FALLBACK when SONG_ENGINE is unset or unrecognised (see
+//                songEngine()), since it needs no extra key.
 //   minimax    — MiniMax Music 2.5 (minimax/music-2.5) on Replicate, same
 //                create+poll flow and REPLICATE_API_TOKEN as acestep.
 //                Integration in song-engine-minimax.ts. No duration input
 //                (length follows the lyrics). Set SONG_ENGINE=minimax.
 
 export type SongEngine = 'elevenlabs' | 'acestep' | 'minimax'
+const SONG_ENGINES: readonly SongEngine[] = ['elevenlabs', 'acestep', 'minimax']
 
-// Absent/unset env means 'elevenlabs' — no Vercel dashboard step to adopt.
+// Fallback for an unset or unrecognised SONG_ENGINE: 'acestep', because it
+// runs on the REPLICATE_API_TOKEN the app already needs for everything else.
+// (It used to be 'elevenlabs', which fails outright without
+// ELEVENLABS_API_KEY — and that key isn't configured in Vercel.)
+// Case and surrounding whitespace are tolerated ("MiniMax " → minimax).
+const FALLBACK_ENGINE: SongEngine = 'acestep'
+let warnedValue: string | undefined | null = null // warn once per lambda/process
+
 export function songEngine(): SongEngine {
-  const v = process.env.SONG_ENGINE
-  return v === 'acestep' || v === 'minimax' ? v : 'elevenlabs'
+  const raw = process.env.SONG_ENGINE
+  const v = (raw ?? '').trim().toLowerCase()
+  if ((SONG_ENGINES as readonly string[]).includes(v)) return v as SongEngine
+  if (warnedValue !== raw) {
+    warnedValue = raw
+    console.warn(
+      raw === undefined || v === ''
+        ? `[song-engine] SONG_ENGINE is not set — falling back to '${FALLBACK_ENGINE}'. Set it to one of: ${SONG_ENGINES.join(', ')}.`
+        : `[song-engine] SONG_ENGINE=${JSON.stringify(raw)} is not recognised — falling back to '${FALLBACK_ENGINE}'. Valid values: ${SONG_ENGINES.join(', ')}.`
+    )
+  }
+  return FALLBACK_ENGINE
 }
 
 // Engines whose model takes a duration. MiniMax doesn't — the UI hides the

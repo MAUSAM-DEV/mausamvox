@@ -19,8 +19,9 @@ import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_MODEL, MINIMAX_VER
 import { normalizeLoudness } from '@/lib/loudness'
 
 // Song Studio: AI full-song generation — engine selected by SONG_ENGINE (see
-// song-engine.ts): 'elevenlabs' (default), 'acestep' (instant rollback) or
-// 'minimax' (MiniMax Music 2.5 on Replicate — same create+poll as acestep).
+// song-engine.ts): 'elevenlabs', 'acestep' (also the fallback for an unset or
+// unrecognised value) or 'minimax' (MiniMax Music 2.5 on Replicate — same
+// create+poll as acestep).
 //
 // elevenlabs: the API returns audio bytes synchronously, so POST does the
 // whole job (charge → compose → persist) and returns the finished song; the
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
       chargedUserId = user.id
     }
 
-    // ── elevenlabs (default): synchronous compose → persist → done ──────────
+    // ── elevenlabs: synchronous compose → persist → done ────────────────────
     if (engine === 'elevenlabs') {
       const audioBuffer = await composeSongElevenLabs(
         { stylePrompt: finalStyle, lyrics, durationSeconds: duration as number },
