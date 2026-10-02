@@ -13,6 +13,9 @@ import {
   ACE_STEP_VERSION,
   SONG_STUDIO_CREDITS,
   SONG_MIN_SECONDS,
+  SONG_TITLE_MAX_CHARS,
+  UNTITLED_SONG,
+  resolveSongTitle,
 } from '@/lib/song-engine'
 import { measureAudioSeconds, trimWithFadeOut } from '@/lib/audio-length'
 import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
@@ -56,7 +59,6 @@ const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Generous input caps — validation, not creativity limits.
 const MAX_LYRICS_CHARS = 5000
 const MAX_TAGS_CHARS = 300
-const MAX_TITLE_CHARS = 120
 
 function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }
@@ -130,9 +132,11 @@ export async function POST(req: NextRequest) {
     let lyrics = (body.lyrics ?? '').trim()
     const stylePrompt = (body.stylePrompt ?? '').trim()
     const duration = body.duration
-    // Used by the synchronous elevenlabs path (the acestep path receives the
-    // title on the GET poll instead — unchanged).
-    const title = (body.title ?? '').trim().slice(0, MAX_TITLE_CHARS) || 'Song Studio track'
+    // The song's name everywhere. The user's title; else the first lyric line;
+    // else "Untitled song" — never the style text. Used directly by the
+    // synchronous elevenlabs path, and stored with Replicate jobs in
+    // song_studio_jobs so the GET save uses it regardless of who polls.
+    const title = resolveSongTitle(body.title, lyrics)
 
     // Vocal selector (optional — older clients don't send it).
     if (body.vocals !== undefined && !SONG_VOCALS.includes(body.vocals as SongVocals)) {
@@ -265,12 +269,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Generation failed to start: ${safeStringify(prediction.error)}` }, { status: 502 })
     }
 
+    // Store the job's title/style/target server-side (best-effort — never
+    // fails a started, paid job; GET falls back to the poll's query params).
+    const { error: jobError } = await supabaseAdmin.from('song_studio_jobs').insert({
+      prediction_id: prediction.id,
+      user_id: user.id,
+      title,
+      style: finalStyle,
+      target_seconds: targetSeconds,
+    })
+    if (jobError) console.warn(`[song-studio] job record not stored (${jobError.message}) — title falls back to the poll; apply migration 20261002000002`)
+
     const lengthNote = engine === 'minimax'
       ? (targetSeconds ? `target ${targetSeconds}s` : 'length follows lyrics')
       : `${engineSeconds}s${fixed ? '' : ' (auto)'}`
-    console.log(`[song-studio] started ${engine} prediction ${prediction.id} (${lengthNote}, user ${user.id})`)
+    console.log(`[song-studio] started ${engine} prediction ${prediction.id} "${title}" (${lengthNote}, user ${user.id})`)
     // targetSeconds goes back so the client's poll can ask GET to trim.
-    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, targetSeconds })
+    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, targetSeconds, title })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[song-studio] create error:', msg)
@@ -285,7 +300,8 @@ export async function POST(req: NextRequest) {
 // ACE-Step (Replicate) predictions only — the elevenlabs engine finishes
 // inside POST and never polls. Kept fully intact for SONG_ENGINE=acestep and
 // for any prediction still in flight across an engine flip.
-// Query: id (prediction id), title (song name for the saved row).
+// Query: id (prediction id); title/style/target are FALLBACKS only — the
+// values stored with the job in song_studio_jobs at POST time win.
 export async function GET(req: NextRequest) {
   try {
     if (!adminConfigured) {
@@ -305,11 +321,27 @@ export async function GET(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
-    const title = (req.nextUrl.searchParams.get('title') ?? '').trim().slice(0, MAX_TITLE_CHARS) || 'Song Studio track'
-    const stylePrompt = (req.nextUrl.searchParams.get('style') ?? '').trim().slice(0, MAX_TAGS_CHARS)
-    // MiniMax target length (seconds) from the client's poll; anything outside
-    // the slider range is ignored (= no trim).
-    const targetRaw = Number(req.nextUrl.searchParams.get('target'))
+    // The job's own record (stored at POST). Its title/style/target win over
+    // the query string, so a save from a resumed tab, another device or a
+    // recovery link still uses the user's title. Missing table/row (pre-
+    // migration, or a job started before it) → query params, as before.
+    const { data: job, error: jobReadError } = await supabaseAdmin
+      .from('song_studio_jobs')
+      .select('user_id, title, style, target_seconds')
+      .eq('prediction_id', id)
+      .maybeSingle()
+    if (jobReadError) console.warn('[song-studio] job record unreadable, using poll params:', jobReadError.message)
+    // Someone else's job: never save it into (or refund it to) this account.
+    if (job && job.user_id !== user.id) {
+      return NextResponse.json({ error: 'This song belongs to another account' }, { status: 403 })
+    }
+
+    const queryTitle = (req.nextUrl.searchParams.get('title') ?? '').trim().slice(0, SONG_TITLE_MAX_CHARS)
+    const title = job?.title || queryTitle || UNTITLED_SONG
+    const stylePrompt = (job?.style ?? req.nextUrl.searchParams.get('style') ?? '').trim().slice(0, MAX_TAGS_CHARS)
+    // MiniMax target length (seconds); anything outside the slider range is
+    // ignored (= no trim).
+    const targetRaw = job ? Number(job.target_seconds) : Number(req.nextUrl.searchParams.get('target'))
     const targetSeconds = Number.isFinite(targetRaw) && targetRaw >= SONG_MIN_SECONDS && targetRaw <= engineMaxSeconds('minimax')
       ? Math.round(targetRaw) : null
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')

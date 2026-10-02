@@ -18,6 +18,7 @@ import {
   countSungLines,
   engineMaxSeconds,
   formatMSS,
+  resolveSongTitle,
   withVocalStyle,
   type SongEngine,
   type SongVocals,
@@ -182,7 +183,9 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
     setErrorMsg('')
     setResult(null)
     try {
-      const songTitle = title.trim() || (trimmedStyle.split(',')[0] || 'Song Studio track')
+      // The user's title; else the first lyric line; else "Untitled song" —
+      // never the style text (same rule as the server, resolveSongTitle).
+      const songTitle = resolveSongTitle(title, trimmedLyrics)
       let startRes: Response
       try {
         startRes = await fetch('/api/song-studio', {

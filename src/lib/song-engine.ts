@@ -112,6 +112,23 @@ export function formatMSS(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// ── Song title ───────────────────────────────────────────────────────────────
+// The user's title is the song's name everywhere (Saved Tracks, track page,
+// Share, Share as Video all read voice_swaps.song_name). With no title we use
+// the first sung lyric line, else "Untitled song" — NEVER the style text
+// (which is stored separately as voice_used and shown as "Style").
+export const SONG_TITLE_MAX_CHARS = 120
+export const UNTITLED_SONG = 'Untitled song'
+export function defaultSongTitle(lyrics: string): string {
+  const first = lyrics.split('\n').map((l) => l.trim()).find((l) => l && !/^\[[^\]]+\]$/.test(l))
+  if (!first) return UNTITLED_SONG
+  const clean = first.replace(/\s+/g, ' ')
+  return clean.length > 60 ? `${clean.slice(0, 57).trimEnd()}…` : clean
+}
+export function resolveSongTitle(title: string | null | undefined, lyrics: string): string {
+  return (title ?? '').trim().slice(0, SONG_TITLE_MAX_CHARS) || defaultSongTitle(lyrics)
+}
+
 // Sung lines = non-empty lines that aren't a whole-line [section tag].
 export function countSungLines(lyrics: string): number {
   return lyrics.split('\n').filter((l) => l.trim() && !/^\s*\[[^\]]+\]\s*$/.test(l)).length
