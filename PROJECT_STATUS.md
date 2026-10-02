@@ -8,9 +8,9 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
-## 🔧 UPLOAD + CHOIR/INSTRUMENTS FIX (2026-10-02, `7c47f8b`) — needs one migration, then test
+## 🔧 UPLOAD + CHOIR/INSTRUMENTS FIX (2026-10-02, `7c47f8b`) — migration applied, ⚠️ untested on live
 
-**⚠️ APPLY FIRST:** `supabase/migrations/20261002000000_audio_uploads_mime_types.sql` in the founder SQL Editor. Until then **every Choir/Instruments mic recording is still rejected** by the `audio-uploads` bucket (`audio/webm` not allowed) — the app now says so clearly instead of "Storage upload failed (400)".
+**✅ Migration `20261002000000_audio_uploads_mime_types.sql` APPLIED (2026-10-02)** — founder ran it; re-read of the live bucket confirms 9 allowed types incl. `audio/webm` + `audio/ogg`, size limit unchanged at 50 MiB. Production deploy `cb78a32` (contains `7c47f8b`) is Ready. **Next: live acceptance tests** — Choir mic recording, Instruments hum, Voice Swap + Stem Studio with a 50–75 MB WAV (should compress), Choir file over 3 min (should reject, no charge).
 
 **Root causes (reproduced against the live bucket):** 50 MiB bucket limit vs the 75 MB the app promised (WAV 413); exact-match MIME allow-list rejecting `audio/x-wav`/`audio/wave` and the recorder's `audio/webm` (415 before the API routes ever ran); Choir inputs over ~3 min could exceed the 60 s function limit (no refund on a hard kill).
 
