@@ -1,6 +1,12 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-10-02 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+_Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+
+## 🎼 SONG STUDIO → GOOGLE LYRIA 3 PRO (2026-10-03, `f1c381a`) — ⚠️ built, NOT switched on yet
+
+**To switch on:** Vercel → Settings → Environment Variables → edit `SONG_ENGINE` → `lyria` → Save (Production) → **Redeploy** → reload any open Song Studio tab. Fallbacks by the same variable: `minimax26`, `minimax` (2.5), `acestep`, `elevenlabs`.
+
+Lyria: $0.08/song (250 cr earns $0.20–$0.28 → ~60–72% margin); one prompt (style + voice + "deep warm bass, full low end, clear natural vocals" + lyrics); songs up to ~3:00; true-peak limiter only (no EQ/compression), 320 kbps; age selector; "Make 2 versions" (250 cr each, total on the button); safety blocks refunded with a friendly message. Real tests: "Final Test 1" (English, 2:54) + "Final Test 2" (Hindi romanized, 2:10), $0.08 each, TP → −1.6/−1.7 dBTP. **Untested live:** 2-version flow end-to-end, a safety-filter block (exact Lyria error text unknown — matched broadly), target-length trim on Lyria, resume of 2 pending songs.
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 
