@@ -8,9 +8,10 @@ import { VSidebar } from '@/components/voice-swap/VSidebar'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { ShareControl } from '@/components/share/ShareControl'
-import { CHOIR_CREDITS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
+import { CHOIR_CREDITS, CHOIR_MAX_SECONDS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
 import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
 import type { MicMeter } from '@/components/recording/micMeter'
+import { uploadAudioToStorage } from '@/lib/audio-upload'
 
 // Choir Composer — DSP vocal harmonizer. HONEST FRAMING everywhere: the
 // output is the user's own voice pitch-shifted into stacked harmony layers,
@@ -132,7 +133,22 @@ export function ChoirPage() {
       showToast(`File must be 25 MB or smaller (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`)
       return
     }
-    setVocalSource(file, file.name, file.name)
+    // Length pre-check (the route enforces the same cap) — saves an upload and
+    // a charge→refund round-trip. Unknown duration = let the server decide.
+    const probeUrl = URL.createObjectURL(file)
+    const probe = new Audio()
+    probe.preload = 'metadata'
+    probe.onloadedmetadata = () => {
+      URL.revokeObjectURL(probeUrl)
+      const d = probe.duration
+      if (Number.isFinite(d) && d > CHOIR_MAX_SECONDS) {
+        showToast(`Keep the vocal under ${CHOIR_MAX_SECONDS / 60} minutes (yours is ${Math.floor(d / 60)}:${String(Math.round(d % 60)).padStart(2, '0')}) — trim it to the part you want harmonized.`)
+        return
+      }
+      setVocalSource(file, file.name, file.name)
+    }
+    probe.onerror = () => { URL.revokeObjectURL(probeUrl); setVocalSource(file, file.name, file.name) }
+    probe.src = probeUrl
   }
 
   // Stream + meter come from the MicCheckWizard (permission → quiet-room check
@@ -188,22 +204,13 @@ export function ChoirPage() {
     setErrorMsg('')
     setResult(null)
     try {
-      // 1 — presigned PUT straight to storage (StemStudio pattern).
+      // 1 — presigned PUT straight to storage. The shared helper sends a
+      // canonical MIME: MediaRecorder's "audio/webm;codecs=opus" was being
+      // rejected by the bucket (415) before this route ever ran.
       setPhase('uploading')
-      const mime = vocal.blob.type || guessMime(vocal.filename)
-      const presignRes = await fetch('/api/upload-stem/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: vocal.filename, contentType: mime }),
-      })
-      const presign = await presignRes.json().catch(() => ({}))
-      if (!presignRes.ok) throw new Error(presign.error ?? `Failed to get upload URL (${presignRes.status})`)
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': mime },
-        body: vocal.blob,
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+      const uploaded = await uploadAudioToStorage(
+        new File([vocal.blob], vocal.filename, { type: vocal.blob.type || guessMime(vocal.filename) })
+      )
 
       // 2 — build the stack (server charges CHOIR_CREDITS atomically; any
       // failure refunds server-side).
@@ -212,7 +219,7 @@ export function ChoirPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vocalPath: presign.path,
+          vocalPath: uploaded.path,
           voices,
           mode,
           title: title.trim() || undefined,
@@ -292,7 +299,7 @@ export function ChoirPage() {
                   onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }}
                 />
                 ⬆ Upload a vocal
-                <span className="ch-drop-hint">MP3 / WAV / M4A / WEBM · max 25 MB · works best on a clean solo take</span>
+                <span className="ch-drop-hint">MP3 / WAV / M4A / WEBM · max 25 MB, up to {CHOIR_MAX_SECONDS / 60} min · works best on a clean solo take</span>
               </label>
               {recording ? (
                 <button className="ch-rec-btn ch-rec-btn--live" onClick={stopRecording} disabled={busy}>

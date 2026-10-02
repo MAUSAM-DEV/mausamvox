@@ -8,8 +8,9 @@ import ffmpegPath from 'ffmpeg-static'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
-import { CHOIR_CREDITS, CHOIR_PRESETS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
+import { CHOIR_CREDITS, CHOIR_MAX_SECONDS, CHOIR_PRESETS, CHOIR_MODE_LABELS, type ChoirMode, type ChoirVoices } from '@/lib/choir-presets'
 import { normalizeLoudness } from '@/lib/loudness'
+import { logStageTiming } from '@/lib/replicate-timing'
 
 // Choir Composer — DSP vocal harmonizer. Takes the user's uploaded solo vocal
 // (a durable audio-uploads path from the existing presign flow) and builds a
@@ -168,12 +169,28 @@ export async function POST(req: NextRequest) {
 
     // Pass 1 — decode whatever arrived (mp3/m4a/webm/wav) to a known-rate WAV
     // so the asetrate math below is exact (ffmpeg-static ships no ffprobe).
+    const tDecode = Date.now()
     await execFileAsync(ffmpegPath, [
       '-v', 'error', '-y', '-i', inFile,
       '-ac', '2', '-ar', String(SAMPLE_RATE), '-c:a', 'pcm_s16le', wavFile,
     ])
+    const decodeMs = Date.now() - tDecode
+
+    // Duration from the decoded PCM size (16-bit stereo; header bytes are
+    // negligible). Enforced HERE — after the cheap decode, before the stack
+    // and loudness passes — because a run past maxDuration is hard-killed and
+    // the refund in the catch block never executes.
+    const audioSeconds = Math.max(0, (await fs.stat(wavFile)).size - 44) / (SAMPLE_RATE * 2 * 2)
+    if (audioSeconds > CHOIR_MAX_SECONDS) {
+      if (chargedUserId) await refundCredits(chargedUserId)
+      return NextResponse.json(
+        { error: `Keep the vocal under ${CHOIR_MAX_SECONDS / 60} minutes for now (yours is ${Math.floor(audioSeconds / 60)}:${String(Math.round(audioSeconds % 60)).padStart(2, '0')}) — trim it to the part you want harmonized.` },
+        { status: 413 }
+      )
+    }
 
     // Pass 2 — the harmony stack in one filter graph.
+    const tStack = Date.now()
     const offsets = CHOIR_PRESETS[mode][voices]
     const n = offsets.length + 1 // harmonies + unshifted lead
     const splitOuts = Array.from({ length: n }, (_, i) => `s${i}`)
@@ -188,10 +205,17 @@ export async function POST(req: NextRequest) {
       '-filter_complex', chains.join(';'),
       '-map', '[mix]', '-c:a', 'libmp3lame', '-b:a', '256k', outFile,
     ], { timeout: 45000 })
+    const stackMs = Date.now() - tStack
 
     // amix attenuates the sum, so the stack lands quiet — bring it to the
     // app-wide loudness target (falls back to the raw mix on failure).
+    const tLoud = Date.now()
     const mixBuffer = await normalizeLoudness(await fs.readFile(outFile), 'mp3', '[choir]')
+    // Tune CHOIR_MAX_SECONDS from these lines (lambda speed vs the local
+    // ≈5.1 s per minute of audio baseline).
+    logStageTiming('choir', decodeMs + stackMs + (Date.now() - tLoud), {
+      audio_s: audioSeconds.toFixed(1), voices, decode_ms: decodeMs, stack_ms: stackMs, loudnorm_ms: Date.now() - tLoud,
+    })
 
     // ── Persist as a saved track ─────────────────────────────────────────────
     const swapId = crypto.randomUUID()

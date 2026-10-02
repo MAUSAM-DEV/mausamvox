@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { AudioPlayer } from './AudioPlayer'
+import { uploadAudioToStorage } from '@/lib/audio-upload'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
@@ -9,15 +10,9 @@ type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'un
 type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
+// Product cap. The storage bucket's own limit is lower (50 MiB on the current
+// Supabase plan) — uploadAudioToStorage compresses WAVs above it to MP3.
 const MAX_BYTES = 75 * 1024 * 1024 // 75 MB
-
-function guessMime(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  if (ext === 'mp3') return 'audio/mpeg'
-  if (ext === 'm4a') return 'audio/mp4'
-  if (ext === 'wav') return 'audio/wav'
-  return 'audio/mpeg'
-}
 
 const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
   vocals:       { label: 'Vocals',       icon: '🎤', required: true },
@@ -290,6 +285,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
   const [dragging, setDragging] = useState(false)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  // 0..100 while an oversize WAV is being compressed to MP3; null otherwise.
+  const [compressPct, setCompressPct] = useState<number | null>(null)
   const [uploadMode, setUploadMode] = useState<UploadMode>('full')
   const [items, setItems] = useState<DetectedItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -313,29 +310,10 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
     setPhase('uploading')
 
     try {
-      const mime = file.type || guessMime(file.name)
-
-      // Step 1 — get a presigned upload URL (tiny JSON request, no file bytes through Vercel)
-      const presignRes = await fetch('/api/upload-stem/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: mime }),
-      })
-      // Check ok before .json() — a cold-start timeout returns HTML, not JSON.
-      if (!presignRes.ok) {
-        let msg = `Failed to get upload URL (${presignRes.status})`
-        try { const e = await presignRes.json(); msg = e.error ?? msg } catch { /* HTML body — use status */ }
-        throw new Error(msg)
-      }
-      const presign = await presignRes.json()
-
-      // Step 2 — PUT file directly to Supabase Storage (bypasses Vercel 4.5 MB body limit)
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+      // Steps 1–2 — presign + direct PUT to Supabase Storage (no file bytes
+      // through Vercel). Oversize WAVs are compressed to 320 kbps MP3 first;
+      // everything under the bucket limit uploads untouched.
+      const uploaded = await uploadAudioToStorage(file, { onCompressProgress: setCompressPct })
 
       setPhase('splitting')
 
@@ -343,7 +321,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const startRes = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: presign.path }),
+        body: JSON.stringify({ storagePath: uploaded.path }),
       })
       if (!startRes.ok) {
         let msg = `Stem split failed to start (${startRes.status})`
@@ -390,7 +368,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       if (!stems) throw new Error('Stem split timed out — please try again')
 
       const stemResult: StemResult = {
-        storagePath:     presign.path,
+        storagePath:     uploaded.path,
         vocalsUrl:       stems.vocals,
         vocalsPath,
         leadVocalsUrl:   '',
@@ -419,30 +397,15 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
   async function uploadDetectedItem(id: string, file: File) {
     try {
-      const mime = file.type || guessMime(file.name)
-
-      // Step 1 — get a presigned upload URL (no file bytes go through Vercel)
-      const presignRes = await fetch('/api/upload-stem/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: mime }),
-      })
-      const presign = await presignRes.json()
-      if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
-
-      // Step 2 — PUT file DIRECTLY to Supabase Storage (bypasses Vercel body size limit)
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+      // Steps 1–2 — presign + direct PUT (oversize WAV stems are compressed
+      // to 320 kbps MP3 first, same rule as the full-song upload)
+      const uploaded = await uploadAudioToStorage(file)
 
       // Step 3 — get a signed download URL now that the file exists in storage
       const signRes = await fetch('/api/upload-stem/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: presign.path }),
+        body: JSON.stringify({ path: uploaded.path }),
       })
       const sign = await signRes.json()
       if (!signRes.ok) throw new Error(sign.error ?? 'Failed to get download URL')
@@ -802,7 +765,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           <div className="vs-progress-zone">
             <div className="vs-prog-spinner" />
             <div className="vs-prog-file">{displayFile.name}</div>
-            <div className="vs-prog-label">Uploading to storage…</div>
+            <div className="vs-prog-label">
+              {compressPct !== null
+                ? `Large WAV — compressing to high-quality MP3 (320 kbps)… ${compressPct}%`
+                : 'Uploading to storage…'}
+            </div>
           </div>
         )}
 

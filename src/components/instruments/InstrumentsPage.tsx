@@ -16,6 +16,7 @@ import {
 } from '@/lib/instruments'
 import { MicCheckWizard, RecordingQualityMonitor } from '@/components/recording/MicCheckWizard'
 import type { MicMeter } from '@/components/recording/micMeter'
+import { uploadAudioToStorage } from '@/lib/audio-upload'
 
 // Instruments — voice → instrument. HONEST FRAMING: we transcribe the melody
 // of the user's vocal (notes + timing) and REPLAY it on the chosen instrument;
@@ -190,28 +191,20 @@ export function InstrumentsPage() {
     setErrorMsg('')
     setResult(null)
     try {
+      // Shared helper sends a canonical MIME: MediaRecorder's
+      // "audio/webm;codecs=opus" was rejected by the bucket (415) before
+      // this route ever ran.
       setPhase('uploading')
-      const mime = vocal.blob.type || guessMime(vocal.filename)
-      const presignRes = await fetch('/api/upload-stem/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: vocal.filename, contentType: mime }),
-      })
-      const presign = await presignRes.json().catch(() => ({}))
-      if (!presignRes.ok) throw new Error(presign.error ?? `Failed to get upload URL (${presignRes.status})`)
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': mime },
-        body: vocal.blob,
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+      const uploaded = await uploadAudioToStorage(
+        new File([vocal.blob], vocal.filename, { type: vocal.blob.type || guessMime(vocal.filename) })
+      )
 
       setPhase('generating')
       const res = await fetch('/api/instruments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vocalPath: presign.path,
+          vocalPath: uploaded.path,
           instrumentId,
           title: title.trim() || undefined,
         }),

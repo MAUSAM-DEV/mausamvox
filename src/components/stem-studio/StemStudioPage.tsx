@@ -8,6 +8,7 @@ import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
+import { uploadAudioToStorage } from '@/lib/audio-upload'
 
 const STEM_SPLIT_COST = 50 // same price the Voice Swap flow charges for this exact operation
 
@@ -28,13 +29,6 @@ const STEM_ROWS: Array<{ key: 'vocals' | 'bass' | 'drums' | 'other'; label: stri
   { key: 'drums',  label: 'Drums',  emoji: '🥁' },
   { key: 'other',  label: 'Other',  emoji: '🎹' },
 ]
-
-function guessMime(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase()
-  if (ext === 'wav') return 'audio/wav'
-  if (ext === 'm4a') return 'audio/mp4'
-  return 'audio/mpeg'
-}
 
 function validateFile(file: File): string | null {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -57,6 +51,8 @@ export function StemStudioPage() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [fileName, setFileName] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  // 0..100 while an oversize WAV is being compressed to MP3; null otherwise.
+  const [compressPct, setCompressPct] = useState<number | null>(null)
   const [stems, setStems] = useState<Stems | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -138,28 +134,9 @@ export function StemStudioPage() {
     setPhase('uploading')
 
     try {
-      const mime = file.type || guessMime(file.name)
-
-      // 1 — presigned upload URL (no file bytes through Vercel)
-      const presignRes = await fetch('/api/upload-stem/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: mime }),
-      })
-      if (!presignRes.ok) {
-        let msg = `Failed to get upload URL (${presignRes.status})`
-        try { const e = await presignRes.json(); msg = e.error ?? msg } catch { /* HTML body */ }
-        throw new Error(msg)
-      }
-      const presign = await presignRes.json()
-
-      // 2 — PUT directly to Supabase Storage
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': mime, 'x-upsert': 'false' },
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+      // 1–2 — presign + PUT directly to Supabase Storage (no file bytes
+      // through Vercel). Oversize WAVs are compressed to 320 kbps MP3 first.
+      const uploaded = await uploadAudioToStorage(file, { onCompressProgress: setCompressPct })
 
       setPhase('splitting')
 
@@ -167,7 +144,7 @@ export function StemStudioPage() {
       const startRes = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath: presign.path }),
+        body: JSON.stringify({ storagePath: uploaded.path }),
       })
       if (!startRes.ok) {
         let msg = `Stem split failed to start (${startRes.status})`
@@ -299,7 +276,9 @@ export function StemStudioPage() {
                 </div>
                 <div className="ss-prog-sub">
                   {phase === 'uploading'
-                    ? fileName
+                    ? (compressPct !== null
+                        ? `${fileName} — large WAV, compressing to high-quality MP3 (320 kbps)… ${compressPct}%`
+                        : fileName)
                     : `StemSplit Engine is working on “${fileName}” — usually 1–3 minutes${elapsed >= 5 ? ` · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : ''}`}
                 </div>
               </div>

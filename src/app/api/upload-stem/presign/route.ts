@@ -4,6 +4,27 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const maxDuration = 30
 
+// The bucket's real per-file limit, read live so the client can check (and
+// compress) BEFORE uploading. Raising the limit in the Supabase dashboard
+// flows through here with no code change. Cached per warm lambda.
+const FALLBACK_MAX_BYTES = 50 * 1024 * 1024
+const LIMIT_TTL_MS = 5 * 60 * 1000
+let cachedLimit: { bytes: number; at: number } | null = null
+
+async function bucketMaxBytes(): Promise<number> {
+  if (cachedLimit && Date.now() - cachedLimit.at < LIMIT_TTL_MS) return cachedLimit.bytes
+  const { data, error } = await supabaseAdmin.storage.getBucket('audio-uploads')
+  if (error || !data) {
+    console.warn('[upload-stem/presign] getBucket failed, using fallback limit:', error?.message)
+    return FALLBACK_MAX_BYTES
+  }
+  // null = no bucket limit (the global limit still applies — assume the fallback)
+  const raw = data.file_size_limit
+  const bytes = typeof raw === 'number' && raw > 0 ? raw : FALLBACK_MAX_BYTES
+  cachedLimit = { bytes, at: Date.now() }
+  return bytes
+}
+
 // Returns a presigned upload URL so the browser can PUT the file DIRECTLY
 // to Supabase Storage without proxying bytes through this server.
 // Auth is verified via the session cookie — unauthenticated calls get 401.
@@ -36,7 +57,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ uploadUrl: data.signedUrl, path, mime })
+    return NextResponse.json({ uploadUrl: data.signedUrl, path, mime, maxBytes: await bucketMaxBytes() })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[upload-stem/presign] unhandled error:', msg)

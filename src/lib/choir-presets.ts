@@ -10,6 +10,16 @@
 // Cheap deterministic ffmpeg compute (no paid model) — priced accordingly.
 export const CHOIR_CREDITS = 25
 
+// Input length cap. The route is synchronous inside a 60 s Vercel function,
+// and a hard timeout kills it before the catch-block refund can run (credits
+// lost). Measured 2026-09-27 on Apple Silicon with the same ffmpeg b6.0 build,
+// 8-voice stack incl. two-pass loudness: 2 min → 10.6 s, ~17 min → 88.8 s
+// (≈5.1 s per minute of audio, linear). A Vercel lambda is slower than that
+// by an unmeasured factor, so 3 min (≈16 s locally) leaves headroom for a
+// ~3× slower CPU plus download/upload. Retune from the `[timing] stage=choir`
+// log lines after the first live runs.
+export const CHOIR_MAX_SECONDS = 180
+
 export type ChoirMode = 'major' | 'octaves'
 export type ChoirVoices = 2 | 4 | 8
 
