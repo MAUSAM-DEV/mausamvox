@@ -5,16 +5,22 @@ import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import {
   songEngine,
+  engineSupportsDuration,
+  withVocalStyle,
+  SONG_VOCALS,
+  type SongVocals,
   ACE_STEP_VERSION,
   SONG_STUDIO_CREDITS,
   SONG_MIN_SECONDS,
   SONG_MAX_SECONDS,
 } from '@/lib/song-engine'
 import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
+import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_MODEL, MINIMAX_VERSION } from '@/lib/song-engine-minimax'
 import { normalizeLoudness } from '@/lib/loudness'
 
 // Song Studio: AI full-song generation — engine selected by SONG_ENGINE (see
-// song-engine.ts): 'elevenlabs' (default) or 'acestep' (instant rollback).
+// song-engine.ts): 'elevenlabs' (default), 'acestep' (instant rollback) or
+// 'minimax' (MiniMax Music 2.5 on Replicate — same create+poll as acestep).
 //
 // elevenlabs: the API returns audio bytes synchronously, so POST does the
 // whole job (charge → compose → persist) and returns the finished song; the
@@ -85,7 +91,7 @@ export async function POST(req: NextRequest) {
     }
     const engine = songEngine()
     // Config gates BEFORE any charge — a misconfigured engine must cost nothing.
-    if (engine === 'acestep' && !process.env.REPLICATE_API_TOKEN) {
+    if ((engine === 'acestep' || engine === 'minimax') && !process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
     if (engine === 'elevenlabs' && !process.env.ELEVENLABS_API_KEY) {
@@ -98,25 +104,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    let body: { lyrics?: string; stylePrompt?: string; duration?: number; title?: string }
+    let body: { lyrics?: string; stylePrompt?: string; duration?: number; title?: string; vocals?: string }
     try {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const lyrics = (body.lyrics ?? '').trim()
+    let lyrics = (body.lyrics ?? '').trim()
     const stylePrompt = (body.stylePrompt ?? '').trim()
     const duration = body.duration
     // Used by the synchronous elevenlabs path (the acestep path receives the
     // title on the GET poll instead — unchanged).
     const title = (body.title ?? '').trim().slice(0, MAX_TITLE_CHARS) || 'Song Studio track'
 
-    if (!lyrics) {
+    // Vocal selector (optional — older clients don't send it).
+    if (body.vocals !== undefined && !SONG_VOCALS.includes(body.vocals as SongVocals)) {
+      return NextResponse.json({ error: `vocals must be one of: ${SONG_VOCALS.join(', ')}` }, { status: 400 })
+    }
+    const vocals = body.vocals as SongVocals | undefined
+
+    // Instrumental = nothing is sung. MiniMax: empty lyrics → [Inst] (mapped in
+    // song-engine-minimax.ts). Other engines keep their documented convention.
+    if (vocals === 'instrumental') lyrics = engine === 'minimax' ? '' : '[instrumental]'
+
+    // MiniMax needs no lyrics (it generates an instrumental); the other
+    // engines keep requiring them exactly as before.
+    if (!lyrics && engine !== 'minimax') {
       return NextResponse.json({ error: 'Lyrics are required — use [instrumental] for a song without vocals' }, { status: 400 })
     }
-    if (lyrics.length > MAX_LYRICS_CHARS) {
-      return NextResponse.json({ error: `Lyrics are too long (max ${MAX_LYRICS_CHARS} characters)` }, { status: 400 })
+    const maxLyrics = engine === 'minimax' ? MINIMAX_MAX_LYRICS_CHARS : MAX_LYRICS_CHARS
+    if (lyrics.length > maxLyrics) {
+      return NextResponse.json({ error: `Lyrics are too long (max ${maxLyrics} characters)` }, { status: 400 })
     }
     if (!stylePrompt) {
       return NextResponse.json({ error: 'A style prompt is required (e.g. "lo-fi hip hop, chill, female vocals")' }, { status: 400 })
@@ -124,12 +143,16 @@ export async function POST(req: NextRequest) {
     if (stylePrompt.length > MAX_TAGS_CHARS) {
       return NextResponse.json({ error: `Style prompt is too long (max ${MAX_TAGS_CHARS} characters)` }, { status: 400 })
     }
+    // MiniMax has no duration input — it is neither required nor validated.
     if (
-      typeof duration !== 'number' || !Number.isFinite(duration) ||
-      duration < SONG_MIN_SECONDS || duration > SONG_MAX_SECONDS
+      engineSupportsDuration(engine) && (
+        typeof duration !== 'number' || !Number.isFinite(duration) ||
+        duration < SONG_MIN_SECONDS || duration > SONG_MAX_SECONDS
+      )
     ) {
       return NextResponse.json({ error: `Duration must be ${SONG_MIN_SECONDS}-${SONG_MAX_SECONDS} seconds` }, { status: 400 })
     }
+    const finalStyle = withVocalStyle(stylePrompt, vocals)
 
     // Charge BEFORE the paid Replicate create (atomic; gender-split pattern).
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
@@ -151,7 +174,7 @@ export async function POST(req: NextRequest) {
     // ── elevenlabs (default): synchronous compose → persist → done ──────────
     if (engine === 'elevenlabs') {
       const audioBuffer = await composeSongElevenLabs(
-        { stylePrompt, lyrics, durationSeconds: duration },
+        { stylePrompt: finalStyle, lyrics, durationSeconds: duration as number },
         '[song-studio]'
       )
       // No loudness pass here (deliberate): ElevenLabs output is already
@@ -169,7 +192,7 @@ export async function POST(req: NextRequest) {
         id: swapId,
         user_id: user.id,
         song_name: title,
-        voice_used: stylePrompt ? `AI generated · ${stylePrompt}` : 'AI generated',
+        voice_used: finalStyle ? `AI generated · ${finalStyle}` : 'AI generated',
         result_path: swapPath,
         // Satisfies the column + its unique index; 'el-' namespace can never
         // collide with real Replicate prediction ids.
@@ -189,16 +212,21 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── acestep (SONG_ENGINE=acestep rollback): create + poll via GET ───────
+    // ── acestep / minimax (Replicate): create + poll via GET ─────────────────
+    // Same create → refund-if-never-started path for both; GET persists.
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-    const prediction = await replicate.predictions.create({
-      version: ACE_STEP_VERSION,
-      input: {
-        tags: stylePrompt,
-        lyrics,
-        duration: Math.round(duration),
-      },
-    })
+    const prediction = await replicate.predictions.create(
+      engine === 'minimax'
+        ? { version: MINIMAX_VERSION, input: buildMiniMaxInput(lyrics, finalStyle) }
+        : {
+            version: ACE_STEP_VERSION,
+            input: {
+              tags: finalStyle,
+              lyrics,
+              duration: Math.round(duration as number),
+            },
+          }
+    )
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
       // Job never ran — refund immediately.
@@ -206,7 +234,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Generation failed to start: ${safeStringify(prediction.error)}` }, { status: 502 })
     }
 
-    console.log(`[song-studio] started prediction ${prediction.id} (${Math.round(duration)}s, user ${user.id})`)
+    console.log(`[song-studio] started ${engine} prediction ${prediction.id} (${engine === 'minimax' ? 'length follows lyrics' : `${Math.round(duration as number)}s`}, user ${user.id})`)
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -289,7 +317,13 @@ export async function GET(req: NextRequest) {
       const ext = new URL(outputUrl).pathname.split('.').pop()?.toLowerCase() === 'mp3' ? 'mp3' : 'wav'
       // ACE-Step output comes back much quieter than the rest of the app —
       // normalize before storing (falls back to the raw audio on failure).
-      const audioBuffer = await normalizeLoudness(rawBuffer, ext, '[song-studio]')
+      // MiniMax output is already mastered (measured −11.5 LUFS on a real run,
+      // louder than our −14 target) — skipped like ElevenLabs. Decided from
+      // the prediction's own model, so a job in flight across an engine flip
+      // is still handled correctly.
+      const audioBuffer = prediction.model === MINIMAX_MODEL
+        ? rawBuffer
+        : await normalizeLoudness(rawBuffer, ext, '[song-studio]')
       const swapId = crypto.randomUUID()
       const swapPath = `${user.id}/${swapId}.${ext}`
 

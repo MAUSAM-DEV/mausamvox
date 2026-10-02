@@ -7,10 +7,46 @@
 //   acestep    — lucataco/ace-step on Replicate (create+poll), the previous
 //                engine, kept fully intact as an instant rollback: set
 //                SONG_ENGINE=acestep in Vercel + redeploy.
+//   minimax    — MiniMax Music 2.5 (minimax/music-2.5) on Replicate, same
+//                create+poll flow and REPLICATE_API_TOKEN as acestep.
+//                Integration in song-engine-minimax.ts. No duration input
+//                (length follows the lyrics). Set SONG_ENGINE=minimax.
+
+export type SongEngine = 'elevenlabs' | 'acestep' | 'minimax'
 
 // Absent/unset env means 'elevenlabs' — no Vercel dashboard step to adopt.
-export function songEngine(): 'elevenlabs' | 'acestep' {
-  return process.env.SONG_ENGINE === 'acestep' ? 'acestep' : 'elevenlabs'
+export function songEngine(): SongEngine {
+  const v = process.env.SONG_ENGINE
+  return v === 'acestep' || v === 'minimax' ? v : 'elevenlabs'
+}
+
+// Engines whose model takes a duration. MiniMax doesn't — the UI hides the
+// duration control there rather than pretend it works.
+export function engineSupportsDuration(engine: SongEngine): boolean {
+  return engine !== 'minimax'
+}
+
+// Vocal selector (users reported every song came out with female vocals when
+// the style prompt didn't say otherwise). The phrase is PREPENDED to the
+// style prompt server-side so it leads the model's description; it works for
+// every engine because all three read vocals from the style text.
+export const SONG_VOCALS = ['male', 'female', 'duet', 'instrumental'] as const
+export type SongVocals = (typeof SONG_VOCALS)[number]
+export const SONG_VOCAL_LABELS: Record<SongVocals, string> = {
+  male: 'Male',
+  female: 'Female',
+  duet: 'Duet',
+  instrumental: 'Instrumental',
+}
+const SONG_VOCAL_PHRASES: Record<SongVocals, string> = {
+  male: 'male vocals',
+  female: 'female vocals',
+  duet: 'male and female duet vocals',
+  instrumental: 'instrumental, no vocals',
+}
+export function withVocalStyle(stylePrompt: string, vocals: SongVocals | undefined): string {
+  if (!vocals) return stylePrompt
+  return [SONG_VOCAL_PHRASES[vocals], stylePrompt].filter(Boolean).join(', ')
 }
 
 // ── ACE-Step pin (the 'acestep' fallback engine) ─────────────────────────────
@@ -32,6 +68,11 @@ export const ACE_STEP_VERSION = '280fc4f9ee507577f880a167f639c02622421d8fecf4924
 // add_credits() if the job fails (never charged on failure).
 // ⚠️ On the elevenlabs engine this must cover the ElevenLabs per-generation
 // cost + margin — value pending the founder's final number; unchanged for now.
+// ⚠️ On the minimax engine it must cover MiniMax's cost: $0.15 per generated
+// song (Replicate bills per output file — model page + a real run's
+// audio_output_count=1, 2026-10-02). At current plan prices 50 credits earn
+// $0.056 (Starter $9/8,000 cr) or $0.04 (Pro $24/30,000 cr) — BELOW cost.
+// Break-even ≈ 134 cr (Starter) / 188 cr (Pro). Founder's pricing call.
 export const SONG_STUDIO_CREDITS = 50
 
 // Duration bounds we expose (schema allows 1-240s; below ~15s the output is

@@ -8,7 +8,16 @@ import { VSidebar } from '@/components/voice-swap/VSidebar'
 import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { ShareControl } from '@/components/share/ShareControl'
-import { SONG_STUDIO_CREDITS } from '@/lib/song-engine'
+import {
+  SONG_STUDIO_CREDITS,
+  SONG_VOCALS,
+  SONG_VOCAL_LABELS,
+  engineSupportsDuration,
+  withVocalStyle,
+  type SongEngine,
+  type SongVocals,
+} from '@/lib/song-engine'
+import { MINIMAX_MAX_LYRICS_CHARS } from '@/lib/song-engine-minimax'
 import {
   LYRICS_GEN_CREDITS,
   LYRICS_THEME_MAX,
@@ -17,8 +26,9 @@ import {
   LYRICS_GEN_STRUCTURES,
 } from '@/lib/lyrics-gen'
 
-// Song Studio — AI full-song generation (music + optional vocals) via
-// ACE-Step. Server route charges SONG_STUDIO_CREDITS atomically up front and
+// Song Studio — AI full-song generation (music + optional vocals) via the
+// engine selected by SONG_ENGINE (elevenlabs / acestep / minimax — passed in
+// from the server page). Server route charges SONG_STUDIO_CREDITS atomically up front and
 // refunds on failure; the result is persisted as a normal saved track
 // (playable forever via the sign-on-read proxy, listed in Saved Tracks,
 // shareable, deletable).
@@ -46,7 +56,11 @@ Chasing every fading light
 
 (…or just [instrumental] for a song without vocals)`
 
-export function SongStudioPage() {
+export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine }) {
+  // Male by default — users reported every song came out female when the
+  // style prompt didn't say otherwise.
+  const [vocals, setVocals] = useState<SongVocals>('male')
+  const durationSupported = engineSupportsDuration(engine)
   const [isAdmin, setIsAdmin] = useState(false)
   const [plan, setPlan] = useState<string | null>(null)
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
@@ -142,8 +156,12 @@ export function SongStudioPage() {
     if (phase === 'generating') return
     const trimmedLyrics = lyrics.trim()
     const trimmedStyle = stylePrompt.trim()
-    if (!trimmedLyrics) { showToast('Add lyrics — or just [instrumental] for a song without vocals.'); return }
-    if (!trimmedStyle) { showToast('Describe the style, e.g. "lo-fi hip hop, chill, female vocals".'); return }
+    // MiniMax turns empty lyrics into an instrumental; Instrumental mode never
+    // sings lyrics. Every other case still needs lyrics, exactly as before.
+    if (!trimmedLyrics && engine !== 'minimax' && vocals !== 'instrumental') {
+      showToast('Add lyrics — or pick Instrumental for a song without vocals.'); return
+    }
+    if (!trimmedStyle) { showToast('Describe the style, e.g. "lo-fi hip hop, chill, acoustic guitar".'); return }
     if (!isAdmin && creditsRemaining !== null && creditsRemaining < SONG_STUDIO_CREDITS) {
       showToast(`Not enough credits — generating a song costs ${SONG_STUDIO_CREDITS}.`)
       return
@@ -159,7 +177,7 @@ export function SongStudioPage() {
         headers: { 'Content-Type': 'application/json' },
         // title is used by the synchronous (elevenlabs) engine, which persists
         // inside POST; the acestep engine takes it on the poll as before.
-        body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle }),
+        body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle, vocals }),
       })
       const startData = await startRes.json().catch(() => ({}))
       if (!startRes.ok) throw new Error(startData.error ?? `Failed to start (${startRes.status})`)
@@ -176,7 +194,8 @@ export function SongStudioPage() {
 
       const predictionId: string = startData.predictionId
       if (!predictionId) throw new Error('No prediction id returned')
-      const pollQs = new URLSearchParams({ id: predictionId, title: songTitle, style: trimmedStyle })
+      // style labels the saved row — the same vocal-prefixed text the server sent.
+      const pollQs = new URLSearchParams({ id: predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals) })
       const deadline = Date.now() + POLL_CEILING_MS
 
       for (;;) {
@@ -269,14 +288,37 @@ export function SongStudioPage() {
               className="ss-input"
               value={stylePrompt}
               onChange={(e) => setStylePrompt(e.target.value)}
-              placeholder="lo-fi hip hop, chill, dreamy female vocals"
+              placeholder="lo-fi hip hop, chill, acoustic guitar"
               maxLength={300}
               disabled={generating}
             />
 
+            <label className="ss-lbl">Vocals</label>
+            <div className="ss-durations" role="radiogroup" aria-label="Vocals">
+              {SONG_VOCALS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={vocals === v}
+                  className={`ss-dur-btn${vocals === v ? ' ss-dur-btn--active' : ''}`}
+                  onClick={() => setVocals(v)}
+                  disabled={generating}
+                >
+                  {SONG_VOCAL_LABELS[v]}
+                </button>
+              ))}
+            </div>
+
             <label className="ss-lbl" htmlFor="ss-lyrics">
               Lyrics
-              <span className="ss-hint">use [verse] / [chorus] / [bridge] — or [instrumental] for no vocals</span>
+              <span className="ss-hint">
+                {vocals === 'instrumental'
+                  ? 'Instrumental — lyrics won’t be sung'
+                  : engine === 'minimax'
+                    ? 'use [verse] / [chorus] / [bridge] — leave empty for an instrumental'
+                    : 'use [verse] / [chorus] / [bridge] — or [instrumental] for no vocals'}
+              </span>
             </label>
 
             <button
@@ -363,23 +405,31 @@ export function SongStudioPage() {
               onChange={(e) => setLyrics(e.target.value)}
               placeholder={LYRICS_PLACEHOLDER}
               rows={10}
-              maxLength={5000}
+              maxLength={engine === 'minimax' ? MINIMAX_MAX_LYRICS_CHARS : 5000}
               disabled={generating}
             />
 
-            <label className="ss-lbl">Duration</label>
-            <div className="ss-durations">
-              {DURATIONS.map((d) => (
-                <button
-                  key={d.seconds}
-                  className={`ss-dur-btn${duration === d.seconds ? ' ss-dur-btn--active' : ''}`}
-                  onClick={() => setDuration(d.seconds)}
-                  disabled={generating}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
+            <label className="ss-lbl">{durationSupported ? 'Duration' : 'Length'}</label>
+            {durationSupported ? (
+              <div className="ss-durations">
+                {DURATIONS.map((d) => (
+                  <button
+                    key={d.seconds}
+                    className={`ss-dur-btn${duration === d.seconds ? ' ss-dur-btn--active' : ''}`}
+                    onClick={() => setDuration(d.seconds)}
+                    disabled={generating}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              // Honest copy: this engine has no duration setting at all.
+              <p className="ss-ai-note">
+                Song length follows your lyrics — more verses and choruses make a longer
+                song. There&rsquo;s no length setting for this engine.
+              </p>
+            )}
 
             <button className="ss-generate" onClick={handleGenerate} disabled={generating}>
               {generating
