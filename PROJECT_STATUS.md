@@ -12,7 +12,7 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 **To switch on:** Vercel → Project Settings → Environment Variables → `SONG_ENGINE` = `minimax` (Production) → **Redeploy**. Rollback: set it back to `elevenlabs` (or delete it) / `acestep` + redeploy. Uses the existing `REPLICATE_API_TOKEN`.
 
-**Cost: $0.15 per song** (Replicate per-output billing, verified on a real run). **⚠️ PRICING DECISION PENDING:** at 50 credits a song earns $0.056 (Starter) / $0.04 (Pro) → each MiniMax song loses ~$0.09–0.11; break-even ≈134 cr (Starter) / 188 cr (Pro). Free plan's 500 cr = up to 10 songs = $1.50 per free user; Studio "Unlimited credits" is uncapped exposure.
+**Cost: $0.15 per song** (Replicate per-output billing, verified on a real run). **✅ Repriced to 250 credits (`3118012`):** earns $0.281 (Starter, ~47% margin) / $0.20 (Pro, ~25% margin); break-even 134 / 188 cr. Free plan's 500 cr = 2 songs ($0.30 max). **⚠️ Still open:** Studio plan's "Unlimited credits" has uncapped MiniMax exposure — needs a cap or fair-use rule.
 
 **Also live now on every engine:** Vocals selector (Male default / Female / Duet / Instrumental), prepended to the style prompt. **Live tests after the switch:** Hindi lyric + Male → male vocal, saved track plays, Share + Share as Video work; empty lyrics → instrumental; Duration buttons replaced by "Song length follows your lyrics"; a failed generation refunds.
 
