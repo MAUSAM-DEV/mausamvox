@@ -8,6 +8,16 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
+## 🎵 SONG STUDIO — MiniMax Music 2.5 engine (2026-10-02, `341fafe`) — ⚠️ not switched on yet
+
+**To switch on:** Vercel → Project Settings → Environment Variables → `SONG_ENGINE` = `minimax` (Production) → **Redeploy**. Rollback: set it back to `elevenlabs` (or delete it) / `acestep` + redeploy. Uses the existing `REPLICATE_API_TOKEN`.
+
+**Cost: $0.15 per song** (Replicate per-output billing, verified on a real run). **⚠️ PRICING DECISION PENDING:** at 50 credits a song earns $0.056 (Starter) / $0.04 (Pro) → each MiniMax song loses ~$0.09–0.11; break-even ≈134 cr (Starter) / 188 cr (Pro). Free plan's 500 cr = up to 10 songs = $1.50 per free user; Studio "Unlimited credits" is uncapped exposure.
+
+**Also live now on every engine:** Vocals selector (Male default / Female / Duet / Instrumental), prepended to the style prompt. **Live tests after the switch:** Hindi lyric + Male → male vocal, saved track plays, Share + Share as Video work; empty lyrics → instrumental; Duration buttons replaced by "Song length follows your lyrics"; a failed generation refunds.
+
+---
+
 ## 🎹 INSTRUMENTS PATH FIX (2026-10-02, `a852e3a`) — ✅ CONFIRMED LIVE
 
 **✅ Live acceptance PASSED (2026-10-02 12:52):** founder's hum → 200, `basic-pitch backend=wasm audio=24.4s inference=4901ms`, 184 notes → grand-piano, saved track. **First real lambda speed number:** Basic Pitch ≈201 ms per audio-second on Vercel vs ≈79 ms locally → **lambda ≈2.5× slower than Apple Silicon** for this workload. Instruments' 25 s cap has wide headroom. Choir projection at the same factor: 3 min ≈39 s (cap looks right — confirm with a real `[timing] stage=choir` line; ffmpeg is a different workload).
