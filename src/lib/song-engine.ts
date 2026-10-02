@@ -70,10 +70,15 @@ export const ACE_STEP_VERSION = '280fc4f9ee507577f880a167f639c02622421d8fecf4924
 // cost + margin — value pending the founder's final number; unchanged for now.
 // ⚠️ On the minimax engine it must cover MiniMax's cost: $0.15 per generated
 // song (Replicate bills per output file — model page + a real run's
-// audio_output_count=1, 2026-10-02). At current plan prices 50 credits earn
-// $0.056 (Starter $9/8,000 cr) or $0.04 (Pro $24/30,000 cr) — BELOW cost.
-// Break-even ≈ 134 cr (Starter) / 188 cr (Pro). Founder's pricing call.
-export const SONG_STUDIO_CREDITS = 50
+// audio_output_count=1, 2026-10-02).
+//   Break-even: Starter ($9 / 8,000 cr = $0.001125/cr) → 134 cr;
+//               Pro ($24 / 30,000 cr = $0.0008/cr)     → 188 cr.
+//   At 250 cr a song earns $0.281 (Starter, ~47% margin) or $0.20 (Pro,
+//   ~25% margin). Free plan's 500 cr = 2 songs = $0.30 max cost per free
+//   user. Studio's "Unlimited credits" is NOT covered by any per-song price.
+// The UI (button label, credit pre-check, toast) reads this constant —
+// change it here only. (Was 50 = $0.04–$0.056 per song, below cost.)
+export const SONG_STUDIO_CREDITS = 250
 
 // Duration bounds we expose (schema allows 1-240s; below ~15s the output is
 // rarely a usable "song", so the UI offers 30s-4min presets).
