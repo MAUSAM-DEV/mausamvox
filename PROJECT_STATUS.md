@@ -8,9 +8,11 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
-## 🎵 SONG STUDIO — MiniMax Music 2.5 engine (2026-10-02, `341fafe`) — ⚠️ not switched on yet
+## 🎵 SONG STUDIO — MiniMax Music 2.5 engine (2026-10-02, `341fafe`) — ✅ switched on (`SONG_ENGINE=minimax`, confirmed in prod logs)
 
-**To switch on:** Vercel → Project Settings → Environment Variables → `SONG_ENGINE` = `minimax` (Production) → **Redeploy**. Rollback: set it back to `elevenlabs` (or delete it) / `acestep` + redeploy. Uses the existing `REPLICATE_API_TOKEN`.
+**Poll resilience fix (`4f11c6b`):** a dropped status poll used to abandon a job that then succeeded (song lost; a paying user's charge would stick). Now retries + resumes on reopen (`src/lib/song-poll.ts`). **Live tests:** generate with Wi-Fi briefly off mid-way → song still arrives; start a song, close the tab, reopen Song Studio within a few minutes → "Picking up your song from earlier…" → saved. **Known gap (fuller fix later):** if the user never comes back within ~1 h, the finished song is still never saved — a Replicate webhook that persists server-side would close this completely.
+
+**Engine switch:** Vercel → Settings → Environment Variables → `SONG_ENGINE` = `minimax` → **Redeploy**, then **reload any open Song Studio tab** (the page is built per deploy). Unset/unrecognised now falls back to `acestep` with a log warning. Uses the existing `REPLICATE_API_TOKEN`.
 
 **Cost: $0.15 per song** (Replicate per-output billing, verified on a real run). **✅ Repriced to 250 credits (`3118012`):** earns $0.281 (Starter, ~47% margin) / $0.20 (Pro, ~25% margin); break-even 134 / 188 cr. Free plan's 500 cr = 2 songs ($0.30 max). **⚠️ Still open:** Studio plan's "Unlimited credits" has uncapped MiniMax exposure — needs a cap or fair-use rule.
 
