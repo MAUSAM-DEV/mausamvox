@@ -8,7 +8,13 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
-## 🔧 UPLOAD + CHOIR/INSTRUMENTS FIX (2026-10-02, `7c47f8b`) — migration applied, ⚠️ untested on live
+## 🎹 INSTRUMENTS PATH FIX (2026-10-02, `a852e3a`) — ⚠️ needs one live test
+
+Choir + Voice Swap confirmed working live by the founder after `7c47f8b`. Instruments then failed with `…Received type number (20841)`: webpack rewrites `createRequire(import.meta.url).resolve()` into a numeric module ID (Basic Pitch model dir → crash; tfjs .wasm dir → silent CPU fallback). Fixed with `__non_webpack_require__.resolve()` + string guard; verified in a standalone (traced-files-only) build: 200 + valid MP3, `backend=wasm`. **Live test:** `/instruments` → hum ~10 s → convert → instrument track plays; Vercel log within an hour must say `basic-pitch backend=wasm` (NOT `using cpu`). **Rule for future server code:** never use `createRequire(...).resolve()` / `require.resolve()` for file paths in a route — webpack turns it into a number; use `__non_webpack_require__.resolve()` or `path.join(process.cwd(), …)`.
+
+---
+
+## 🔧 UPLOAD + CHOIR/INSTRUMENTS FIX (2026-10-02, `7c47f8b`) — migration applied, ✅ Choir + Voice Swap confirmed live
 
 **✅ Migration `20261002000000_audio_uploads_mime_types.sql` APPLIED (2026-10-02)** — founder ran it; re-read of the live bucket confirms 9 allowed types incl. `audio/webm` + `audio/ogg`, size limit unchanged at 50 MiB. Production deploy `cb78a32` (contains `7c47f8b`) is Ready. **Next: live acceptance tests** — Choir mic recording, Instruments hum, Voice Swap + Stem Studio with a 50–75 MB WAV (should compress), Choir file over 3 min (should reject, no charge).
 
