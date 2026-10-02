@@ -1,10 +1,26 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-08-14 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+_Last updated: 2026-10-02 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
 > **Vision:** "The most powerful, honest, and creator-friendly AI voice platform — built first for India, loved everywhere." (see [MausamVox-PRD-v2.md](MausamVox-PRD-v2.md))
 
 MausamVox is an AI voice & music creation platform: clone voices, swap vocals on a track, split stems, and (planned) generate SATB choirs — with hard controls, free previews, honest billing, and Indian-language support.
+
+---
+
+## 🔧 UPLOAD + CHOIR/INSTRUMENTS FIX (2026-10-02, `7c47f8b`) — needs one migration, then test
+
+**⚠️ APPLY FIRST:** `supabase/migrations/20261002000000_audio_uploads_mime_types.sql` in the founder SQL Editor. Until then **every Choir/Instruments mic recording is still rejected** by the `audio-uploads` bucket (`audio/webm` not allowed) — the app now says so clearly instead of "Storage upload failed (400)".
+
+**Root causes (reproduced against the live bucket):** 50 MiB bucket limit vs the 75 MB the app promised (WAV 413); exact-match MIME allow-list rejecting `audio/x-wav`/`audio/wave` and the recorder's `audio/webm` (415 before the API routes ever ran); Choir inputs over ~3 min could exceed the 60 s function limit (no refund on a hard kill).
+
+**What changed:** shared `src/lib/audio-upload.ts` (canonical MIME, friendly size/format errors with the real limit, in-browser WAV→320 kbps MP3 only for WAVs over the bucket limit) used by Voice Swap, Stem Studio, Choir, Instruments; presign returns the live bucket limit; Choir capped at `CHOIR_MAX_SECONDS = 180` with refund + `[timing] stage=choir` logs.
+
+**To allow 100 MB uploads instead of compressing:** Dashboard → Storage → Settings → Upload file size limit → 100 MB (may need a paid plan), then `update storage.buckets set file_size_limit = 104857600 where id = 'audio-uploads';` — no code change needed.
+
+**Retune `CHOIR_MAX_SECONDS`** from the first live `[timing] stage=choir` lines (local baseline ≈5.1 s per minute of audio; Vercel speed unmeasured — logs were unavailable).
+
+**Vercel logs:** Likely, unverified: Hobby runtime-log retention is ~1 hour — check logs within an hour of a failing test.
 
 ---
 
