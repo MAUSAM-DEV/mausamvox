@@ -45,7 +45,26 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const execFileAsync = promisify(execFile)
+// Only used to LOAD js-synthesizer (webpack compiles these calls to real
+// external require()s, verified in the built route). Never use its .resolve().
 const nodeRequire = createRequire(import.meta.url)
+
+// ⚠️ FILE PATHS: webpack rewrites createRequire(import.meta.url).resolve(x)
+// into x's numeric MODULE ID, not a path. In production that compiled to
+// path.dirname(20841) → "The "path" argument must be of type string. Received
+// type number (20841)" for the Basic Pitch model dir, and the same for the
+// tfjs .wasm dir (21180) — which was caught and silently forced the ~10×
+// slower CPU backend. __non_webpack_require__ is webpack's escape hatch: it
+// compiles to Node's real require, so .resolve() returns a filesystem path,
+// resolved from the function's own folder into its traced node_modules.
+declare const __non_webpack_require__: NodeRequire
+function packageFileDir(specifier: string): string {
+  const resolved: unknown = __non_webpack_require__.resolve(specifier)
+  if (typeof resolved !== 'string') {
+    throw new Error(`could not resolve ${specifier} to a file path (got ${typeof resolved} ${String(resolved)})`)
+  }
+  return path.dirname(resolved)
+}
 
 const BP_SAMPLE_RATE = 22050
 const RENDER_SAMPLE_RATE = 44100
@@ -75,10 +94,7 @@ function ensureTf(): Promise<{ tf: TfModule; backend: string }> {
         const wasm = interop<typeof import('@tensorflow/tfjs-backend-wasm')>(
           await import('@tensorflow/tfjs-backend-wasm')
         )
-        const wasmDist = path.join(
-          path.dirname(nodeRequire.resolve('@tensorflow/tfjs-backend-wasm/package.json')),
-          'dist'
-        ) + path.sep
+        const wasmDist = path.join(packageFileDir('@tensorflow/tfjs-backend-wasm/package.json'), 'dist') + path.sep
         wasm.setWasmPaths(wasmDist)
         await tf.setBackend('wasm')
         await tf.ready()
@@ -102,7 +118,7 @@ function ensureBasicPitch(): NonNullable<typeof bpPromise> {
     bpPromise = (async () => {
       const { tf } = await ensureTf()
       const bp = interop<BasicPitchModule>(await import('@spotify/basic-pitch'))
-      const modelDir = path.dirname(nodeRequire.resolve('@spotify/basic-pitch/model/model.json'))
+      const modelDir = packageFileDir('@spotify/basic-pitch/model/model.json')
       // The browser-oriented tfjs loads models via fetch — hand it the files.
       const fileIOHandler = {
         load: async () => {
