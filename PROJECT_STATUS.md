@@ -2,6 +2,10 @@
 
 _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
+## 🎨 SONG STUDIO REDESIGN (2026-10-03, `9ef4b12`) — ⚠️ untested live
+
+Suno-style page: create panel (Simple: describe + language → AI lyrics → edit → generate; Advanced: lyrics/style/vocals/age) with style chips, tempo/key, structure-tag buttons, length, 2 versions; "My songs" list (cover tiles, play, Reuse style, Share, Share as Video, search, in-progress rows); fixed bottom player. Lyrics writer supports any language (26 + "Other"). Landing card made honest. **Live tests:** Simple flow end-to-end in a non-English language (e.g. Spanish or "Other → Assamese"); chips + tempo/key reach the saved style; Reuse style; play while scrolling; phone layout. **Open:** Choir + Instruments landing cards still overclaim (task chip spawned).
+
 ## 🎼 SONG STUDIO → GOOGLE LYRIA 3 PRO (2026-10-03, `f1c381a`) — ⚠️ built, NOT switched on yet
 
 **To switch on:** Vercel → Settings → Environment Variables → edit `SONG_ENGINE` → `lyria` → Save (Production) → **Redeploy** → reload any open Song Studio tab. Fallbacks by the same variable: `minimax26`, `minimax` (2.5), `acestep`, `elevenlabs`.
