@@ -12,6 +12,10 @@ import {
   SONG_STUDIO_CREDITS,
   SONG_VOCALS,
   SONG_VOCAL_LABELS,
+  SONG_AGES,
+  SONG_AGE_LABELS,
+  isMiniMaxEngine,
+  styleMentionsAge,
   SONG_MIN_SECONDS,
   SONG_LENGTH_STEP_SECONDS,
   autoDurationSeconds,
@@ -22,7 +26,9 @@ import {
   withVocalStyle,
   type SongEngine,
   type SongVocals,
+  type SongAge,
 } from '@/lib/song-engine'
+import { lyriaLyricsLookTooLong } from '@/lib/song-engine-lyria'
 import { MINIMAX_MAX_LYRICS_CHARS, estimateMiniMaxSeconds } from '@/lib/song-engine-minimax'
 import {
   clearPending,
@@ -64,6 +70,13 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
   // Male by default — users reported every song came out female when the
   // style prompt didn't say otherwise.
   const [vocals, setVocals] = useState<SongVocals>('male')
+  // Voice age: "Auto — match the song" adds no age words (the model decides).
+  const [age, setAge] = useState<SongAge>('auto')
+  // "Make 2 versions" — charged SONG_STUDIO_CREDITS per song.
+  const [twoVersions, setTwoVersions] = useState(false)
+  const songCount = twoVersions && engine !== 'elevenlabs' ? 2 : 1
+  const minimaxLike = isMiniMaxEngine(engine)
+  const targetEngine = minimaxLike || engine === 'lyria'
   // Length: "Auto" (default) or a slider value. On MiniMax the value is a
   // target (no duration input exists); on acestep/elevenlabs it's the real
   // duration. The slider tops out at the engine's limit.
@@ -82,6 +95,8 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
   // MiniMax: warn when the lyrics' estimated natural length falls well short
   // of the target (estimate fitted to real runs — rough, so a 20 s margin).
   const lyricsShortForTarget = estimateMiniMaxSeconds(countSungLines(lyrics)) < lengthValue - 20
+  // Lyria: songs top out around 3:00 — friendly note when lyrics look longer.
+  const lyricsTooLongForLyria = engine === 'lyria' && vocals !== 'instrumental' && lyriaLyricsLookTooLong(countSungLines(lyrics))
 
   // AI lyrics writer (inline panel above the lyrics box).
   const [aiOpen, setAiOpen] = useState(false)
@@ -94,8 +109,10 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
   const [phase, setPhase] = useState<Phase>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
-  const [result, setResult] = useState<{ swapId: string; url: string; title: string } | null>(null)
-  const [downloading, setDownloading] = useState(false)
+  // One finished song, or two with "Make 2 versions".
+  type SongResult = { swapId: string; url: string; title: string }
+  const [results, setResults] = useState<SongResult[]>([])
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const [toast, setToast] = useState({ visible: false, message: '' })
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -170,31 +187,33 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
     const trimmedStyle = stylePrompt.trim()
     // MiniMax turns empty lyrics into an instrumental; Instrumental mode never
     // sings lyrics. Every other case still needs lyrics, exactly as before.
-    if (!trimmedLyrics && engine !== 'minimax' && vocals !== 'instrumental') {
+    if (!trimmedLyrics && !minimaxLike && vocals !== 'instrumental') {
       showToast('Add lyrics — or pick Instrumental for a song without vocals.'); return
     }
     if (!trimmedStyle) { showToast('Describe the style, e.g. "lo-fi hip hop, chill, acoustic guitar".'); return }
-    if (!isAdmin && creditsRemaining !== null && creditsRemaining < SONG_STUDIO_CREDITS) {
-      showToast(`Not enough credits — generating a song costs ${SONG_STUDIO_CREDITS}.`)
+    const totalCost = songCount * SONG_STUDIO_CREDITS
+    if (!isAdmin && creditsRemaining !== null && creditsRemaining < totalCost) {
+      showToast(songCount === 2
+        ? `Not enough credits — 2 versions cost ${totalCost}.`
+        : `Not enough credits — generating a song costs ${SONG_STUDIO_CREDITS}.`)
       return
     }
 
     setPhase('generating')
     setErrorMsg('')
-    setResult(null)
+    setResults([])
     try {
-      // The user's title; else the first lyric line; else "Untitled song" —
-      // never the style text (same rule as the server, resolveSongTitle).
+      // The user's title (as typed); else the first lyric line; else
+      // "Untitled song" — never the style text (same rule as the server).
       const songTitle = resolveSongTitle(title, trimmedLyrics)
       let startRes: Response
       try {
         startRes = await fetch('/api/song-studio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // title is used by the synchronous (elevenlabs) engine, which persists
-          // inside POST; the acestep engine takes it on the poll as before.
           body: JSON.stringify({
-            lyrics: trimmedLyrics, stylePrompt: trimmedStyle, title: songTitle, vocals,
+            lyrics: trimmedLyrics, stylePrompt: trimmedStyle, title: songTitle, vocals, age,
+            versions: songCount,
             lengthMode: autoLength ? 'auto' : 'fixed',
             duration: autoLength ? null : lengthValue,
           }),
@@ -211,22 +230,27 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
       // Synchronous engine (elevenlabs): POST already carries the finished
       // song — no polling.
       if (startData.status === 'succeeded' && startData.swapId) {
-        setResult({ swapId: startData.swapId, url: startData.url, title: songTitle })
+        setResults([{ swapId: startData.swapId, url: startData.url, title: songTitle }])
         setPhase('done')
         showToast('Your song is ready — saved to Saved Tracks.')
         return
       }
 
-      const predictionId: string = startData.predictionId
-      if (!predictionId) throw new Error('No prediction id returned')
-      // style labels the saved row — the same vocal-prefixed text the server sent.
-      const pending: PendingSong = {
-        predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals), startedAt: Date.now(),
-        // MiniMax target from the server (null on Auto / other engines).
+      const started: { predictionId: string; title: string }[] =
+        Array.isArray(startData.predictions) && startData.predictions.length
+          ? startData.predictions
+          : startData.predictionId ? [{ predictionId: startData.predictionId, title: startData.title ?? songTitle }] : []
+      if (!started.length) throw new Error('No song was started — please try again.')
+      if (startData.partial) showToast('Only one version could be started — the other one’s credits were refunded.', 6000)
+      // style labels the saved row — the same voice-prefixed text the server sent.
+      const style = withVocalStyle(trimmedStyle, vocals, age)
+      const pendings: PendingSong[] = started.map((s) => ({
+        predictionId: s.predictionId, title: s.title, style, startedAt: Date.now(),
+        // Target length from the server (null on Auto / engines without one).
         targetSeconds: typeof startData.targetSeconds === 'number' ? startData.targetSeconds : null,
-      }
-      savePending(pending)
-      await runPoll(pending)
+      }))
+      pendings.forEach(savePending)
+      await runPolls(pendings)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[song-studio] generate failed:', msg)
@@ -236,47 +260,52 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
     }
   }
 
-  // Polls a started generation to the end. Shared by Generate and by the
-  // resume-on-open effect below.
-  async function runPoll(p: PendingSong) {
-    try {
-      const done = await pollUntilDone(p)
-      clearPending()
-      setResult({ swapId: done.swapId, url: done.url, title: p.title })
-      setPhase('done')
-      showToast('Your song is ready — saved to Saved Tracks.')
-    } catch (err) {
-      // Keep the pending entry only when the job may still be running.
-      if (!(err instanceof ResumableError)) clearPending()
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[song-studio] poll ended without a song:', msg)
-      setErrorMsg(msg)
-      setPhase('error')
-    } finally {
-      refetchCredits() // a refund (failure) or nothing changed — reflect it
-    }
+  // Polls started generations (1 or 2) to the end — in parallel. Shared by
+  // Generate and by the resume-on-open effect below. Each job is independent:
+  // one can succeed while the other fails (and refunds itself server-side).
+  async function runPolls(list: PendingSong[]) {
+    const outcomes = await Promise.allSettled(list.map(async (p) => {
+      try {
+        const done = await pollUntilDone(p)
+        clearPending(p.predictionId)
+        return { swapId: done.swapId, url: done.url, title: p.title }
+      } catch (err) {
+        // Keep the pending entry only when the job may still be running.
+        if (!(err instanceof ResumableError)) clearPending(p.predictionId)
+        throw err
+      }
+    }))
+    const ok = outcomes.flatMap((o) => (o.status === 'fulfilled' ? [o.value] : []))
+    const errors = Array.from(new Set(outcomes.flatMap((o) =>
+      o.status === 'rejected' ? [o.reason instanceof Error ? o.reason.message : String(o.reason)] : [])))
+    setResults(ok)
+    setErrorMsg(errors.join(' '))
+    setPhase(ok.length ? 'done' : 'error')
+    if (ok.length) showToast(ok.length === 2 ? 'Both versions are ready — saved to Saved Tracks.' : 'Your song is ready — saved to Saved Tracks.')
+    if (errors.length) console.error('[song-studio] poll ended without a song:', errors.join(' | '))
+    refetchCredits() // a refund (failure) or nothing changed — reflect it
   }
 
-  // Resume a generation interrupted by a dropped connection, reload or closed
+  // Resume generations interrupted by a dropped connection, reload or closed
   // tab (ref-guarded so React dev StrictMode can't start two poll loops).
   const resumedRef = useRef(false)
   useEffect(() => {
     if (resumedRef.current) return
     resumedRef.current = true
     const pending = loadPending()
-    if (!pending) return
+    if (!pending.length) return
     setPhase('generating')
     setErrorMsg('')
-    showToast('Picking up your song from earlier…')
-    void runPoll(pending)
+    showToast(pending.length === 2 ? 'Picking up your songs from earlier…' : 'Picking up your song from earlier…')
+    void runPolls(pending)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Proxy 307s to cross-origin storage where <a download> is ignored —
   // download via fetch → blob (SavedSwapPage pattern).
-  async function handleDownload() {
-    if (!result || downloading) return
-    setDownloading(true)
+  async function handleDownload(result: SongResult) {
+    if (downloadingId) return
+    setDownloadingId(result.swapId)
     try {
       const res = await fetch(result.url)
       if (!res.ok) throw new Error(`Download failed (${res.status})`)
@@ -293,7 +322,7 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
       console.error('[song-studio] download failed:', err)
       showToast('Download failed — please try again')
     } finally {
-      setDownloading(false)
+      setDownloadingId(null)
     }
   }
 
@@ -358,14 +387,40 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
               ))}
             </div>
 
+            {vocals !== 'instrumental' && (
+              <>
+                <label className="ss-lbl">Voice age</label>
+                <div className="ss-durations" role="radiogroup" aria-label="Voice age">
+                  {SONG_AGES.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      role="radio"
+                      aria-checked={age === a}
+                      className={`ss-dur-btn${age === a ? ' ss-dur-btn--active' : ''}`}
+                      onClick={() => setAge(a)}
+                      disabled={generating}
+                    >
+                      {SONG_AGE_LABELS[a]}
+                    </button>
+                  ))}
+                </div>
+                {age !== 'auto' && styleMentionsAge(stylePrompt) && (
+                  <p className="ss-ai-note">Your style already describes the singer&rsquo;s age, so we&rsquo;ll keep yours.</p>
+                )}
+              </>
+            )}
+
             <label className="ss-lbl" htmlFor="ss-lyrics">
               Lyrics
               <span className="ss-hint">
                 {vocals === 'instrumental'
                   ? 'Instrumental — lyrics won’t be sung'
-                  : engine === 'minimax'
+                  : minimaxLike
                     ? 'use [verse] / [chorus] / [bridge] — leave empty for an instrumental'
-                    : 'use [verse] / [chorus] / [bridge] — or [instrumental] for no vocals'}
+                    : engine === 'lyria'
+                      ? 'use [verse] / [chorus] / [bridge] — or pick Instrumental above'
+                      : 'use [verse] / [chorus] / [bridge] — or [instrumental] for no vocals'}
               </span>
             </label>
 
@@ -453,7 +508,7 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
               onChange={(e) => setLyrics(e.target.value)}
               placeholder={LYRICS_PLACEHOLDER}
               rows={10}
-              maxLength={engine === 'minimax' ? MINIMAX_MAX_LYRICS_CHARS : 5000}
+              maxLength={minimaxLike ? MINIMAX_MAX_LYRICS_CHARS : 5000}
               disabled={generating}
             />
 
@@ -483,15 +538,20 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
               />
               <span className={`ss-len-val${autoLength ? ' ss-len-val--off' : ''}`}>{formatMSS(lengthValue)}</span>
             </div>
-            {/* Honest copy per engine: MiniMax has no duration input, so a
-                value there is a TARGET (structure + prompt, trimmed if the
-                song runs long — never stretched). */}
+            {/* Honest copy per engine (never an engine name): MiniMax and the
+                default engine have no duration input, so a value there is a
+                TARGET — asked for in words, trimmed with a fade if the song
+                runs long, never stretched. */}
             <p className="ss-ai-note">
               {autoLength
-                ? engine === 'minimax'
-                  ? 'Auto — follows your lyrics'
-                  : `Auto — follows your lyrics (about ${formatMSS(autoDurationSeconds(lyrics, engine))} for these lyrics)`
-                : engine === 'minimax'
+                ? engine === 'lyria'
+                  ? 'Auto — follows your song (up to about 3 minutes)'
+                  : minimaxLike
+                    ? 'Auto — follows your lyrics'
+                    : `Auto — follows your lyrics (about ${formatMSS(autoDurationSeconds(lyrics, engine))} for these lyrics)`
+                : engine === 'lyria'
+                  ? 'Target length — the song will be about this long. Longer songs are trimmed to fit; shorter ones are never stretched.'
+                  : minimaxLike
                   // Real test 2026-10-02: 4 short lines with a 2:00 target came
                   // back at 1:00 — MiniMax can't be made to write a longer song
                   // than the lyrics support, and we never stretch audio. Longer
@@ -499,17 +559,32 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
                   ? 'Target length — the song will be about this long if your lyrics are long enough. Longer songs are trimmed to fit; shorter ones are never stretched.'
                   : `The song will be about ${formatMSS(lengthValue)} long.`}
             </p>
-            {!autoLength && engine === 'minimax' && lyricsShortForTarget && (
+            {lyricsTooLongForLyria && (
+              <p className="ss-ai-note ss-len-warn">Songs can be up to about 3 minutes — try trimming a verse.</p>
+            )}
+            {!autoLength && minimaxLike && lyricsShortForTarget && (
               <p className="ss-ai-note ss-len-warn">
                 Your lyrics look short for {formatMSS(lengthValue)} — expect a shorter song.
                 Add verses or a bridge to get closer.
               </p>
             )}
 
+            {engine !== 'elevenlabs' && (
+              <label className="ss-versions">
+                <input
+                  type="checkbox"
+                  checked={twoVersions}
+                  onChange={(e) => setTwoVersions(e.target.checked)}
+                  disabled={generating}
+                />
+                <span>Make 2 versions <span className="ss-opt">— two different takes to pick from ({SONG_STUDIO_CREDITS} cr each)</span></span>
+              </label>
+            )}
+
             <button className="ss-generate" onClick={handleGenerate} disabled={generating}>
               {generating
-                ? `⏳ Generating… ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
-                : `♪ Generate song · ${isAdmin ? 'free (founder)' : `${SONG_STUDIO_CREDITS} cr`}`}
+                ? `⏳ Generating${songCount === 2 ? ' 2 songs' : ''}… ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+                : `♪ Generate ${songCount === 2 ? '2 songs' : 'song'} · ${isAdmin ? 'free (founder)' : `${songCount * SONG_STUDIO_CREDITS} cr`}`}
             </button>
             {generating && (
               <div className="ss-progress-note">
@@ -525,32 +600,32 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
             </p>
           </div>
 
-          {phase === 'error' && (
+          {(phase === 'error' || (phase === 'done' && errorMsg)) && (
             <div className="ss-card ss-card--error">
-              <div className="ss-err-title">Generation failed</div>
+              <div className="ss-err-title">{phase === 'done' ? 'One version didn’t finish' : 'Generation failed'}</div>
               <div className="ss-err-msg">{errorMsg}</div>
             </div>
           )}
 
-          {phase === 'done' && result && (
-            <div className="ss-card">
+          {phase === 'done' && results.map((result, i) => (
+            <div className="ss-card" key={result.swapId}>
               <div className="ss-result-head">
                 <span className="ss-result-ico">✅</span>
                 <div>
-                  <div className="ss-result-title">{result.title}</div>
+                  <div className="ss-result-title">{result.title}{results.length > 1 && !/\(version 2\)$/.test(result.title) ? ` (version ${i + 1})` : ''}</div>
                   <div className="ss-result-sub">Saved to your tracks — plays from durable storage, never expires.</div>
                 </div>
               </div>
               <AudioPlayer src={result.url} label="AI generated" />
               <div className="ss-actions">
-                <button className="ss-btn-solid" onClick={handleDownload} disabled={downloading}>
-                  {downloading ? 'Preparing…' : '⬇ Download'}
+                <button className="ss-btn-solid" onClick={() => handleDownload(result)} disabled={downloadingId !== null}>
+                  {downloadingId === result.swapId ? 'Preparing…' : '⬇ Download'}
                 </button>
                 <ShareControl swapId={result.swapId} initialToken={null} onToast={showToast} />
                 <Link href={`/swaps/${result.swapId}`} className="ss-btn-ghost">Open in Saved Tracks</Link>
               </div>
             </div>
-          )}
+          ))}
         </main>
       </div>
 
@@ -643,6 +718,8 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
         }
         .ss-len-val--off { color: #4A4A7A; }
         .ss-len-warn { color: #E8B04A; margin-top: 6px; }
+        .ss-versions { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-size: 13px; color: #C4C4E0; cursor: pointer; }
+        .ss-versions input { width: 16px; height: 16px; accent-color: #9D5CFF; cursor: pointer; }
         .ss-generate {
           display: block; width: 100%; margin-top: 20px;
           padding: 13px 22px; border-radius: 10px; border: none;

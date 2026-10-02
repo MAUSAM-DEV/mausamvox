@@ -20,25 +20,37 @@ export const MAX_POLL_FAILURES = 8 // consecutive; backoff 8s→15s cap ≈ 1.5 
 // poll so the server-side persist can trim an over-long song.
 export type PendingSong = { predictionId: string; title: string; style: string; startedAt: number; targetSeconds?: number | null }
 
-export function savePending(p: PendingSong) {
-  try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)) } catch { /* private mode etc. */ }
-}
-export function clearPending() {
-  try { localStorage.removeItem(PENDING_KEY) } catch { /* ignore */ }
-}
-export function loadPending(): PendingSong | null {
+// Several jobs can be in flight ("Make 2 versions"), so storage holds a LIST
+// keyed by predictionId. The pre-list format (one object) is still read.
+function readAll(): PendingSong[] {
   try {
     const raw = localStorage.getItem(PENDING_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as PendingSong
-    if (!p?.predictionId || typeof p.startedAt !== 'number' || Date.now() - p.startedAt > PENDING_MAX_AGE_MS) {
-      clearPending()
-      return null
-    }
-    return p
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as PendingSong | PendingSong[]
+    return Array.isArray(parsed) ? parsed : [parsed]
   } catch {
-    return null
+    return []
   }
+}
+function writeAll(list: PendingSong[]) {
+  try {
+    if (list.length) localStorage.setItem(PENDING_KEY, JSON.stringify(list))
+    else localStorage.removeItem(PENDING_KEY)
+  } catch { /* private mode etc. */ }
+}
+export function savePending(p: PendingSong) {
+  writeAll([...readAll().filter((x) => x.predictionId !== p.predictionId), p])
+}
+// One job (by id), or all of them when no id is given.
+export function clearPending(predictionId?: string) {
+  writeAll(predictionId ? readAll().filter((x) => x.predictionId !== predictionId) : [])
+}
+// Still-resumable jobs (≤1 h old); expired/invalid entries are purged.
+export function loadPending(): PendingSong[] {
+  const all = readAll()
+  const live = all.filter((p) => p?.predictionId && typeof p.startedAt === 'number' && Date.now() - p.startedAt <= PENDING_MAX_AGE_MS)
+  if (live.length !== all.length) writeAll(live)
+  return live
 }
 
 // fetch() rejects with a TypeError on network failure — "Failed to fetch"
@@ -99,7 +111,9 @@ export async function pollUntilDone(p: PendingSong, deps: PollDeps = {}): Promis
     failures = 0
     if (poll.status === 'succeeded') return { swapId: String(poll.swapId), url: String(poll.url) }
     if (poll.status === 'failed' || poll.status === 'canceled') {
-      throw new Error(`Generation failed${poll.refunded ? ' — your credits were refunded' : ''}. ${String(poll.error ?? '')}`.trim())
+      // Server message first (e.g. "This song couldn't be created — try
+      // changing the lyrics or style."), then the refund note.
+      throw new Error(`${String(poll.error ?? 'The song couldn’t be generated.')}${poll.refunded ? ' Your credits were refunded.' : ''}`)
     }
     // starting / processing — keep polling
   }

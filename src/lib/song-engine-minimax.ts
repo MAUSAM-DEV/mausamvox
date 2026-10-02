@@ -20,6 +20,10 @@
 export const MINIMAX_MODEL = 'minimax/music-2.5'
 // Pinned from the model's live latest_version on 2026-10-02.
 export const MINIMAX_VERSION = 'f2100977b6ce90322ab00443b76d48f079435c1d903c4805517f89d2b8cc9c5a'
+// MiniMax Music 2.6 ('minimax26' engine) — same inputs as 2.5 (+ unused
+// is_instrumental / lyrics_optimizer); $0.15/song. Pinned 2026-10-02.
+export const MINIMAX_26_MODEL = 'minimax/music-2.6'
+export const MINIMAX_26_VERSION = 'dcd69b2c83c63ed612af65fc9842781fd7cf86db555e0b12ded7c6292bff8b7a'
 
 export const MINIMAX_MAX_LYRICS_CHARS = 3500
 export const MINIMAX_MAX_PROMPT_CHARS = 2000

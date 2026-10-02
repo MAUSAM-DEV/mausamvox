@@ -5,11 +5,14 @@ import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import {
   songEngine,
+  isMiniMaxEngine,
   autoDurationSeconds,
   engineMaxSeconds,
   withVocalStyle,
   SONG_VOCALS,
+  SONG_AGES,
   type SongVocals,
+  type SongAge,
   ACE_STEP_VERSION,
   SONG_STUDIO_CREDITS,
   SONG_MIN_SECONDS,
@@ -17,17 +20,22 @@ import {
   UNTITLED_SONG,
   resolveSongTitle,
   songStyleLabel,
-  stripEngineNames,
 } from '@/lib/song-engine'
-import { measureAudioSeconds, trimWithFadeOut } from '@/lib/audio-length'
+import { limitTruePeak, measureAudioSeconds, trimWithFadeOut } from '@/lib/audio-length'
 import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
-import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_MODEL, MINIMAX_VERSION } from '@/lib/song-engine-minimax'
+import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_VERSION, MINIMAX_26_VERSION } from '@/lib/song-engine-minimax'
+import { buildLyriaPrompt, isLyriaBlocked, LYRIA_BLOCKED_MSG, LYRIA_MODEL, LYRIA_VERSION } from '@/lib/song-engine-lyria'
 import { normalizeLoudness } from '@/lib/loudness'
 
 // Song Studio: AI full-song generation — engine selected by SONG_ENGINE (see
-// song-engine.ts): 'elevenlabs', 'acestep' (also the fallback for an unset or
-// unrecognised value) or 'minimax' (MiniMax Music 2.5 on Replicate — same
-// create+poll as acestep).
+// song-engine.ts): 'lyria' (Google Lyria 3 Pro), 'minimax' / 'minimax26'
+// (MiniMax Music 2.5 / 2.6), 'acestep' (also the fallback for an unset or
+// unrecognised value) — all on Replicate with the same create+poll flow —
+// or 'elevenlabs' (synchronous).
+//
+// "Make 2 versions": POST charges SONG_STUDIO_CREDITS PER SONG (one atomic
+// deduct_credits() call each) and starts one prediction per song; each job
+// then refunds itself independently if it fails (same marker-row rule).
 //
 // elevenlabs: the API returns audio bytes synchronously, so POST does the
 // whole job (charge → compose → persist) and returns the finished song; the
@@ -109,17 +117,40 @@ async function insertSwapRow(row: Record<string, unknown>): Promise<{ error: { c
   return result
 }
 
-// ── POST: validate → deduct → create the prediction ─────────────────────────
+// Replicate prediction create with one polite retry on 429. The account is
+// throttled to 1-burst / 6 per minute while its credit is under $5, so the
+// 2nd version of "Make 2 versions" can hit it; wait the advertised
+// retry_after (capped) and try again. Anything else throws to the caller.
+async function createPrediction(replicate: Replicate, version: string, input: Record<string, unknown>) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await replicate.predictions.create({ version, input })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (attempt >= 2 || !/\b429\b|throttl/i.test(msg)) throw err
+      const wait = Math.min(15, Number(msg.match(/"retry_after":\s*(\d+)/)?.[1] ?? 10)) + 1
+      console.warn(`[song-studio] create throttled (429) — retrying in ${wait}s`)
+      await new Promise((r) => setTimeout(r, wait * 1000))
+    }
+  }
+}
+
+// ── POST: validate → deduct → create the prediction(s) ──────────────────────
 export async function POST(req: NextRequest) {
-  // Set once credits are debited so every create-failure path can refund.
+  // Charges taken but not yet owned by a STARTED job (a started job refunds
+  // itself on failure via GET). Every exit path before that refunds these.
+  let unstartedCharges = 0
   let chargedUserId: string | null = null
+  const refundUnstarted = async () => {
+    while (chargedUserId && unstartedCharges > 0) { unstartedCharges--; await refundCredits(chargedUserId) }
+  }
   try {
     if (!adminConfigured) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
     const engine = songEngine()
     // Config gates BEFORE any charge — a misconfigured engine must cost nothing.
-    if ((engine === 'acestep' || engine === 'minimax') && !process.env.REPLICATE_API_TOKEN) {
+    if ((engine === 'acestep' || isMiniMaxEngine(engine) || engine === 'lyria') && !process.env.REPLICATE_API_TOKEN) {
       console.error('[song-studio] REPLICATE_API_TOKEN not configured')
       return NextResponse.json({ error: UNAVAILABLE_MSG }, { status: 500 })
     }
@@ -136,7 +167,7 @@ export async function POST(req: NextRequest) {
 
     let body: {
       lyrics?: string; stylePrompt?: string; duration?: number | null; title?: string; vocals?: string
-      lengthMode?: 'auto' | 'fixed'
+      age?: string; versions?: number; lengthMode?: 'auto' | 'fixed'
     }
     try {
       body = await req.json()
@@ -147,28 +178,36 @@ export async function POST(req: NextRequest) {
     let lyrics = (body.lyrics ?? '').trim()
     const stylePrompt = (body.stylePrompt ?? '').trim()
     const duration = body.duration
-    // The song's name everywhere. The user's title; else the first lyric line;
-    // else "Untitled song" — never the style text. Used directly by the
-    // synchronous elevenlabs path, and stored with Replicate jobs in
-    // song_studio_jobs so the GET save uses it regardless of who polls.
+    // The song's name everywhere. The user's title (as typed — never
+    // filtered); else the first lyric line; else "Untitled song" — never the
+    // style text. Stored with each Replicate job in song_studio_jobs so the
+    // GET save uses it regardless of who polls.
     const title = resolveSongTitle(body.title, lyrics)
 
-    // Vocal selector (optional — older clients don't send it).
+    // Vocal + age selectors (optional — older clients don't send them).
     if (body.vocals !== undefined && !SONG_VOCALS.includes(body.vocals as SongVocals)) {
       return NextResponse.json({ error: `vocals must be one of: ${SONG_VOCALS.join(', ')}` }, { status: 400 })
     }
     const vocals = body.vocals as SongVocals | undefined
+    if (body.age !== undefined && !SONG_AGES.includes(body.age as SongAge)) {
+      return NextResponse.json({ error: `age must be one of: ${SONG_AGES.join(', ')}` }, { status: 400 })
+    }
+    const age = (body.age as SongAge | undefined) ?? 'auto'
+    // "Make 2 versions" (create+poll engines only; elevenlabs is synchronous).
+    const versions = body.versions === 2 && engine !== 'elevenlabs' ? 2 : 1
 
-    // Instrumental = nothing is sung. MiniMax: empty lyrics → [Inst] (mapped in
-    // song-engine-minimax.ts). Other engines keep their documented convention.
-    if (vocals === 'instrumental') lyrics = engine === 'minimax' ? '' : '[instrumental]'
+    // Instrumental = nothing is sung. MiniMax: empty lyrics → [Inst]; Lyria:
+    // an "instrumental only" prompt with no lyrics block; ACE-Step/ElevenLabs
+    // keep their documented [instrumental] convention.
+    const instrumental = vocals === 'instrumental'
+    if (instrumental) lyrics = isMiniMaxEngine(engine) || engine === 'lyria' ? '' : '[instrumental]'
 
-    // MiniMax needs no lyrics (it generates an instrumental); the other
-    // engines keep requiring them exactly as before.
-    if (!lyrics && engine !== 'minimax') {
+    // MiniMax needs no lyrics (it generates an instrumental); the others need
+    // them unless the song is instrumental.
+    if (!lyrics && !isMiniMaxEngine(engine) && !instrumental) {
       return NextResponse.json({ error: 'Lyrics are required — use [instrumental] for a song without vocals' }, { status: 400 })
     }
-    const maxLyrics = engine === 'minimax' ? MINIMAX_MAX_LYRICS_CHARS : MAX_LYRICS_CHARS
+    const maxLyrics = isMiniMaxEngine(engine) ? MINIMAX_MAX_LYRICS_CHARS : MAX_LYRICS_CHARS
     if (lyrics.length > maxLyrics) {
       return NextResponse.json({ error: `Lyrics are too long (max ${maxLyrics} characters)` }, { status: 400 })
     }
@@ -180,42 +219,48 @@ export async function POST(req: NextRequest) {
     }
     // ── Length ("Auto + slider") ────────────────────────────────────────────
     // lengthMode 'auto'  → acestep/elevenlabs: duration picked from the lyrics;
-    //                      minimax: no target (length follows the lyrics).
-    // lengthMode 'fixed' → `duration` seconds, within the engine's range —
-    //                      a real duration for acestep/elevenlabs, a TARGET
-    //                      for minimax (structure + prompt; trimmed if longer).
+    //                      minimax/lyria: no target (length follows the song).
+    // lengthMode 'fixed' → `duration` seconds within the engine's range — a
+    // real duration for acestep/elevenlabs, a TARGET for minimax/lyria (asked
+    // for in words; trimmed with a fade if longer; never stretched).
     // No lengthMode = a legacy client: acestep/elevenlabs use `duration` as
-    // before; minimax IGNORES it (old MiniMax tabs always send a hidden 60,
-    // which must not start trimming songs to one minute).
+    // before; minimax/lyria IGNORE it (old tabs send a hidden duration).
+    const targetEngine = isMiniMaxEngine(engine) || engine === 'lyria'
     const maxSeconds = engineMaxSeconds(engine)
-    const fixed = body.lengthMode === 'fixed' || (body.lengthMode === undefined && engine !== 'minimax')
+    const fixed = body.lengthMode === 'fixed' || (body.lengthMode === undefined && !targetEngine)
     if (fixed && (
       typeof duration !== 'number' || !Number.isFinite(duration) ||
       duration < SONG_MIN_SECONDS || duration > maxSeconds
     )) {
       return NextResponse.json({ error: `Length must be ${SONG_MIN_SECONDS}-${maxSeconds} seconds` }, { status: 400 })
     }
-    const finalStyle = withVocalStyle(stylePrompt, vocals)
+    const finalStyle = withVocalStyle(stylePrompt, vocals, age)
     // Seconds handed to engines that take a real duration.
     const engineSeconds = fixed ? Math.round(duration as number) : autoDurationSeconds(lyrics, engine)
-    // MiniMax target (null = Auto).
-    const targetSeconds = engine === 'minimax' && fixed ? Math.round(duration as number) : null
+    // MiniMax / Lyria target (null = Auto).
+    const targetSeconds = targetEngine && fixed ? Math.round(duration as number) : null
 
-    // Charge BEFORE the paid Replicate create (atomic; gender-split pattern).
+    // ── Charge BEFORE the paid work — once PER SONG (atomic each) ───────────
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
     if (!isAdmin) {
-      const { error: debitError } = await supabaseAdmin.rpc('deduct_credits', {
-        p_user_id: user.id,
-        p_amount: SONG_STUDIO_CREDITS,
-      })
-      if (debitError) {
-        if (debitError.message.includes('INSUFFICIENT_CREDITS')) {
-          return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
-        }
-        console.error('[song-studio] debit failed:', debitError.message)
-        return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
-      }
       chargedUserId = user.id
+      for (let i = 0; i < versions; i++) {
+        const { error: debitError } = await supabaseAdmin.rpc('deduct_credits', {
+          p_user_id: user.id,
+          p_amount: SONG_STUDIO_CREDITS,
+        })
+        if (debitError) {
+          await refundUnstarted() // a 2nd-song failure gives back the 1st charge
+          if (debitError.message.includes('INSUFFICIENT_CREDITS')) {
+            return NextResponse.json({
+              error: versions === 2 ? `Not enough credits for 2 versions (${versions * SONG_STUDIO_CREDITS} cr).` : 'Insufficient credits',
+            }, { status: 402 })
+          }
+          console.error('[song-studio] debit failed:', debitError.message)
+          return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+        }
+        unstartedCharges++
+      }
     }
 
     // ── elevenlabs: synchronous compose → persist → done ────────────────────
@@ -254,6 +299,7 @@ export async function POST(req: NextRequest) {
         throw new Error(`Could not save the song: ${insertError.message}`)
       }
 
+      unstartedCharges = 0 // the song exists — the charge is earned
       console.log(`[song-studio] elevenlabs song persisted as swap ${swapId} (${audioBuffer.length} bytes, user ${user.id})`)
       return NextResponse.json({
         status: 'succeeded',
@@ -262,53 +308,83 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── acestep / minimax (Replicate): create + poll via GET ─────────────────
-    // Same create → refund-if-never-started path for both; GET persists.
+    // ── Replicate engines (lyria / minimax / minimax26 / acestep) ───────────
+    // One prediction per song. A started job owns its charge (GET refunds it
+    // if the job fails); a job that fails to START is refunded right here.
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-    const prediction = await replicate.predictions.create(
-      engine === 'minimax'
-        ? { version: MINIMAX_VERSION, input: buildMiniMaxInput(lyrics, finalStyle, targetSeconds) }
-        : {
-            version: ACE_STEP_VERSION,
-            input: {
-              tags: finalStyle,
-              lyrics,
-              duration: engineSeconds,
-            },
-          }
-    )
+    const { version, input } =
+      engine === 'lyria'
+        ? { version: LYRIA_VERSION, input: { prompt: buildLyriaPrompt({ style: finalStyle, lyrics, instrumental, targetSeconds }) } }
+        : isMiniMaxEngine(engine)
+          ? { version: engine === 'minimax26' ? MINIMAX_26_VERSION : MINIMAX_VERSION, input: buildMiniMaxInput(lyrics, finalStyle, targetSeconds) }
+          : { version: ACE_STEP_VERSION, input: { tags: finalStyle, lyrics, duration: engineSeconds } }
 
-    if (prediction.status === 'failed' || prediction.status === 'canceled') {
-      // Job never ran — refund immediately.
-      if (chargedUserId) await refundCredits(chargedUserId)
-      console.error('[song-studio] prediction failed to start:', safeStringify(prediction.error))
-      return NextResponse.json({ error: `The song couldn’t be started.${chargedUserId ? ' Your credits were refunded.' : ''} Please try again.`, refunded: chargedUserId !== null }, { status: 502 })
+    const started: { predictionId: string; title: string }[] = []
+    let lastStartError = ''
+    for (let i = 0; i < versions; i++) {
+      const songTitle = i === 0 ? title : `${title} (version 2)`.slice(0, SONG_TITLE_MAX_CHARS)
+      let prediction: Awaited<ReturnType<typeof createPrediction>>
+      try {
+        prediction = await createPrediction(replicate, version, input)
+      } catch (err) {
+        lastStartError = err instanceof Error ? err.message : String(err)
+        console.error(`[song-studio] ${engine} create failed (song ${i + 1}/${versions}):`, lastStartError)
+        if (chargedUserId && unstartedCharges > 0) { unstartedCharges--; await refundCredits(chargedUserId) }
+        continue
+      }
+      if (prediction.status === 'failed' || prediction.status === 'canceled') {
+        lastStartError = safeStringify(prediction.error)
+        console.error(`[song-studio] ${engine} prediction failed to start (song ${i + 1}/${versions}):`, lastStartError)
+        if (chargedUserId && unstartedCharges > 0) { unstartedCharges--; await refundCredits(chargedUserId) }
+        continue
+      }
+      if (chargedUserId && unstartedCharges > 0) unstartedCharges-- // the started job owns it now
+      started.push({ predictionId: prediction.id, title: songTitle })
+
+      // Store the job's title/style/target server-side (best-effort — never
+      // fails a started, paid job; GET falls back to the poll's query params).
+      const { error: jobError } = await supabaseAdmin.from('song_studio_jobs').insert({
+        prediction_id: prediction.id,
+        user_id: user.id,
+        title: songTitle,
+        style: finalStyle,
+        target_seconds: targetSeconds,
+      })
+      if (jobError) console.warn(`[song-studio] job record not stored (${jobError.message}) — title falls back to the poll; apply migration 20261002000002`)
+      const lengthNote = targetEngine
+        ? (targetSeconds ? `target ${targetSeconds}s` : 'length follows the song')
+        : `${engineSeconds}s${fixed ? '' : ' (auto)'}`
+      console.log(`[song-studio] started ${engine} prediction ${prediction.id} "${songTitle}" (${lengthNote}, user ${user.id})`)
     }
 
-    // Store the job's title/style/target server-side (best-effort — never
-    // fails a started, paid job; GET falls back to the poll's query params).
-    const { error: jobError } = await supabaseAdmin.from('song_studio_jobs').insert({
-      prediction_id: prediction.id,
-      user_id: user.id,
-      title,
-      style: finalStyle,
-      target_seconds: targetSeconds,
-    })
-    if (jobError) console.warn(`[song-studio] job record not stored (${jobError.message}) — title falls back to the poll; apply migration 20261002000002`)
+    if (started.length === 0) {
+      const blocked = engine === 'lyria' && isLyriaBlocked(lastStartError)
+      const refunded = chargedUserId !== null
+      return NextResponse.json({
+        error: blocked
+          ? `${LYRIA_BLOCKED_MSG}${refunded ? ' Your credits were refunded.' : ''}`
+          : publicCreateError(lastStartError, refunded),
+        refunded,
+      }, { status: 502 })
+    }
 
-    const lengthNote = engine === 'minimax'
-      ? (targetSeconds ? `target ${targetSeconds}s` : 'length follows lyrics')
-      : `${engineSeconds}s${fixed ? '' : ' (auto)'}`
-    console.log(`[song-studio] started ${engine} prediction ${prediction.id} "${title}" (${lengthNote}, user ${user.id})`)
     // targetSeconds goes back so the client's poll can ask GET to trim.
-    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, targetSeconds, title })
+    return NextResponse.json({
+      predictions: started,
+      predictionId: started[0].predictionId, // legacy single-song clients
+      title: started[0].title,
+      status: 'starting',
+      targetSeconds,
+      partial: started.length < versions, // one version couldn't start (refunded)
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[song-studio] create error:', msg)
-    // Any failure after the debit (elevenlabs compose/persist, or the acestep
-    // create throwing before a job started) — refund the charge.
-    if (chargedUserId) await refundCredits(chargedUserId)
-    return NextResponse.json({ error: publicCreateError(msg, chargedUserId !== null), refunded: chargedUserId !== null }, { status: 500 })
+    // Any failure after a debit that no started job owns yet (elevenlabs
+    // compose/persist, or a throw before a prediction started) — refund it.
+    const refunded = chargedUserId !== null && unstartedCharges > 0
+    await refundUnstarted()
+    return NextResponse.json({ error: publicCreateError(msg, refunded), refunded }, { status: 500 })
   }
 }
 
@@ -354,10 +430,10 @@ export async function GET(req: NextRequest) {
     }
 
     const queryTitle = (req.nextUrl.searchParams.get('title') ?? '').trim().slice(0, SONG_TITLE_MAX_CHARS)
-    const title = job?.title || stripEngineNames(queryTitle) || UNTITLED_SONG
+    const title = job?.title || queryTitle || UNTITLED_SONG // users' own titles are never filtered
     const stylePrompt = (job?.style ?? req.nextUrl.searchParams.get('style') ?? '').trim().slice(0, MAX_TAGS_CHARS)
-    // MiniMax target length (seconds); anything outside the slider range is
-    // ignored (= no trim).
+    // MiniMax / Lyria target length (seconds); anything outside the slider
+    // range is ignored (= no trim).
     const targetRaw = job ? Number(job.target_seconds) : Number(req.nextUrl.searchParams.get('target'))
     const targetSeconds = Number.isFinite(targetRaw) && targetRaw >= SONG_MIN_SECONDS && targetRaw <= engineMaxSeconds('minimax')
       ? Math.round(targetRaw) : null
@@ -405,38 +481,59 @@ export async function GET(req: NextRequest) {
       }
       const rawBuffer = Buffer.from(await audioRes.arrayBuffer())
       const ext = new URL(outputUrl).pathname.split('.').pop()?.toLowerCase() === 'mp3' ? 'mp3' : 'wav'
-      // ACE-Step output comes back much quieter than the rest of the app —
-      // normalize before storing (falls back to the raw audio on failure).
-      // MiniMax output is already mastered (measured −11.5 LUFS on a real run,
-      // louder than our −14 target) — skipped like ElevenLabs. Decided from
-      // the prediction's own model, so a job in flight across an engine flip
-      // is still handled correctly.
-      const isMiniMax = prediction.model === MINIMAX_MODEL
-      let audioBuffer = isMiniMax
-        ? rawBuffer
-        : await normalizeLoudness(rawBuffer, ext, '[song-studio]')
-
-      // MiniMax target: if the song came out LONGER than asked, trim to the
-      // target with a 2.5 s fade-out. Shorter songs are kept as they are —
-      // never stretched or slowed to fake length. Trim failure keeps the
-      // untrimmed song (a paid generation is never failed over length).
-      let finalSeconds = await measureAudioSeconds(audioBuffer, ext)
-      const rawSeconds = finalSeconds
-      if (isMiniMax && targetSeconds && finalSeconds !== null && finalSeconds > targetSeconds + TRIM_TOLERANCE_SECONDS) {
-        const trimmed = await trimWithFadeOut(audioBuffer, ext, targetSeconds, TRIM_FADE_SECONDS)
-        if (trimmed) {
-          audioBuffer = trimmed
-          finalSeconds = (await measureAudioSeconds(trimmed, ext)) ?? targetSeconds
+      // Post-processing is decided from the prediction's OWN model, so a job in
+      // flight across an engine flip is still handled correctly:
+      //  • Lyria   — NO EQ / compression / loudness change: only a true-peak
+      //              limiter (it ships above 0 dBTP), 320 kbps MP3; a target
+      //              trims longer songs with a fade in the same pass. Limiter
+      //              failure keeps the original (never fails a paid song).
+      //  • MiniMax — already mastered (−11.5 LUFS measured): trim-to-target only.
+      //  • ACE-Step — comes back much quieter than the rest of the app:
+      //              loudness-normalized (falls back to raw on failure).
+      // Shorter-than-target songs are never stretched or slowed.
+      const model = prediction.model ?? ''
+      const isLyria = model === LYRIA_MODEL
+      const isMiniMax = model.startsWith('minimax/')
+      let audioBuffer: Buffer = rawBuffer
+      let saveExt = ext
+      let rawSeconds: number | null = null
+      let finalSeconds: number | null = null
+      let note = ''
+      if (isLyria) {
+        rawSeconds = await measureAudioSeconds(rawBuffer, ext)
+        const trimTo = targetSeconds && rawSeconds !== null && rawSeconds > targetSeconds + TRIM_TOLERANCE_SECONDS ? targetSeconds : null
+        const limited = await limitTruePeak(rawBuffer, ext, { trimTo, fadeSeconds: TRIM_FADE_SECONDS })
+        if (limited) {
+          audioBuffer = limited.buffer
+          saveExt = 'mp3'
+          finalSeconds = limited.seconds ?? (await measureAudioSeconds(limited.buffer, 'mp3'))
+          note = `true peak ${limited.truePeak} dBTP (ceiling ${limited.ceiling})${trimTo ? `, trimmed to ${trimTo}s` : ''}`
+        } else {
+          finalSeconds = rawSeconds
+          note = 'limiter failed — original kept'
         }
+      } else if (isMiniMax) {
+        finalSeconds = rawSeconds = await measureAudioSeconds(audioBuffer, ext)
+        if (targetSeconds && finalSeconds !== null && finalSeconds > targetSeconds + TRIM_TOLERANCE_SECONDS) {
+          const trimmed = await trimWithFadeOut(audioBuffer, ext, targetSeconds, TRIM_FADE_SECONDS)
+          if (trimmed) {
+            audioBuffer = trimmed
+            finalSeconds = (await measureAudioSeconds(trimmed, ext)) ?? targetSeconds
+            note = `trimmed to ${targetSeconds}s`
+          }
+        }
+      } else {
+        audioBuffer = await normalizeLoudness(rawBuffer, ext, '[song-studio]')
+        finalSeconds = rawSeconds = await measureAudioSeconds(audioBuffer, ext)
       }
-      console.log(`[song-studio] length: ${isMiniMax ? 'minimax' : 'acestep'} raw ${rawSeconds ?? '?'}s → final ${finalSeconds ?? '?'}s` +
-        `${targetSeconds && isMiniMax ? ` (target ${targetSeconds}s${finalSeconds !== rawSeconds ? ', trimmed' : ''})` : ''}`)
+      console.log(`[song-studio] length: ${isLyria ? 'lyria' : isMiniMax ? 'minimax' : 'acestep'} raw ${rawSeconds ?? '?'}s → final ${finalSeconds ?? '?'}s` +
+        `${targetSeconds && (isLyria || isMiniMax) ? ` (target ${targetSeconds}s)` : ''}${note ? ` · ${note}` : ''}`)
       const swapId = crypto.randomUUID()
-      const swapPath = `${user.id}/${swapId}.${ext}`
+      const swapPath = `${user.id}/${swapId}.${saveExt}`
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from('voice-swaps')
-        .upload(swapPath, audioBuffer, { contentType: ext === 'mp3' ? 'audio/mpeg' : 'audio/wav', upsert: true })
+        .upload(swapPath, audioBuffer, { contentType: saveExt === 'mp3' ? 'audio/mpeg' : 'audio/wav', upsert: true })
       if (uploadError) {
         return NextResponse.json({ status: 'failed', error: `Storage upload failed: ${uploadError.message}` }, { status: 500 })
       }
@@ -501,7 +598,10 @@ export async function GET(req: NextRequest) {
         }
       }
       // errMsg (the engine's raw error) stays in the log above — never shown.
-      return NextResponse.json({ status: prediction.status, error: 'The song couldn’t be generated.', refunded: !isAdmin })
+      // A Lyria safety-filter block gets the friendly "change the lyrics or
+      // style" message; everything else the generic one. Both refunded.
+      const blocked = (prediction.model ?? '') === LYRIA_MODEL && isLyriaBlocked(errMsg)
+      return NextResponse.json({ status: prediction.status, error: blocked ? LYRIA_BLOCKED_MSG : 'The song couldn’t be generated.', refunded: !isAdmin, blocked })
     }
 
     // starting / processing — client keeps polling
