@@ -112,6 +112,26 @@ export function formatMSS(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// ── Never expose the engine ──────────────────────────────────────────────────
+// Users must never see which music engine/model made a song. Song Studio
+// strips engine/vendor/model names from everything it STORES for display
+// (title + style label → Saved Tracks, track page, share page, Share as
+// Video all read those columns). WHOLE WORDS only — "Studio" / "studio
+// production" contain "udio" and must survive (a substring match there was
+// a real false positive while auditing the DB).
+const ENGINE_NAME_RE = /\b(?:mini ?max(?:[- ]?music)?(?:[- ]?\d+(?:\.\d+)?)?|ace[- ]?step|eleven ?labs|replicate|lucataco|music[-_ ]?(?:2\.\d+|v2)|suno|udio)\b/gi
+export function stripEngineNames(text: string): string {
+  return text
+    .replace(ENGINE_NAME_RE, '')
+    // tidy separators left behind: "a ·  · b" → "a · b", ", ," → ","
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s*([·,])\s*(?=[·,]|$)/g, '')
+    .replace(/^\s*[·,]\s*/, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // ── Song title ───────────────────────────────────────────────────────────────
 // The user's title is the song's name everywhere (Saved Tracks, track page,
 // Share, Share as Video all read voice_swaps.song_name). With no title we use
@@ -126,7 +146,13 @@ export function defaultSongTitle(lyrics: string): string {
   return clean.length > 60 ? `${clean.slice(0, 57).trimEnd()}…` : clean
 }
 export function resolveSongTitle(title: string | null | undefined, lyrics: string): string {
-  return (title ?? '').trim().slice(0, SONG_TITLE_MAX_CHARS) || defaultSongTitle(lyrics)
+  return stripEngineNames((title ?? '').trim()).slice(0, SONG_TITLE_MAX_CHARS) || defaultSongTitle(lyrics)
+}
+
+// The saved "Style" label (voice_swaps.voice_used) — engine names stripped.
+export function songStyleLabel(style: string | null | undefined): string {
+  const clean = stripEngineNames(style ?? '')
+  return clean ? `AI generated · ${clean}` : 'AI generated'
 }
 
 // Sung lines = non-empty lines that aren't a whole-line [section tag].

@@ -16,6 +16,8 @@ import {
   SONG_TITLE_MAX_CHARS,
   UNTITLED_SONG,
   resolveSongTitle,
+  songStyleLabel,
+  stripEngineNames,
 } from '@/lib/song-engine'
 import { measureAudioSeconds, trimWithFadeOut } from '@/lib/audio-length'
 import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
@@ -54,7 +56,18 @@ export const maxDuration = 60
 const TRIM_TOLERANCE_SECONDS = 3
 const TRIM_FADE_SECONDS = 2.5
 
-const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// ── User-facing errors never name the engine/model ──────────────────────────
+// The raw reason (engine errors, missing keys, Replicate throttling) is logged
+// server-side; the user sees plain language. See stripEngineNames().
+const UNAVAILABLE_MSG = 'Song Studio is temporarily unavailable — please try again later.'
+function publicCreateError(internal: string, refunded: boolean): string {
+  const refund = refunded ? ' Your credits were refunded.' : ''
+  if (/\b429\b|throttl|rate limit/i.test(internal)) return `Song Studio is busy right now — please try again in a minute.${refund}`
+  if (/timed out|timeout|abort/i.test(internal)) return `The song took too long to create.${refund} Please try again.`
+  return `The song couldn’t be created.${refund} Please try again.`
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Generous input caps — validation, not creativity limits.
 const MAX_LYRICS_CHARS = 5000
@@ -107,10 +120,12 @@ export async function POST(req: NextRequest) {
     const engine = songEngine()
     // Config gates BEFORE any charge — a misconfigured engine must cost nothing.
     if ((engine === 'acestep' || engine === 'minimax') && !process.env.REPLICATE_API_TOKEN) {
-      return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
+      console.error('[song-studio] REPLICATE_API_TOKEN not configured')
+      return NextResponse.json({ error: UNAVAILABLE_MSG }, { status: 500 })
     }
     if (engine === 'elevenlabs' && !process.env.ELEVENLABS_API_KEY) {
-      return NextResponse.json({ error: 'ELEVENLABS_API_KEY not configured (or set SONG_ENGINE=acestep)' }, { status: 500 })
+      console.error('[song-studio] ELEVENLABS_API_KEY not configured (or set SONG_ENGINE=acestep)')
+      return NextResponse.json({ error: UNAVAILABLE_MSG }, { status: 500 })
     }
 
     const sessionClient = await createClient()
@@ -226,7 +241,7 @@ export async function POST(req: NextRequest) {
         id: swapId,
         user_id: user.id,
         song_name: title,
-        voice_used: finalStyle ? `AI generated · ${finalStyle}` : 'AI generated',
+        voice_used: songStyleLabel(finalStyle),
         result_path: swapPath,
         // Satisfies the column + its unique index; 'el-' namespace can never
         // collide with real Replicate prediction ids.
@@ -266,7 +281,8 @@ export async function POST(req: NextRequest) {
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
       // Job never ran — refund immediately.
       if (chargedUserId) await refundCredits(chargedUserId)
-      return NextResponse.json({ error: `Generation failed to start: ${safeStringify(prediction.error)}` }, { status: 502 })
+      console.error('[song-studio] prediction failed to start:', safeStringify(prediction.error))
+      return NextResponse.json({ error: `The song couldn’t be started.${chargedUserId ? ' Your credits were refunded.' : ''} Please try again.`, refunded: chargedUserId !== null }, { status: 502 })
     }
 
     // Store the job's title/style/target server-side (best-effort — never
@@ -292,7 +308,7 @@ export async function POST(req: NextRequest) {
     // Any failure after the debit (elevenlabs compose/persist, or the acestep
     // create throwing before a job started) — refund the charge.
     if (chargedUserId) await refundCredits(chargedUserId)
-    return NextResponse.json({ error: msg, refunded: chargedUserId !== null }, { status: 500 })
+    return NextResponse.json({ error: publicCreateError(msg, chargedUserId !== null), refunded: chargedUserId !== null }, { status: 500 })
   }
 }
 
@@ -308,7 +324,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
     if (!process.env.REPLICATE_API_TOKEN) {
-      return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
+      console.error('[song-studio] REPLICATE_API_TOKEN not configured')
+      return NextResponse.json({ error: UNAVAILABLE_MSG }, { status: 500 })
     }
 
     const sessionClient = await createClient()
@@ -337,7 +354,7 @@ export async function GET(req: NextRequest) {
     }
 
     const queryTitle = (req.nextUrl.searchParams.get('title') ?? '').trim().slice(0, SONG_TITLE_MAX_CHARS)
-    const title = job?.title || queryTitle || UNTITLED_SONG
+    const title = job?.title || stripEngineNames(queryTitle) || UNTITLED_SONG
     const stylePrompt = (job?.style ?? req.nextUrl.searchParams.get('style') ?? '').trim().slice(0, MAX_TAGS_CHARS)
     // MiniMax target length (seconds); anything outside the slider range is
     // ignored (= no trim).
@@ -373,8 +390,9 @@ export async function GET(req: NextRequest) {
 
       const outputUrl = typeof prediction.output === 'string' ? prediction.output : null
       if (!outputUrl) {
+        console.error(`[song-studio] could not parse output for ${id}:`, safeStringify(prediction.output))
         return NextResponse.json(
-          { status: 'failed', error: `Could not parse output. Shape: ${safeStringify(prediction.output)}` },
+          { status: 'failed', error: 'The finished song couldn’t be read — please try again.' },
           { status: 502 }
         )
       }
@@ -427,7 +445,7 @@ export async function GET(req: NextRequest) {
         id: swapId,
         user_id: user.id,
         song_name: title,
-        voice_used: stylePrompt ? `AI generated · ${stylePrompt}` : 'AI generated',
+        voice_used: songStyleLabel(stylePrompt),
         result_path: swapPath,
         replicate_prediction_id: id,
         kind: 'song_studio',
@@ -482,7 +500,8 @@ export async function GET(req: NextRequest) {
           await refundCredits(user.id)
         }
       }
-      return NextResponse.json({ status: prediction.status, error: errMsg, refunded: !isAdmin })
+      // errMsg (the engine's raw error) stays in the log above — never shown.
+      return NextResponse.json({ status: prediction.status, error: 'The song couldn’t be generated.', refunded: !isAdmin })
     }
 
     // starting / processing — client keeps polling
@@ -490,6 +509,6 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[song-studio] poll error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Couldn’t check on your song right now.' }, { status: 500 })
   }
 }

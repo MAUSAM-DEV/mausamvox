@@ -37,12 +37,42 @@ type SwapRow = {
   kind?: string | null
 }
 
-// Subtitle + "Voice" detail label per row kind — generated/harmonized tracks
-// must not claim to be swaps.
-const KIND_LABELS: Record<string, { subtitle: string; detail: string }> = {
-  song_studio: { subtitle: 'AI-generated song — Song Studio', detail: 'Style' },
-  choir: { subtitle: 'Vocal harmony stack — Choir Composer', detail: 'Preset' },
-  instrument: { subtitle: 'Melody replayed on an instrument — Instruments', detail: 'Instrument' },
+// Per row kind: subtitle, detail label, the footer note + "make another" link,
+// and the Sing-along backing label. Generated/harmonized tracks must not show
+// Voice Swap copy (the "music-only backing … Run a new swap" note is about
+// swaps only — those tools never store a music-only backing).
+type KindCopy = {
+  subtitle: string
+  detail: string
+  note: string        // what this saved file is
+  againText: string   // "Want a different take?"
+  againLink: string   // link label
+  againHref: string
+  karaokeLabel: string
+  performNote: string // Perform live — what plays
+}
+const KIND_LABELS: Record<string, KindCopy> = {
+  song_studio: {
+    subtitle: 'AI-generated song — Song Studio', detail: 'Style',
+    note: 'This is your song exactly as it was generated.',
+    againText: 'Want a different take?', againLink: 'Make another song', againHref: '/song-studio',
+    karaokeLabel: 'your saved song',
+    performNote: 'Full song — vocals and music',
+  },
+  choir: {
+    subtitle: 'Vocal harmony stack — Choir Composer', detail: 'Preset',
+    note: 'This is your harmony stack exactly as it was built.',
+    againText: 'Want a different harmony?', againLink: 'Make another stack', againHref: '/choir',
+    karaokeLabel: 'your saved harmony stack',
+    performNote: 'Full harmony stack — every layer',
+  },
+  instrument: {
+    subtitle: 'Melody replayed on an instrument — Instruments', detail: 'Instrument',
+    note: 'This is your melody exactly as it was played back.',
+    againText: 'Want a different instrument?', againLink: 'Convert another take', againHref: '/instruments',
+    karaokeLabel: 'your saved instrument track',
+    performNote: 'Your melody on the instrument',
+  },
 }
 
 type LoadState = 'loading' | 'ready' | 'expired' | 'notFound'
@@ -76,6 +106,8 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
   // Same-origin proxy that signs the stored file fresh on every request —
   // the durable path never leaves the server (see /api/voice-swaps/[swapId]).
   const playerSrc = `/api/voice-swaps/${swapId}/result.mp3`
+  // Song Studio / Choir / Instruments copy; undefined = a voice swap.
+  const kindCopy: KindCopy | undefined = swap ? KIND_LABELS[swap.kind ?? ''] : undefined
 
   useEffect(() => {
     const supabase = createClient()
@@ -205,14 +237,14 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <div>
                   <h1 className="sw-title">{swap.song_name}</h1>
                   <div className="sw-subtitle">
-                    {KIND_LABELS[swap.kind ?? '']?.subtitle ?? 'Saved swap — final mix'}
+                    {kindCopy?.subtitle ?? 'Saved swap — final mix'}
                   </div>
                 </div>
               </div>
 
               <div className="sw-details">
                 <div className="sw-detail">
-                  <span className="sw-detail-lbl">{KIND_LABELS[swap.kind ?? '']?.detail ?? 'Voice'}</span>
+                  <span className="sw-detail-lbl">{kindCopy?.detail ?? 'Voice'}</span>
                   <span className="sw-detail-val">{swap.voice_used}</span>
                 </div>
                 <div className="sw-detail">
@@ -265,20 +297,27 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
                 <KaraokePanel
                   backingUrls={[playerSrc]}
                   trackName={swap.song_name}
-                  backingLabel="your saved track — a duet with your cloned voice"
+                  backingLabel={kindCopy?.karaokeLabel ?? 'your saved track — a duet with your cloned voice'}
                   lyricsSourceKey={swap.vocal_stem_path ?? null}
                   onToast={showToast}
                 />
               )}
 
-              <p className="sw-note-fine">
-                This is the finished track exactly as it was saved (effects included).
-                {!swap.instrumental_path && (
-                  <> A music-only backing isn&rsquo;t stored for this track — it was
-                  saved before we started keeping one. Run a new swap to get it.</>
-                )}
-                {' '}Want a different take? <Link href="/voice-swap" style={{ color: '#9D5CFF' }}>Run a new swap</Link>.
-              </p>
+              {kindCopy ? (
+                <p className="sw-note-fine">
+                  {kindCopy.note}{' '}{kindCopy.againText}{' '}
+                  <Link href={kindCopy.againHref} style={{ color: '#9D5CFF' }}>{kindCopy.againLink}</Link>.
+                </p>
+              ) : (
+                <p className="sw-note-fine">
+                  This is the finished track exactly as it was saved (effects included).
+                  {!swap.instrumental_path && (
+                    <> A music-only backing isn&rsquo;t stored for this track — it was
+                    saved before we started keeping one. Run a new swap to get it.</>
+                  )}
+                  {' '}Want a different take? <Link href="/voice-swap" style={{ color: '#9D5CFF' }}>Run a new swap</Link>.
+                </p>
+              )}
             </div>
           )}
         </main>
@@ -290,7 +329,7 @@ export function SavedSwapPage({ swapId }: { swapId: string }) {
           sourceNote={
             performSource === 'music'
               ? 'Music only — instrumental backing, the recorded vocal is muted'
-              : 'Full track — includes the recorded vocal (a duet with your clone)'
+              : (kindCopy?.performNote ?? 'Full track — includes the recorded vocal (a duet with your clone)')
           }
           srcUrl={
             performSource === 'music'
