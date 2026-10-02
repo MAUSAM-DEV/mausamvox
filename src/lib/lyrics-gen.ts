@@ -20,17 +20,54 @@ export const LYRICS_THEME_MAX = 300
 export const LYRICS_MOOD_MAX = 120
 
 // Target languages: id is the API value, label the UI text, instruction the
-// exact phrasing given to the LLM. Roman-script variants are offered because
-// ACE-Step (Song Studio's singer) and most karaoke readers handle Latin
-// script most predictably.
+// exact phrasing given to the LLM, sung = the plain language name used for
+// the "sung in <language>" style note. MausamVox is for any song in any
+// language: a broad list plus 'other' with a typed language name (validated
+// in resolveLyricsLanguage). Existing ids are kept so older pages still work.
 export const LYRICS_GEN_LANGUAGES = [
-  { id: 'english', label: 'English', instruction: 'English' },
-  { id: 'hindi', label: 'Hindi (Devanagari)', instruction: 'Hindi in Devanagari script' },
-  { id: 'hinglish', label: 'Hinglish (Roman Hindi)', instruction: 'Hindi written in Latin/Roman script (Hinglish)' },
-  { id: 'punjabi', label: 'Punjabi (Roman)', instruction: 'Punjabi written in Latin/Roman script' },
-  { id: 'tamil', label: 'Tamil', instruction: 'Tamil in Tamil script' },
-  { id: 'bengali', label: 'Bengali', instruction: 'Bengali in Bengali script' },
+  { id: 'english', label: 'English', instruction: 'English', sung: 'English' },
+  { id: 'hindi', label: 'Hindi (Devanagari)', instruction: 'Hindi in Devanagari script', sung: 'Hindi' },
+  { id: 'hinglish', label: 'Hinglish (Roman Hindi)', instruction: 'Hindi written in Latin/Roman script (Hinglish)', sung: 'Hindi' },
+  { id: 'spanish', label: 'Spanish', instruction: 'Spanish', sung: 'Spanish' },
+  { id: 'bengali', label: 'Bengali', instruction: 'Bengali in Bengali script', sung: 'Bengali' },
+  { id: 'tamil', label: 'Tamil', instruction: 'Tamil in Tamil script', sung: 'Tamil' },
+  { id: 'telugu', label: 'Telugu', instruction: 'Telugu in Telugu script', sung: 'Telugu' },
+  { id: 'marathi', label: 'Marathi', instruction: 'Marathi in Devanagari script', sung: 'Marathi' },
+  { id: 'gujarati', label: 'Gujarati', instruction: 'Gujarati in Gujarati script', sung: 'Gujarati' },
+  { id: 'kannada', label: 'Kannada', instruction: 'Kannada in Kannada script', sung: 'Kannada' },
+  { id: 'malayalam', label: 'Malayalam', instruction: 'Malayalam in Malayalam script', sung: 'Malayalam' },
+  { id: 'punjabi', label: 'Punjabi (Roman)', instruction: 'Punjabi written in Latin/Roman script', sung: 'Punjabi' },
+  { id: 'urdu', label: 'Urdu', instruction: 'Urdu in Urdu (Perso-Arabic) script', sung: 'Urdu' },
+  { id: 'nepali', label: 'Nepali', instruction: 'Nepali in Devanagari script', sung: 'Nepali' },
+  { id: 'arabic', label: 'Arabic', instruction: 'Arabic in Arabic script', sung: 'Arabic' },
+  { id: 'french', label: 'French', instruction: 'French', sung: 'French' },
+  { id: 'portuguese', label: 'Portuguese', instruction: 'Portuguese', sung: 'Portuguese' },
+  { id: 'german', label: 'German', instruction: 'German', sung: 'German' },
+  { id: 'italian', label: 'Italian', instruction: 'Italian', sung: 'Italian' },
+  { id: 'turkish', label: 'Turkish', instruction: 'Turkish', sung: 'Turkish' },
+  { id: 'russian', label: 'Russian', instruction: 'Russian in Cyrillic script', sung: 'Russian' },
+  { id: 'japanese', label: 'Japanese', instruction: 'Japanese', sung: 'Japanese' },
+  { id: 'korean', label: 'Korean', instruction: 'Korean in Hangul', sung: 'Korean' },
+  { id: 'mandarin', label: 'Chinese (Mandarin)', instruction: 'Mandarin Chinese in simplified characters', sung: 'Mandarin Chinese' },
+  { id: 'indonesian', label: 'Indonesian', instruction: 'Indonesian', sung: 'Indonesian' },
+  { id: 'swahili', label: 'Swahili', instruction: 'Swahili', sung: 'Swahili' },
+  { id: 'other', label: 'Other — type it', instruction: '', sung: '' },
 ] as const
+
+// 'other': the user types the language. Letters (any script), spaces,
+// hyphens and parentheses only, 2–40 chars — so nothing but a language name
+// can reach the LLM instruction.
+export const LYRICS_CUSTOM_LANGUAGE_MAX = 40
+const CUSTOM_LANGUAGE_RE = new RegExp('^[\\p{L}\\p{M}][\\p{L}\\p{M} ()-]{1,39}$', 'u') // any script
+export function resolveLyricsLanguage(id: unknown, custom?: unknown): { id: string; instruction: string; sung: string } | null {
+  if (id === 'other') {
+    const name = typeof custom === 'string' ? custom.trim().replace(/\s+/g, ' ') : ''
+    if (!CUSTOM_LANGUAGE_RE.test(name)) return null
+    return { id: 'other', instruction: `${name} (in its usual script)`, sung: name }
+  }
+  const l = LYRICS_GEN_LANGUAGES.find((x) => x.id === id && x.id !== 'other')
+  return l ? { id: l.id, instruction: l.instruction, sung: l.sung } : null
+}
 
 export const LYRICS_GEN_STRUCTURES = [
   { id: 'auto', label: 'Auto', instruction: 'whatever structure fits the theme best (use [verse]/[chorus], add [bridge] only if it helps)' },

@@ -9,7 +9,7 @@ import {
   LYRICS_GEN_CREDITS,
   LYRICS_THEME_MAX,
   LYRICS_MOOD_MAX,
-  LYRICS_GEN_LANGUAGES,
+  resolveLyricsLanguage,
   LYRICS_GEN_STRUCTURES,
 } from '@/lib/lyrics-gen'
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    let body: { theme?: unknown; language?: unknown; mood?: unknown; structure?: unknown }
+    let body: { theme?: unknown; language?: unknown; customLanguage?: unknown; mood?: unknown; structure?: unknown }
     try {
       body = await req.json()
     } catch {
@@ -89,9 +89,10 @@ export async function POST(req: NextRequest) {
     if (theme.length < 3) {
       return NextResponse.json({ error: 'Give the song a theme — a few words is enough' }, { status: 400 })
     }
-    const language = LYRICS_GEN_LANGUAGES.find((l) => l.id === body.language)
+    // Any listed language, or 'other' with a typed (validated) language name.
+    const language = resolveLyricsLanguage(body.language, body.customLanguage)
     if (!language) {
-      return NextResponse.json({ error: 'Unknown language' }, { status: 400 })
+      return NextResponse.json({ error: body.language === 'other' ? 'Type the language name (letters only)' : 'Unknown language' }, { status: 400 })
     }
     const structure = LYRICS_GEN_STRUCTURES.find((s) => s.id === (body.structure ?? 'auto'))
     if (!structure) {

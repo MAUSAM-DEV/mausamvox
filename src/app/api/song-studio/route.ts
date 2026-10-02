@@ -79,7 +79,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Generous input caps — validation, not creativity limits.
 const MAX_LYRICS_CHARS = 5000
-const MAX_TAGS_CHARS = 300
+// Style text: Simple mode sends description (≤300) + chips (≤300) + tempo/key
+// + "sung in <language>" — 600 leaves room for all of it.
+const MAX_TAGS_CHARS = 600
 
 function safeStringify(v: unknown): string {
   try { return JSON.stringify(v) } catch { return String(v) }

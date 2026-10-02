@@ -43,8 +43,8 @@ const features = [
   {
     icon: '🎵',
     title: 'Song Studio',
-    desc: 'Text prompt → full song with timeline editor. Set structure, key, tempo. Hum your melody in. 3 variations per generation — pick the best.',
-    tag: 'AI Song Gen',
+    desc: 'Write your own lyrics or just describe the song — in any language. Pick genre, mood, instruments and voice, and get a full song up to about 3 minutes. Make 2 versions and keep your favourite.',
+    tag: 'Any language · 2 versions',
     tagType: 'v',
   },
   {
