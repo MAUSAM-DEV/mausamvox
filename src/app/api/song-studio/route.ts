@@ -5,15 +5,16 @@ import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import {
   songEngine,
-  engineSupportsDuration,
+  autoDurationSeconds,
+  engineMaxSeconds,
   withVocalStyle,
   SONG_VOCALS,
   type SongVocals,
   ACE_STEP_VERSION,
   SONG_STUDIO_CREDITS,
   SONG_MIN_SECONDS,
-  SONG_MAX_SECONDS,
 } from '@/lib/song-engine'
+import { measureAudioSeconds, trimWithFadeOut } from '@/lib/audio-length'
 import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
 import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_MODEL, MINIMAX_VERSION } from '@/lib/song-engine-minimax'
 import { normalizeLoudness } from '@/lib/loudness'
@@ -45,7 +46,12 @@ import { normalizeLoudness } from '@/lib/loudness'
 // Recent/Saved Tracks, shareable, deletable, 90-day retention.
 export const maxDuration = 60
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// MiniMax target trimming: only when the song overshoots the target by more
+// than this (a couple of seconds over isn't worth a re-encode), with a fade.
+const TRIM_TOLERANCE_SECONDS = 3
+const TRIM_FADE_SECONDS = 2.5
+
+const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Generous input caps — validation, not creativity limits.
 const MAX_LYRICS_CHARS = 5000
@@ -70,16 +76,22 @@ async function refundCredits(userId: string): Promise<void> {
   }
 }
 
-// Insert a voice_swaps row, tolerating a deploy that outruns migration
-// 20260712000003: if Postgres rejects the unknown `kind` column, retry the
-// same row without it (the row is then unlabeled but functional).
+// Insert a voice_swaps row, tolerating a deploy that outruns a migration:
+// if Postgres/PostgREST rejects an OPTIONAL column it doesn't know yet
+// (`kind` — 20260712000003, `duration_seconds` — 20261002000001), retry the
+// same row without it (the row is then unlabeled / length-less but works).
+const OPTIONAL_COLUMNS = ['duration_seconds', 'kind'] as const
 async function insertSwapRow(row: Record<string, unknown>): Promise<{ error: { code?: string; message: string } | null }> {
-  const first = await supabaseAdmin.from('voice_swaps').insert(row)
-  if (first.error && /kind/.test(first.error.message)) {
-    const { kind: _kind, ...withoutKind } = row
-    return supabaseAdmin.from('voice_swaps').insert(withoutKind)
+  let current = { ...row }
+  let result = await supabaseAdmin.from('voice_swaps').insert(current)
+  for (const col of OPTIONAL_COLUMNS) {
+    if (!result.error || !(col in current) || !result.error.message.includes(col)) continue
+    const { [col]: _dropped, ...rest } = current
+    current = rest
+    console.warn(`[song-studio] voice_swaps.${col} missing — saved without it (apply its migration)`)
+    result = await supabaseAdmin.from('voice_swaps').insert(current)
   }
-  return first
+  return result
 }
 
 // ── POST: validate → deduct → create the prediction ─────────────────────────
@@ -105,7 +117,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
-    let body: { lyrics?: string; stylePrompt?: string; duration?: number; title?: string; vocals?: string }
+    let body: {
+      lyrics?: string; stylePrompt?: string; duration?: number | null; title?: string; vocals?: string
+      lengthMode?: 'auto' | 'fixed'
+    }
     try {
       body = await req.json()
     } catch {
@@ -144,16 +159,28 @@ export async function POST(req: NextRequest) {
     if (stylePrompt.length > MAX_TAGS_CHARS) {
       return NextResponse.json({ error: `Style prompt is too long (max ${MAX_TAGS_CHARS} characters)` }, { status: 400 })
     }
-    // MiniMax has no duration input — it is neither required nor validated.
-    if (
-      engineSupportsDuration(engine) && (
-        typeof duration !== 'number' || !Number.isFinite(duration) ||
-        duration < SONG_MIN_SECONDS || duration > SONG_MAX_SECONDS
-      )
-    ) {
-      return NextResponse.json({ error: `Duration must be ${SONG_MIN_SECONDS}-${SONG_MAX_SECONDS} seconds` }, { status: 400 })
+    // ── Length ("Auto + slider") ────────────────────────────────────────────
+    // lengthMode 'auto'  → acestep/elevenlabs: duration picked from the lyrics;
+    //                      minimax: no target (length follows the lyrics).
+    // lengthMode 'fixed' → `duration` seconds, within the engine's range —
+    //                      a real duration for acestep/elevenlabs, a TARGET
+    //                      for minimax (structure + prompt; trimmed if longer).
+    // No lengthMode = a legacy client: acestep/elevenlabs use `duration` as
+    // before; minimax IGNORES it (old MiniMax tabs always send a hidden 60,
+    // which must not start trimming songs to one minute).
+    const maxSeconds = engineMaxSeconds(engine)
+    const fixed = body.lengthMode === 'fixed' || (body.lengthMode === undefined && engine !== 'minimax')
+    if (fixed && (
+      typeof duration !== 'number' || !Number.isFinite(duration) ||
+      duration < SONG_MIN_SECONDS || duration > maxSeconds
+    )) {
+      return NextResponse.json({ error: `Length must be ${SONG_MIN_SECONDS}-${maxSeconds} seconds` }, { status: 400 })
     }
     const finalStyle = withVocalStyle(stylePrompt, vocals)
+    // Seconds handed to engines that take a real duration.
+    const engineSeconds = fixed ? Math.round(duration as number) : autoDurationSeconds(lyrics, engine)
+    // MiniMax target (null = Auto).
+    const targetSeconds = engine === 'minimax' && fixed ? Math.round(duration as number) : null
 
     // Charge BEFORE the paid Replicate create (atomic; gender-split pattern).
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
@@ -175,12 +202,14 @@ export async function POST(req: NextRequest) {
     // ── elevenlabs: synchronous compose → persist → done ────────────────────
     if (engine === 'elevenlabs') {
       const audioBuffer = await composeSongElevenLabs(
-        { stylePrompt: finalStyle, lyrics, durationSeconds: duration as number },
+        { stylePrompt: finalStyle, lyrics, durationSeconds: engineSeconds },
         '[song-studio]'
       )
       // No loudness pass here (deliberate): ElevenLabs output is already
       // mastered — running loudnorm again risks double-compression. The
       // normalizeLoudness helper stays for the ACE-Step path below.
+      const finalSeconds = await measureAudioSeconds(audioBuffer, 'mp3')
+      console.log(`[song-studio] length: elevenlabs requested ${engineSeconds}s → actual ${finalSeconds ?? '?'}s`)
 
       const swapId = crypto.randomUUID()
       const swapPath = `${user.id}/${swapId}.mp3`
@@ -199,6 +228,7 @@ export async function POST(req: NextRequest) {
         // collide with real Replicate prediction ids.
         replicate_prediction_id: `el-${swapId}`,
         kind: 'song_studio',
+        duration_seconds: finalSeconds,
       })
       if (insertError) {
         await supabaseAdmin.storage.from('voice-swaps').remove([swapPath]).catch(() => {})
@@ -218,13 +248,13 @@ export async function POST(req: NextRequest) {
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
     const prediction = await replicate.predictions.create(
       engine === 'minimax'
-        ? { version: MINIMAX_VERSION, input: buildMiniMaxInput(lyrics, finalStyle) }
+        ? { version: MINIMAX_VERSION, input: buildMiniMaxInput(lyrics, finalStyle, targetSeconds) }
         : {
             version: ACE_STEP_VERSION,
             input: {
               tags: finalStyle,
               lyrics,
-              duration: Math.round(duration as number),
+              duration: engineSeconds,
             },
           }
     )
@@ -235,8 +265,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Generation failed to start: ${safeStringify(prediction.error)}` }, { status: 502 })
     }
 
-    console.log(`[song-studio] started ${engine} prediction ${prediction.id} (${engine === 'minimax' ? 'length follows lyrics' : `${Math.round(duration as number)}s`}, user ${user.id})`)
-    return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
+    const lengthNote = engine === 'minimax'
+      ? (targetSeconds ? `target ${targetSeconds}s` : 'length follows lyrics')
+      : `${engineSeconds}s${fixed ? '' : ' (auto)'}`
+    console.log(`[song-studio] started ${engine} prediction ${prediction.id} (${lengthNote}, user ${user.id})`)
+    // targetSeconds goes back so the client's poll can ask GET to trim.
+    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, targetSeconds })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[song-studio] create error:', msg)
@@ -273,6 +307,11 @@ export async function GET(req: NextRequest) {
     }
     const title = (req.nextUrl.searchParams.get('title') ?? '').trim().slice(0, MAX_TITLE_CHARS) || 'Song Studio track'
     const stylePrompt = (req.nextUrl.searchParams.get('style') ?? '').trim().slice(0, MAX_TAGS_CHARS)
+    // MiniMax target length (seconds) from the client's poll; anything outside
+    // the slider range is ignored (= no trim).
+    const targetRaw = Number(req.nextUrl.searchParams.get('target'))
+    const targetSeconds = Number.isFinite(targetRaw) && targetRaw >= SONG_MIN_SECONDS && targetRaw <= engineMaxSeconds('minimax')
+      ? Math.round(targetRaw) : null
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
@@ -322,9 +361,26 @@ export async function GET(req: NextRequest) {
       // louder than our −14 target) — skipped like ElevenLabs. Decided from
       // the prediction's own model, so a job in flight across an engine flip
       // is still handled correctly.
-      const audioBuffer = prediction.model === MINIMAX_MODEL
+      const isMiniMax = prediction.model === MINIMAX_MODEL
+      let audioBuffer = isMiniMax
         ? rawBuffer
         : await normalizeLoudness(rawBuffer, ext, '[song-studio]')
+
+      // MiniMax target: if the song came out LONGER than asked, trim to the
+      // target with a 2.5 s fade-out. Shorter songs are kept as they are —
+      // never stretched or slowed to fake length. Trim failure keeps the
+      // untrimmed song (a paid generation is never failed over length).
+      let finalSeconds = await measureAudioSeconds(audioBuffer, ext)
+      const rawSeconds = finalSeconds
+      if (isMiniMax && targetSeconds && finalSeconds !== null && finalSeconds > targetSeconds + TRIM_TOLERANCE_SECONDS) {
+        const trimmed = await trimWithFadeOut(audioBuffer, ext, targetSeconds, TRIM_FADE_SECONDS)
+        if (trimmed) {
+          audioBuffer = trimmed
+          finalSeconds = (await measureAudioSeconds(trimmed, ext)) ?? targetSeconds
+        }
+      }
+      console.log(`[song-studio] length: ${isMiniMax ? 'minimax' : 'acestep'} raw ${rawSeconds ?? '?'}s → final ${finalSeconds ?? '?'}s` +
+        `${targetSeconds && isMiniMax ? ` (target ${targetSeconds}s${finalSeconds !== rawSeconds ? ', trimmed' : ''})` : ''}`)
       const swapId = crypto.randomUUID()
       const swapPath = `${user.id}/${swapId}.${ext}`
 
@@ -343,6 +399,7 @@ export async function GET(req: NextRequest) {
         result_path: swapPath,
         replicate_prediction_id: id,
         kind: 'song_studio',
+        duration_seconds: finalSeconds,
       })
       if (insertError) {
         if (insertError.code === '23505') {

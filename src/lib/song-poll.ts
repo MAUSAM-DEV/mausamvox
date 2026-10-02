@@ -16,7 +16,9 @@ const PENDING_KEY = 'mvox_song_pending'
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000 // Replicate keeps outputs ~1 h
 export const MAX_POLL_FAILURES = 8 // consecutive; backoff 8s→15s cap ≈ 1.5 min of outage
 
-export type PendingSong = { predictionId: string; title: string; style: string; startedAt: number }
+// targetSeconds: MiniMax target length (null/absent = Auto). Sent on every
+// poll so the server-side persist can trim an over-long song.
+export type PendingSong = { predictionId: string; title: string; style: string; startedAt: number; targetSeconds?: number | null }
 
 export function savePending(p: PendingSong) {
   try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)) } catch { /* private mode etc. */ }
@@ -62,6 +64,7 @@ export async function pollUntilDone(p: PendingSong, deps: PollDeps = {}): Promis
   const now = deps.now ?? Date.now
 
   const qs = new URLSearchParams({ id: p.predictionId, title: p.title, style: p.style })
+  if (p.targetSeconds) qs.set('target', String(p.targetSeconds))
   const deadline = p.startedAt + POLL_CEILING_MS
   let failures = 0
   for (;;) {

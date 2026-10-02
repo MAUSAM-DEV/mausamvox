@@ -12,12 +12,17 @@ import {
   SONG_STUDIO_CREDITS,
   SONG_VOCALS,
   SONG_VOCAL_LABELS,
-  engineSupportsDuration,
+  SONG_MIN_SECONDS,
+  SONG_LENGTH_STEP_SECONDS,
+  autoDurationSeconds,
+  countSungLines,
+  engineMaxSeconds,
+  formatMSS,
   withVocalStyle,
   type SongEngine,
   type SongVocals,
 } from '@/lib/song-engine'
-import { MINIMAX_MAX_LYRICS_CHARS } from '@/lib/song-engine-minimax'
+import { MINIMAX_MAX_LYRICS_CHARS, estimateMiniMaxSeconds } from '@/lib/song-engine-minimax'
 import {
   clearPending,
   isNetworkError,
@@ -44,14 +49,6 @@ import {
 
 type Phase = 'idle' | 'generating' | 'done' | 'error'
 
-const DURATIONS: { seconds: number; label: string }[] = [
-  { seconds: 30, label: '30 sec' },
-  { seconds: 60, label: '1 min' },
-  { seconds: 120, label: '2 min' },
-  { seconds: 180, label: '3 min' },
-  { seconds: 240, label: '4 min' },
-]
-
 const LYRICS_PLACEHOLDER = `[verse]
 Neon lights on empty streets
 Echoes of a distant beat
@@ -66,7 +63,13 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
   // Male by default — users reported every song came out female when the
   // style prompt didn't say otherwise.
   const [vocals, setVocals] = useState<SongVocals>('male')
-  const durationSupported = engineSupportsDuration(engine)
+  // Length: "Auto" (default) or a slider value. On MiniMax the value is a
+  // target (no duration input exists); on acestep/elevenlabs it's the real
+  // duration. The slider tops out at the engine's limit.
+  const [autoLength, setAutoLength] = useState(true)
+  const [lengthSeconds, setLengthSeconds] = useState(120)
+  const maxLengthSeconds = engineMaxSeconds(engine)
+  const lengthValue = Math.min(lengthSeconds, maxLengthSeconds)
   const [isAdmin, setIsAdmin] = useState(false)
   const [plan, setPlan] = useState<string | null>(null)
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
@@ -75,7 +78,9 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
   const [title, setTitle] = useState('')
   const [stylePrompt, setStylePrompt] = useState('')
   const [lyrics, setLyrics] = useState('')
-  const [duration, setDuration] = useState(60)
+  // MiniMax: warn when the lyrics' estimated natural length falls well short
+  // of the target (estimate fitted to real runs — rough, so a 20 s margin).
+  const lyricsShortForTarget = estimateMiniMaxSeconds(countSungLines(lyrics)) < lengthValue - 20
 
   // AI lyrics writer (inline panel above the lyrics box).
   const [aiOpen, setAiOpen] = useState(false)
@@ -185,7 +190,11 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
           headers: { 'Content-Type': 'application/json' },
           // title is used by the synchronous (elevenlabs) engine, which persists
           // inside POST; the acestep engine takes it on the poll as before.
-          body: JSON.stringify({ lyrics: trimmedLyrics, stylePrompt: trimmedStyle, duration, title: songTitle, vocals }),
+          body: JSON.stringify({
+            lyrics: trimmedLyrics, stylePrompt: trimmedStyle, title: songTitle, vocals,
+            lengthMode: autoLength ? 'auto' : 'fixed',
+            duration: autoLength ? null : lengthValue,
+          }),
         })
       } catch (err) {
         if (!isNetworkError(err)) throw err
@@ -208,7 +217,11 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
       const predictionId: string = startData.predictionId
       if (!predictionId) throw new Error('No prediction id returned')
       // style labels the saved row — the same vocal-prefixed text the server sent.
-      const pending: PendingSong = { predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals), startedAt: Date.now() }
+      const pending: PendingSong = {
+        predictionId, title: songTitle, style: withVocalStyle(trimmedStyle, vocals), startedAt: Date.now(),
+        // MiniMax target from the server (null on Auto / other engines).
+        targetSeconds: typeof startData.targetSeconds === 'number' ? startData.targetSeconds : null,
+      }
       savePending(pending)
       await runPoll(pending)
     } catch (err) {
@@ -441,25 +454,52 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
               disabled={generating}
             />
 
-            <label className="ss-lbl">{durationSupported ? 'Duration' : 'Length'}</label>
-            {durationSupported ? (
-              <div className="ss-durations">
-                {DURATIONS.map((d) => (
-                  <button
-                    key={d.seconds}
-                    className={`ss-dur-btn${duration === d.seconds ? ' ss-dur-btn--active' : ''}`}
-                    onClick={() => setDuration(d.seconds)}
-                    disabled={generating}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              // Honest copy: this engine has no duration setting at all.
-              <p className="ss-ai-note">
-                Song length follows your lyrics — more verses and choruses make a longer
-                song. There&rsquo;s no length setting for this engine.
+            <label className="ss-lbl" htmlFor="ss-length">Length</label>
+            <div className="ss-len">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoLength}
+                className={`ss-dur-btn${autoLength ? ' ss-dur-btn--active' : ''}`}
+                onClick={() => setAutoLength((a) => !a)}
+                disabled={generating}
+              >
+                Auto
+              </button>
+              <input
+                id="ss-length"
+                type="range"
+                className="ss-len-slider"
+                min={SONG_MIN_SECONDS}
+                max={maxLengthSeconds}
+                step={SONG_LENGTH_STEP_SECONDS}
+                value={lengthValue}
+                onChange={(e) => setLengthSeconds(Number(e.target.value))}
+                disabled={autoLength || generating}
+                aria-valuetext={formatMSS(lengthValue)}
+              />
+              <span className={`ss-len-val${autoLength ? ' ss-len-val--off' : ''}`}>{formatMSS(lengthValue)}</span>
+            </div>
+            {/* Honest copy per engine: MiniMax has no duration input, so a
+                value there is a TARGET (structure + prompt, trimmed if the
+                song runs long — never stretched). */}
+            <p className="ss-ai-note">
+              {autoLength
+                ? engine === 'minimax'
+                  ? 'Auto — follows your lyrics'
+                  : `Auto — follows your lyrics (about ${formatMSS(autoDurationSeconds(lyrics, engine))} for these lyrics)`
+                : engine === 'minimax'
+                  // Real test 2026-10-02: 4 short lines with a 2:00 target came
+                  // back at 1:00 — MiniMax can't be made to write a longer song
+                  // than the lyrics support, and we never stretch audio. Longer
+                  // songs ARE trimmed to the target. Copy says exactly that.
+                  ? 'Target length — the song will be about this long if your lyrics are long enough. Longer songs are trimmed to fit; shorter ones are never stretched.'
+                  : `The song will be about ${formatMSS(lengthValue)} long.`}
+            </p>
+            {!autoLength && engine === 'minimax' && lyricsShortForTarget && (
+              <p className="ss-ai-note ss-len-warn">
+                Your lyrics look short for {formatMSS(lengthValue)} — expect a shorter song.
+                Add verses or a bridge to get closer.
               </p>
             )}
 
@@ -591,6 +631,15 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
           border-color: transparent;
         }
         .ss-dur-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .ss-len { display: flex; align-items: center; gap: 12px; }
+        .ss-len-slider { flex: 1; min-width: 0; accent-color: #9D5CFF; height: 28px; cursor: pointer; }
+        .ss-len-slider:disabled { opacity: 0.35; cursor: not-allowed; }
+        .ss-len-val {
+          min-width: 44px; text-align: right; font-variant-numeric: tabular-nums;
+          font-size: 13px; font-weight: 600; color: #F0F0FF;
+        }
+        .ss-len-val--off { color: #4A4A7A; }
+        .ss-len-warn { color: #E8B04A; margin-top: 6px; }
         .ss-generate {
           display: block; width: 100%; margin-top: 20px;
           padding: 13px 22px; border-radius: 10px; border: none;
