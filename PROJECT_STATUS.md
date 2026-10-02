@@ -8,7 +8,9 @@ MausamVox is an AI voice & music creation platform: clone voices, swap vocals on
 
 ---
 
-## 🎹 INSTRUMENTS PATH FIX (2026-10-02, `a852e3a`) — ⚠️ needs one live test
+## 🎹 INSTRUMENTS PATH FIX (2026-10-02, `a852e3a`) — ✅ CONFIRMED LIVE
+
+**✅ Live acceptance PASSED (2026-10-02 12:52):** founder's hum → 200, `basic-pitch backend=wasm audio=24.4s inference=4901ms`, 184 notes → grand-piano, saved track. **First real lambda speed number:** Basic Pitch ≈201 ms per audio-second on Vercel vs ≈79 ms locally → **lambda ≈2.5× slower than Apple Silicon** for this workload. Instruments' 25 s cap has wide headroom. Choir projection at the same factor: 3 min ≈39 s (cap looks right — confirm with a real `[timing] stage=choir` line; ffmpeg is a different workload).
 
 Choir + Voice Swap confirmed working live by the founder after `7c47f8b`. Instruments then failed with `…Received type number (20841)`: webpack rewrites `createRequire(import.meta.url).resolve()` into a numeric module ID (Basic Pitch model dir → crash; tfjs .wasm dir → silent CPU fallback). Fixed with `__non_webpack_require__.resolve()` + string guard; verified in a standalone (traced-files-only) build: 200 + valid MP3, `backend=wasm`. **Live test:** `/instruments` → hum ~10 s → convert → instrument track plays; Vercel log within an hour must say `basic-pitch backend=wasm` (NOT `using cpu`). **Rule for future server code:** never use `createRequire(...).resolve()` / `require.resolve()` for file paths in a route — webpack turns it into a number; use `__non_webpack_require__.resolve()` or `path.join(process.cwd(), …)`.
 
