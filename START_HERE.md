@@ -1,6 +1,6 @@
 # START HERE — MausamVox quick orientation
 
-_Refreshed 2026-10-03 from `PROJECT_STATUS.md`. If the two ever disagree, **`PROJECT_STATUS.md` wins** — it holds the full detail; this file is the one-page map._
+_Refreshed 2026-10-03 (migrations + Replicate updated later the same day) from `PROJECT_STATUS.md`. If the two ever disagree, **`PROJECT_STATUS.md` wins** — it holds the full detail; this file is the one-page map._
 
 ## 1. How we work
 
@@ -42,7 +42,7 @@ Users never see engine names (enforced in code).
 3. **Lyria still untested live:** target-length trim, resuming 2 pending songs after closing the tab.
 4. **Pricing table still lists features that don't exist:** Pro "Style marketplace"; Studio "API access", "DAW plugin (VST/AU)", "Priority GPU queue", "Team workspace". Decide: build, remove, or mark "coming soon".
 5. **Studio plan "Unlimited credits"** has no cap — uncapped AI cost per user. Needs a cap or fair-use rule before launch.
-6. **Replicate account under $5 credit** (as of 2026-10-02) → requests throttled to 6/min. Top up before real traffic.
+6. ✅ **Replicate topped up** — founder added $10 on 2026-10-03, so the under-$5 throttle (6 requests/min) should no longer apply. Keep the balance above $5 once real users arrive.
 7. **Song lost if user never returns** — a finished song is only saved when the user comes back within ~1 h. Real fix = a Replicate webhook.
 8. **Billing not wired** — no Stripe / INR plans yet.
 9. **Large backlog of live acceptance tests** (Choir/Instruments live checks, recording wizard on phones, lyrics regenerate, polish re-save, Share as Video, etc.) — full numbered list in `PROJECT_STATUS.md` ("START HERE NEXT SESSION" section).
@@ -50,16 +50,20 @@ Users never see engine names (enforced in code).
 
 ### Migrations
 
-- **Confirmed applied:** `20260705*` (both), credit functions `20260712000000/1` + `kind` column `20260712000003` (seen in prod 2026-10-02), `20261002000000` / `…01` / `…02`.
-- **Not confirmed applied — check in Supabase before relying on them:** `20260707000000` (polish re-save UPDATE grant), `20260712000002` (share links), `20260713000000` (Voice Library), `20260814000000` (waitlist).
+- **All 20 migrations in `supabase/migrations/` are applied** (read-only check of the live database, 2026-10-03):
+  - share links `20260712000002` → `voice_swaps.share_token` exists
+  - Voice Library `20260713000000` → all 4 new `voice_clones` columns exist
+  - waitlist `20260814000000` → table exists (15 sign-ups so far)
+  - polish re-save grant `20260707000000` → a saved track was re-saved via UPDATE on 2026-08-13 (only possible with the grant)
+  - earlier: `20260705*`, credit functions `20260712000000/1`, `kind` `20260712000003`, `20261002000000/01/02`
 
 ## 5. Launch checklist
 
 - [ ] Run the open live tests above (Song Studio redesign first).
-- [ ] Waitlist migration `20260814000000` applied (else the waitlist form errors).
+- [x] Waitlist migration applied (confirmed 2026-10-03).
 - [ ] Fix or remove the unbuilt pricing-table features (item 4).
 - [ ] Cap the Studio plan's "Unlimited credits" (item 5).
-- [ ] Top up Replicate (item 6).
+- [x] Top up Replicate — $10 added 2026-10-03.
 - [ ] Decide on billing: Stripe / INR plans (item 8) — or launch free-credits-only.
 - [ ] Optional: Replicate webhook so no finished song is ever lost (item 7).
 - [ ] **Open sign-ups:** Vercel → Settings → Environment Variables → `NEXT_PUBLIC_SIGNUPS_OPEN` = `true` → **Redeploy** (saving the variable alone does nothing — it's baked in at build time).
