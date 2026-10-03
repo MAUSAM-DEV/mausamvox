@@ -6,6 +6,17 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🩺 DIAGNOSIS: WHY TESTS 2 & 4 SOUNDED BROKEN (2026-10-03) — cause found; NO app change; live app stays on the old engine
+
+**Founder verdict on the blind tests:** all 10 Test 2 tracks (incl. Seed-VC) bad — language unrecognisable, voice "breaks every second". **Cause = the test excerpt I chose, not the engines/clones/recording:** "Harmony Test" 1:28–1:58 is the final GROUP chorus — backing vocals only −1…−3 dB under the lead (the solo verse 0:34–0:54 is −26 dB). A group singing in unison with the lead cannot be separated into one voice, so every engine got several voices smeared into one "lead". I picked that excerpt on purpose for Test 1 (separation) and wrongly reused it for Tests 2 and 4.
+- **One-change proof (WhisperX large-v3 as the word check; it transcribes the source leads correctly):** old engine + MKIPHONE + pitch −12 → chorus = no recognisable words (hallucinated loop); **same settings on the solo verse → lyrics recognised** ("गलियों में गूँजे हँसी हमारी, तारों से माँगी ये दुनिया सारी…"). Pitch 0 vs −12 on the chorus: both unrecognisable → the octave shift is not the cause. New 3 min/200-epoch clone: mostly recognised on the solo verse and on Final Test 2.
+- **Index engine is not the cause:** on Final Test 2 the new engine at Style Intensity 0 / 0.3 / 0.8 and the old-engine baseline are all recognised; index 0 sounds like the old engine (spectral distance 2.26 vs 2.31 run-to-run); index moves the sound 2.87 (0.3) / 3.58 (0.8) — whether that helps or hurts is an ear call (founder).
+- **All conversions follow the source:** 93–97% of frames within 1 semitone of source pitch (+shift), ≤2% octave errors, loudness-envelope correlation 0.83–0.89 (Seed-VC 0.68) → "breaking" isn't pitch tracking failure.
+- **Recording is fine:** same 16 kHz top end as the working MKIPHONE sample, 0 clipped samples, ~16% silence, noise floor −64 dBFS; app denoise changes the voice band by only −0.2 dB while singing; all clips 10.0 s / 44.1 kHz / 16-bit.
+- **Unresolved:** Seed-VC was intelligible to WhisperX even on the chorus, yet sounded bad to the founder — needs a solo-passage rerun if Seed-VC is still of interest. The Harmony music bed ("other" stem) is brighter in the voice band than Final Test 2's (−7.4 vs −10.4 dB) — possible ghost voices; saved as its own track for an ear check.
+- **12 labelled tracks** in Saved Tracks (voice "Diagnosis", names start "Diag"). Cost ≈ $0.025 conversions + ~$0.10–0.15 WhisperX (hardware price unverified).
+- **Lessons:** test voices only on a SOLO passage; a song/excerpt must be checked for backing ≈ lead level before any voice test.
+
 ## 🎧 VOICE TESTS 1/2/4 RUN WITH THE INDEX WORKING (2026-10-03) — AWAITING FOUNDER'S BLIND VERDICT; app NOT switched yet (plan awaiting approval)
 
 - **Engine `mausam-dev/rvc-v2-index` live (public, version `9374ece1…`).** First build (`3e357f0a`) never booted: `pyworld` 0.3.4 (Linux = source only) was compiled by Cog against glibc 2.38 > image's → `ImportError` at import; found with a CPU smoke-test workflow; fixed by recompiling it inside the image (+build-essential). Every run logs `index file: added_IVF…index`; signed-URL tokens not logged. Cold first boot 123 s queue, then ~0 s; compute 6–16 s per clip.

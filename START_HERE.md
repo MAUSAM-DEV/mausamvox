@@ -47,7 +47,7 @@ Users never see engine names (enforced in code).
 8. **Billing not wired** — no Stripe / INR plans yet.
 9. **Large backlog of live acceptance tests** (Choir/Instruments live checks, recording wizard on phones, lyrics regenerate, polish re-save, Share as Video, etc.) — full numbered list in `PROJECT_STATUS.md` ("START HERE NEXT SESSION" section).
 10. **Seed-VC listening test (2026-10-03) — awaiting your verdict:** "Swap – Current" vs "Swap – Seed-VC" in Saved Tracks (30 s excerpt, MKIPHONE). Seed-VC only runs on a GPU in practice (53 min for 30 s on this Mac); local files ~4.4 GB on the SSD until you say delete.
-11. **Voice index fix + voice tests (2026-10-03):** fixed engine `mausam-dev/rvc-v2-index` works (Style Intensity + protect now real; filter radius still not). 12 blind test tracks in Saved Tracks await your verdict; app switch to the new engine awaits your approval. Replicate credit is under $10 (throttled) — top up.
+11. **Voice tests (2026-10-03):** the blind tests failed because I tested on a group chorus (can't be separated into one voice) — not the engines. 12 labelled "Diag" tracks await your ears. Live app stays on the old engine. Replicate credit < $10 (throttled).
 12. **Parked:** duet swap male voice sounds like the original → fix is a clean dry-mic retrain of the "Raju" voice.
 
 ### Migrations
