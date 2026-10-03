@@ -33,9 +33,18 @@ if (!serviceRoleKey) {
   )
 }
 
+// Every admin call must hit Supabase live. Next.js 14 caches fetch() made from
+// route handlers by default (its Data Cache, which also survives deploys), so
+// without `cache: 'no-store'` a route that reads nothing from the request
+// served the SAME signed URL for over an hour after it expired — the
+// voice-model proxy broke every Voice Swap with "HTTP 400" (2026-10-03).
+// It would equally serve stale database rows.
+const noStoreFetch: typeof fetch = (input, init) => fetch(input, { ...init, cache: 'no-store' })
+
 export const supabaseAdmin = createClient(
   supabaseUrl ?? '',
-  serviceRoleKey ?? ''
+  serviceRoleKey ?? '',
+  { global: { fetch: noStoreFetch } }
 )
 
 /** True when the admin client is properly configured with a service-role key. */

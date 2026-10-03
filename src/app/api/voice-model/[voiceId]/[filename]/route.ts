@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 
 export const maxDuration = 15
+// Always run fresh: this route reads nothing from the request, so without
+// this Next.js may treat it as cacheable. The signed URL must be new each time.
+export const dynamic = 'force-dynamic'
 
 // GET /api/voice-model/<voiceId>/<voiceId>-<modelPathHash>.zip
 //
