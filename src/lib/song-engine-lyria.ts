@@ -81,13 +81,22 @@ export function buildLyriaPrompt(input: LyriaPromptInput): string {
   return lyrics ? `${direction}\n\nLyrics:\n${lyrics}` : direction
 }
 
-// Lyria's safety filter blocks some prompts. The exact error wording isn't
-// documented, so match broadly; anything matching gets the friendly
-// "try changing the lyrics or style" message (and the normal refund).
+// Lyria's content check. Real error seen in production (2026-10-03):
+//   "ModelError: The input or output was flagged as sensitive. Please try
+//    again with different inputs. (E005)"
+// It is INTERMITTENT — identical Assamese lyrics + style passed twice and
+// were flagged once in the same session ("input OR output" — the generated
+// song itself can trip it), and flagged predictions are not billed
+// (audio_output_count 0). So: match only genuine safety signatures (the old
+// broad match on words like "filter"/"harm"/"policy" could mislabel an
+// unrelated error as a block), and say honestly that retrying often works.
+// The app never auto-retries a flagged song — retrying is the user's choice.
 export function isLyriaBlocked(errorText: string): boolean {
-  return /safety|blocked|filter|policy|prohibited|not allowed|sensitive|responsible ai|harm|violat|inappropriate|copyright|recitation/i.test(errorText)
+  return /flagged as sensitive|\bE005\b|safety (?:filter|system|check)|blocked by (?:the )?(?:safety|content)|content policy|recitation/i.test(errorText)
 }
-export const LYRIA_BLOCKED_MSG = 'This song couldn’t be created — try changing the lyrics or style.'
+export const LYRIA_BLOCKED_MSG =
+  'This song couldn’t be created — it was stopped by an automatic content check, which sometimes happens even with ordinary lyrics. ' +
+  'Try again; if it keeps happening, try changing the lyrics or style.'
 
 // Rough "will these lyrics fit in ~3 minutes?" check for the UI note. Sung
 // pop lines run ~4 s each; >~44 sung lines won't fit. A heuristic only — it
