@@ -12,7 +12,7 @@
 - **`voice_swaps` GRANTs:** every new DB operation on `voice_swaps` needs its own explicit `GRANT` for **both** `authenticated` **and** `service_role`. No RLS on this table — access is grants + app-code ownership checks. Adding a query/insert/update? Add the matching grant migration.
 - **Never store expiring signed URLs.** Store the durable storage **path** in the DB, and **sign fresh at the moment of use**. Stale signed URLs are the #1 cause of "it worked yesterday" failures.
 - **Supabase branching must stay OFF.** Do not enable it.
-- **RVC is deterministic.** Same input + same model + same params → same output. (We pass a random seed only to dodge Replicate's prediction cache, not to change the voice.)
+- **RVC repeats the sound, not the exact bytes.** Same input + same model + same params → the same-sounding voice, but the audio file differs a little every run (its vocoder adds random noise — measured 2026-10-03). So never compare RVC outputs by file hash — compare by ear or by spectrum; and Regenerate with identical params won't fix an artifact — only a param change or a cleaner input does. (No seed is passed: the vocal URL is re-signed per request, which already stops Replicate reusing a cached prediction.)
 
 ## Session handoff protocol
 
