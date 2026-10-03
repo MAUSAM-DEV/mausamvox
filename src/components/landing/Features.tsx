@@ -28,16 +28,16 @@ const features = [
   },
   {
     icon: '🎼',
-    title: 'Choir Composer Pro',
-    desc: 'True SATB polyphonic output — 4 separate stems. Piano roll melody input, full song lyrics, live preview, and sheet music PDF export.',
-    tag: 'SATB · 4 Stems',
+    title: 'Choir Composer',
+    desc: 'Turn one solo vocal into a stacked harmony of your own voice. Upload a vocal up to 3 minutes (or record up to 2), pick 2, 4 or 8 voices in thirds & fifths or octaves, and get one finished harmony track.',
+    tag: '2 · 4 · 8 Voices',
     tagType: 'p',
   },
   {
     icon: '🎷',
-    title: 'Vocal Instrument Engine',
-    desc: '50+ instruments — sax, violin, sitar, synth. Articulation control (legato, staccato, vibrato). Blend two instruments into one output.',
-    tag: '50+ Instruments',
+    title: 'Instruments',
+    desc: 'Hum or sing a melody (up to 25 seconds) and hear it played back on an instrument — piano, violin, sitar, flute, sax, shehnai, synth and more. One melody line, one instrument at a time.',
+    tag: '32 Instruments',
     tagType: 'c',
   },
   {
