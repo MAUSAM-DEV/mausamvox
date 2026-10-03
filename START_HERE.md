@@ -37,6 +37,7 @@ Users never see engine names (enforced in code).
 
 ## 4. Open items (most important first)
 
+0. **🚨 LIVE: Voice Swap model download failing** — the voice-model link serves an expired cached signed URL (found 2026-10-03). Fix planned (one-line no-cache on the admin storage client + force-dynamic route); awaiting approval. See PROJECT_STATUS top.
 1. **Song Studio redesign (`9ef4b12`) is untested live.** Test: Simple flow in a non-English language, style chips/tempo/key reach the saved style, Reuse style, play while scrolling, phone layout.
 2. **Lyria content flag (E005) is intermittent** — identical lyrics can pass once and fail once; the user now sees an honest "try again" message (`156b88d`). Watch how often it hits non-English lyrics — a product risk for the "any language" promise.
 3. **Lyria still untested live:** target-length trim, resuming 2 pending songs after closing the tab.
