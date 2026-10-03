@@ -47,7 +47,7 @@ Users never see engine names (enforced in code).
 8. **Billing not wired** — no Stripe / INR plans yet.
 9. **Large backlog of live acceptance tests** (Choir/Instruments live checks, recording wizard on phones, lyrics regenerate, polish re-save, Share as Video, etc.) — full numbered list in `PROJECT_STATUS.md` ("START HERE NEXT SESSION" section).
 10. **Seed-VC listening test (2026-10-03) — awaiting your verdict:** "Swap – Current" vs "Swap – Seed-VC" in Saved Tracks (30 s excerpt, MKIPHONE). Seed-VC only runs on a GPU in practice (53 min for 30 s on this Mac); local files ~4.4 GB on the SSD until you say delete.
-11. **Voice-quality findings (2026-10-03):** the swap engine ignores the voice index, so the "Style Intensity" control does nothing today; training really takes ~1–2.5 min, not the ~15/45 min the app says. Test plan waiting on your recording.
+11. **Voice index fix (before any voice tests):** confirmed 2026-10-03 that the swap engine ignores each voice's index, so Style Intensity / protect / filter_radius do nothing. Fix = our own copy of the engine on Replicate; waiting on your setup steps. Training-time text fixed (`e80e985`).
 12. **Parked:** duet swap male voice sounds like the original → fix is a clean dry-mic retrain of the "Raju" voice.
 
 ### Migrations
