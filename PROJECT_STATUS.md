@@ -2,13 +2,15 @@
 
 _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
+**Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
+
 ## 🎨 SONG STUDIO REDESIGN (2026-10-03, `9ef4b12`) — ⚠️ untested live
 
 Suno-style page: create panel (Simple: describe + language → AI lyrics → edit → generate; Advanced: lyrics/style/vocals/age) with style chips, tempo/key, structure-tag buttons, length, 2 versions; "My songs" list (cover tiles, play, Reuse style, Share, Share as Video, search, in-progress rows); fixed bottom player. Lyrics writer supports any language (26 + "Other"). Landing card made honest. **Live tests:** Simple flow end-to-end in a non-English language (e.g. Spanish or "Other → Assamese"); chips + tempo/key reach the saved style; Reuse style; play while scrolling; phone layout. **Done (`f6459da`):** Choir + Instruments landing cards and their pricing lines made honest. **✅ Decided (`bd767d2`):** Choir + Instruments listed on every plan (matches the code — not plan-gated). **⚠️ Still open on the pricing table** — these plan items look unbuilt: Pro "Style marketplace" (sidebar shows Marketplace as "Soon"), Studio "API access", "DAW plugin (VST/AU)", "Priority GPU queue", "Team workspace".
 
-## 🎼 SONG STUDIO → GOOGLE LYRIA 3 PRO (2026-10-03, `f1c381a`) — ⚠️ built, NOT switched on yet
+## 🎼 SONG STUDIO → GOOGLE LYRIA 3 PRO (2026-10-03, `f1c381a`) — ✅ switched on (`SONG_ENGINE=lyria`; Lyria jobs in prod logs 2026-10-03)
 
-**To switch on:** Vercel → Settings → Environment Variables → edit `SONG_ENGINE` → `lyria` → Save (Production) → **Redeploy** → reload any open Song Studio tab. Fallbacks by the same variable: `minimax26`, `minimax` (2.5), `acestep`, `elevenlabs`.
+**Engine switch:** Vercel → Settings → Environment Variables → edit `SONG_ENGINE` → Save (Production) → **Redeploy** → reload any open Song Studio tab. Fallbacks by the same variable: `minimax26`, `minimax` (2.5), `acestep`, `elevenlabs`.
 
 Lyria: $0.08/song (250 cr earns $0.20–$0.28 → ~60–72% margin); one prompt (style + voice + "deep warm bass, full low end, clear natural vocals" + lyrics); songs up to ~3:00; true-peak limiter only (no EQ/compression), 320 kbps; age selector; "Make 2 versions" (250 cr each, total on the button); safety blocks refunded with a friendly message. Real tests: "Final Test 1" (English, 2:54) + "Final Test 2" (Hindi romanized, 2:10), $0.08 each, TP → −1.6/−1.7 dBTP. **Seen live (2026-10-03):** 2-version flow works (both start; each finishes/fails independently). **Lyria content flag is real and INTERMITTENT** — `flagged as sensitive (E005)`; identical Assamese lyrics passed twice and were flagged once; flagged runs aren't billed; message now says retrying often works (`156b88d`). **Still untested live:** target-length trim on Lyria, resume of 2 pending songs. Watch how often E005 hits non-English lyrics — if frequent, that's a product risk for the any-language promise.
 
