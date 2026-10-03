@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
-import { encodeWav, encodeMp3, createReverbImpulse } from './audioClip'
+import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -73,10 +73,9 @@ async function uploadFullMixMp3(wavMixUrl: string, filename = 'swap-full-mix.mp3
   try {
     const res = await fetch(wavMixUrl)
     if (!res.ok) return null
-    const ctx = new AudioContext()
-    const decoded = await ctx.decodeAudioData(await res.arrayBuffer())
-    await ctx.close()
-    const mp3 = encodeMp3(decoded)
+    // Encode the finished mix's own 16-bit WAV straight to MP3 at 320 kbps — no
+    // second decode (which resampled to the device rate) and no 192 kbps step.
+    const mp3 = encodeMp3FromWav(await res.arrayBuffer(), SAVED_MP3_KBPS)
 
     const presignRes = await fetch('/api/upload-stem/presign', {
       method: 'POST',
