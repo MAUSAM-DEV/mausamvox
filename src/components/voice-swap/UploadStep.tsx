@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
 import { uploadAudioToStorage } from '@/lib/audio-upload'
 
@@ -105,6 +106,9 @@ export interface StemResult {
   backingVocalsUrl?: string
   leadVocalsPath?: string
   backingVocalsPath?: string
+  // Group/backing vocals as loud as the lead (src/lib/group-vocals.ts), set after
+  // the lead/backing split ONLY when the warning applies. Seconds [start, end).
+  groupVocals?: { ranges: Array<[number, number]>; flaggedShare: number }
   // Male/female split of vocalsUrl, populated by /api/gender-split (premium).
   // Optional, same as lead/backing: empty until a gender split runs; consumers
   // fall back to vocalsUrl. Nothing populates these yet (Layer 1 Step 1 adds the
@@ -841,6 +845,20 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
                   </div>
                 </div>
               ) : null}
+
+              {displayResult.groupVocals && (
+                <div className="vs-duet-gate" role="note">
+                  <span className="vs-duet-gate-icon">⚠️</span>
+                  <div>
+                    <div className="vs-duet-gate-title">Group vocals in this song</div>
+                    <div className="vs-duet-gate-body">
+                      At {formatGroupVocalRanges(displayResult.groupVocals.ranges)}, other singers are about as loud as the lead.
+                      Voice swaps can sound rough or unclear in those parts — solo sections convert best.
+                      This is an automatic check and can miss some parts.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Remaining stems */}
               {([

@@ -48,6 +48,9 @@ interface ConfigStepProps {
   // Style Intensity, Pitch Shift) behind their defaults — pitch is still
   // auto-matched by the page — and show first-timer copy instead.
   guided?: boolean
+  // Pre-formatted time ranges of loud group/backing vocals (src/lib/group-vocals.ts);
+  // set only when the warning applies.
+  groupVocalsRanges?: string
 }
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
@@ -135,7 +138,7 @@ export function ConfigStep({
   gender, setGender,
   styleIntensity, setStyleIntensity, pitchShift, setPitchShift,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
-  selectedVoiceId2, setSelectedVoiceId2, guided = false,
+  selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
 }: ConfigStepProps) {
   const activeDuetMode = duetMode ?? 'one'
 
@@ -241,6 +244,13 @@ export function ConfigStep({
               setSelectedVoiceId={setSelectedVoiceId2}
             />
           </>
+        )}
+
+        {groupVocalsRanges && (
+          <div className="vs-gv-note" role="note">
+            ⚠️ <b>Group vocals at {groupVocalsRanges}.</b> Other singers are about as loud as the lead there,
+            so the swap can sound rough or unclear in those parts. Solo sections convert best.
+          </div>
         )}
 
         {/* Swap Controls — hidden in guided mode: the defaults (Style Intensity 8,
@@ -474,6 +484,17 @@ export function ConfigStep({
           line-height: 1.5;
           margin: -6px 0 14px;
         }
+        .vs-gv-note {
+          margin-top: 14px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          border: 1px solid rgba(245,158,11,.35);
+          background: rgba(245,158,11,.07);
+          font-size: 12px;
+          color: #C4C4E0;
+          line-height: 1.6;
+        }
+        .vs-gv-note b { color: #F59E0B; }
         .vs-guided-note {
           font-size: 12px;
           color: #A8A8CC;

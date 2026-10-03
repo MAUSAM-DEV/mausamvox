@@ -12,6 +12,7 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { trimAudioToClip } from './audioClip'
+import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
 import { detectMedianF0, autoOctaveShiftSemitones, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
 import type { TuneParams } from './ResultStep'
 
@@ -76,7 +77,7 @@ async function refreshStemUrls(result: StemResult): Promise<StemResult> {
     for (const { path, url } of wanted) {
       const fresh = urls[result[path] as string]
       if (fresh) {
-        (refreshed as Record<string, string>)[url] = fresh
+        (refreshed as unknown as Record<string, string>)[url] = fresh
         count++
       }
     }
@@ -99,6 +100,46 @@ const _ASSESS_FRAME_S = 0.1    // 100 ms RMS windows
 const _VOCAL_FLOOR    = 10 ** (-45 / 20) // full-vocal must exceed this to count as active
 const _LEAD_SILENCE   = 10 ** (-50 / 20) // lead below this = silent frame
 const _MIN_GAP_S      = 2.0    // ignore gaps shorter than this (short harmonic dips)
+
+// Group/backing-vocals check (src/lib/group-vocals.ts): decodes the lead and
+// backing stems in the browser and returns the warning only when it applies.
+// Free (no model) and never blocks the swap — any failure returns undefined.
+const GV_DECODE_RATE = 11025
+async function checkGroupVocals(leadUrl: string, backingUrl: string): Promise<StemResult['groupVocals']> {
+  if (!leadUrl || !backingUrl) return undefined
+  try {
+    // Decode at 11 kHz (enough for loudness) in an OfflineAudioContext, so two
+    // full-length stems cost ~25 MB instead of ~200 MB at the device rate.
+    let ctx: BaseAudioContext
+    try { ctx = new OfflineAudioContext(1, 1, GV_DECODE_RATE) }
+    catch {
+      const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      ctx = new AudioCtx()
+    }
+    const decodeMono = async (url: string): Promise<{ data: Float32Array; sr: number } | null> => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) return null
+        const buf = await ctx.decodeAudioData(await res.arrayBuffer())
+        const data = new Float32Array(buf.length)
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const ch = buf.getChannelData(c)
+          for (let i = 0; i < ch.length; i++) data[i] += ch[i] / buf.numberOfChannels
+        }
+        return { data, sr: buf.sampleRate }
+      } catch { return null }
+    }
+    const lead = await decodeMono(leadUrl)        // one at a time: bounded memory
+    const backing = lead ? await decodeMono(backingUrl) : null
+    if (ctx instanceof AudioContext) { try { await ctx.close() } catch { /* ignore */ } }
+    if (!lead || !backing || lead.sr !== backing.sr) return undefined
+    const r = detectGroupVocals(lead.data, backing.data, lead.sr)
+    console.log(`[group-vocals] flagged ${Math.round(r.flaggedShare * 100)}% of sung time → ${r.warn ? 'warn' : 'no warning'}`)
+    return r.warn ? { ranges: r.ranges, flaggedShare: r.flaggedShare } : undefined
+  } catch {
+    return undefined
+  }
+}
 
 async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise<boolean> {
   try {
@@ -642,6 +683,21 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
           } catch { /* ignore */ }
           console.log(`[karaoke-split] ${leadHealthy ? 'lead/backing ready' : 'dropout detected — full vocals fallback'} for ${result.fileName}`)
+          // Group-vocals warning — after the stems are shown, so it never delays
+          // or blocks the swap. Only stored (and shown) when the warning applies.
+          const groupVocals = await checkGroupVocals(leadVocalsUrl, backingVocalsUrl)
+          if (groupVocals && karaokeJobRef.current === jobId) {
+            setStemResult((prev) =>
+              prev && prev.storagePath === result.storagePath ? { ...prev, groupVocals } : prev
+            )
+            try {
+              const raw = localStorage.getItem(STEM_CACHE_KEY)
+              const cached = raw ? JSON.parse(raw) : null
+              if (cached?.result?.storagePath === result.storagePath) {
+                localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, groupVocals } }))
+              }
+            } catch { /* ignore */ }
+          }
           return
         }
         if (pollData.status === 'failed' || pollData.status === 'canceled') {
@@ -1471,6 +1527,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 selectedVoiceId2={selectedVoiceId2}
                 setSelectedVoiceId2={setSelectedVoiceId2}
                 guided={guided}
+                groupVocalsRanges={stemResult?.groupVocals ? formatGroupVocalRanges(stemResult.groupVocals.ranges) : undefined}
               />
             )}
             {step === 3 && (
