@@ -31,8 +31,10 @@ export function TrainingStep({ cloneType, phase, error, voiceName, onRetry }: Tr
   const activeIdx = activeStageIndex(phase)
   const inProgress = phase === 'preparing' || phase === 'queued' || phase === 'training' || phase === 'finalizing'
   const tierLabel = cloneType === 'studio' ? 'Studio Clone' : 'Express Clone'
-  // Honest ETAs: Studio trains 50 epochs (~45 min), Express ~18 (~15 min).
-  const etaLabel = cloneType === 'studio' ? 'about 45 minutes' : 'about 15 minutes'
+  // Honest ETAs, measured on real runs (2026-10-03): training + GPU queue took
+  // ~1–4 min for Express (18 epochs, short recording); Studio (50 epochs) grows
+  // with recording length — ~5 min for 10 min of audio, longer for 30 min.
+  const etaLabel = cloneType === 'studio' ? 'about 5–15 minutes' : 'about 2–4 minutes'
 
   // A more specific sub-line for the long training phase.
   const subline =

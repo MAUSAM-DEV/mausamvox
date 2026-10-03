@@ -17,8 +17,9 @@ const TRAIN_RVC_VERSION = '0397d5e28c9b54665e1e5d29d5cf4f722a7b89ec20e9dbf314872
 
 // Epochs are decided HERE from the clone's type — never from the request body,
 // so the browser can't buy Studio-depth training on an Express clone (or vice
-// versa). Express trades fidelity for turnaround: ~15–20 epochs on a short
-// sample finishes in roughly 15 minutes vs ~45 for Studio's 50.
+// versa). Express trades fidelity for turnaround: 18 epochs on a short sample.
+// Measured 2026-10-03: 53–148 s of compute (+0–81 s GPU queue) per run; time
+// grows with epochs × recording length, so a long Studio recording takes longer.
 const STUDIO_EPOCH = 50
 const EXPRESS_EPOCH = 18
 const SAMPLE_RATE = '48k'

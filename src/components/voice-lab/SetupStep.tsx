@@ -9,7 +9,7 @@ interface SetupStepProps {
 
 const EXPRESS_FEATS = [
   { text: 'Short recording — 2–3 minutes', dim: false },
-  { text: 'Ready in ~15 minutes', dim: false },
+  { text: 'Ready in ~2–4 minutes', dim: false },
   { text: 'Great for quick tests', dim: false },
   { text: 'Standard fidelity (Studio is HD)', dim: true },
 ]
@@ -27,8 +27,8 @@ export function SetupStep({ cloneType, setCloneType }: SetupStepProps) {
     <>
       <div className="vlst-grid">
         {([
-          { id: 'studio' as CloneType, icon: '🎙️', name: 'Studio Clone', time: '10+ min audio · Ready in ~45 minutes', desc: 'Full production-quality clone that trains a real model on your voice — capturing your tone, vibrato, and emotional range. For releases and commercial work.', feats: STUDIO_FEATS, soon: false },
-          { id: 'express' as CloneType, icon: '⚡', name: 'Express Clone', time: 'Quick clone · Ready in ~15 minutes', desc: 'A lighter clone trained on a short recording — real training, just a shorter session and faster turnaround. Perfect for hearing your voice on a track before a full Studio session.', feats: EXPRESS_FEATS, soon: false },
+          { id: 'studio' as CloneType, icon: '🎙️', name: 'Studio Clone', time: '10+ min audio · Ready in ~5–15 minutes', desc: 'Full production-quality clone that trains a real model on your voice — capturing your tone, vibrato, and emotional range. For releases and commercial work.', feats: STUDIO_FEATS, soon: false },
+          { id: 'express' as CloneType, icon: '⚡', name: 'Express Clone', time: 'Quick clone · Ready in ~2–4 minutes', desc: 'A lighter clone trained on a short recording — real training, just a shorter session and faster turnaround. Perfect for hearing your voice on a track before a full Studio session.', feats: EXPRESS_FEATS, soon: false },
         ]).map((card) => (
           <div
             key={card.id}

@@ -18,7 +18,7 @@ type CloneType = 'express' | 'studio'
 export function VoiceLabPage() {
   const [step, setStep] = useState<Step>(1)
   // Both tiers run the same real training pipeline; Express uses a shorter
-  // recording and fewer epochs (decided server-side) for a ~15-min turnaround.
+  // recording and fewer epochs (decided server-side) for a ~2–4 min turnaround.
   const [cloneType, setCloneType] = useState<CloneType>('studio')
   // "Clean up background noise" — optional ffmpeg cleanup (highpass + afftdn)
   // applied server-side to the training sample before it's split into clips.
@@ -274,7 +274,7 @@ export function VoiceLabPage() {
                 {cloneType === 'studio' ? (
                   <span>Studio clone uses <b style={{ color: '#9D5CFF' }}>1 of 3</b> monthly slots on your Pro plan</span>
                 ) : (
-                  <span>Express clone — <b style={{ color: '#9D5CFF' }}>same real training</b>, shorter recording, ready in ~15 minutes</span>
+                  <span>Express clone — <b style={{ color: '#9D5CFF' }}>same real training</b>, shorter recording, ready in ~2–4 minutes</span>
                 )}
               </div>
               {step === 2 && (
