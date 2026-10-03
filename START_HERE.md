@@ -46,7 +46,8 @@ Users never see engine names (enforced in code).
 7. **Song lost if user never returns** — a finished song is only saved when the user comes back within ~1 h. Real fix = a Replicate webhook.
 8. **Billing not wired** — no Stripe / INR plans yet.
 9. **Large backlog of live acceptance tests** (Choir/Instruments live checks, recording wizard on phones, lyrics regenerate, polish re-save, Share as Video, etc.) — full numbered list in `PROJECT_STATUS.md` ("START HERE NEXT SESSION" section).
-10. **Parked:** duet swap male voice sounds like the original → fix is a clean dry-mic retrain of the "Raju" voice.
+10. **Seed-VC listening test (2026-10-03) — awaiting your verdict:** "Swap – Current" vs "Swap – Seed-VC" in Saved Tracks (30 s excerpt, MKIPHONE). Seed-VC only runs on a GPU in practice (53 min for 30 s on this Mac); local files ~4.4 GB on the SSD until you say delete.
+11. **Parked:** duet swap male voice sounds like the original → fix is a clean dry-mic retrain of the "Raju" voice.
 
 ### Migrations
 
