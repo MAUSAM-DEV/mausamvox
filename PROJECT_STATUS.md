@@ -6,6 +6,20 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎤 VOICE BREAKS & WORD CLARITY TESTS (2026-10-04) — no app change; 15 labelled "Fix …" clips in Saved Tracks (Studio polish, 320 kbps)
+
+Song "Solo Test" (Lyria, solo male, high chorus notes to ~520 Hz; backing −21…−37 dB except last chorus −9 dB), app chain separation, MKIPHONE, our index engine, pitch 0 (app rule). Breaks = pYIN vs the original singer (calibrated: 0/min on the unconverted lead after MP3 round-trips); words = WhisperX large-v3 recall vs the original singer's transcript.
+- **Cause of the breaks:** ~30 dropouts + ~20 cracks per minute in EVERY variant; 85–97% land at the same moments across runs/settings/models → input-driven: **faint, high note tails** (original at −41 dB vs −24 dB normal singing, ~418 Hz) that the pitch tracker marks "not singing" → the engine stops voicing (output −18 dB there).
+- **Style Intensity** (app default is 8 = index 0.8 — but the live OLD engine ignores the index, so live swaps are effectively 0): words 0 → 62% (76/49), **0.3 → 80% (79/81)**, 0.8 → 75% (73/76); cracks lowest at 0.3. → **0.3 is the clearest.**
+- **Start-of-song break:** not special — first 3 s of singing break at the normal rate (~29/min); a short clip's edge added one extra crack in one run only.
+- **Pitch tracker:** high-note passage rmvpe words 4%/65% (one run unintelligible to WhisperX), **crepe 73/76%**, cracks 29 → 20/min. Full song: **crepe words 85% vs 79%, dropouts 17.9 vs 33.5/min** (−45%); compute 61 s vs 20 s per 2:15 song (≈ +$0.01/swap on T4). RMVPE cut-off (new `rmvpe_threshold` input on our engine, version `35029e83`): 0.03 → 33.5, 0.015 → 29.0, 0.008 → 25.3 dropouts/min, words unchanged (79/79/78%). Levelled input (dynaudnorm): dropouts 30 → 26/min, words unchanged.
+- **Voice model:** clones from the founder's singing recording 81–87% words (1 min/50 ep 85, 1 min/200 84, 3 min/50 87, 3 min/200 81; one run each) vs MKIPHONE 80%; breaks unchanged; more epochs didn't help; 1 min ≈ 3 min.
+- **Key −2 / −3** (music shifted with asetrate+atempo, voice via pitch_change): words 78% / 75%, breaks unchanged → no clarity gain.
+- **Best combo** (crepe + 3-min/50-ep clone + SI 0.3): 86% words, 17.1 dropouts/min — ≈ crepe alone → crepe is the main lever.
+- Engine cold start seen up to 271 s (our own pool) — warm pings needed before any switch.
+- Spend ≈ $0.52 (song $0.08, separation $0.06, conversions ~$0.13, WhisperX ~$0.25 — WhisperX GPU price unverified).
+- **Recommended (awaiting approval):** (1) switch Voice Swap to our index engine with **pitch tracker crepe (hop 64)** and **Style Intensity default 3 (0.3)**, keeping `RVC_ENGINE` rollback + warm pings; (2) offer singing-recording guidance for clones (1 min of singing ≈ 3 min). **Plans (not built):** song-matched polish preset (default is already "Studio" +4 dB warmth / 15% reverb — proposal: set reverb/warmth/treble from the original vocal, capped, with "Reset to Studio"); "Key" control (voice via pitch_change; bass+other shifted in-browser with a time-preserving shifter, drums untouched; ±4 st) — a comfort feature, not a clarity fix.
+
 ## ✅ SHIPPED 2026-10-03 (evening) — proxy cache fix, 320 kbps saves, group-vocals warning — ⚠️ founder live tests pending
 
 1. **Voice-model proxy fix (`569428d`) — ✅ verified live:** after deploy, two requests 5 s apart returned fresh signed URLs (iat 17:58:05 and 17:58:10 UTC) and the model downloads (HTTP 206). `supabaseAdmin` now uses a `no-store` fetch for every admin call; the proxy route is `force-dynamic`. **Live test:** one real Voice Swap with any voice → succeeds.

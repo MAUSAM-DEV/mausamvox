@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-04
+
+- **Voice-break & clarity tests (no app code; models repo: per-request `rmvpe_threshold`, engine `35029e83`).** Breaks are input-driven (faint high note tails); crepe pitch tracker is the main fix (words 85% vs 79%, dropouts −45%); Style Intensity 0.3 clearest (80% vs 75% at the 0.8 default, 62% at 0); new-recording clones slightly clearer than MKIPHONE; key −2/−3, levelling and lower RMVPE cut-off give little. 15 labelled clips saved. ≈ $0.52. `tsc --noEmit` clean; clean `npm ci && npm run build` passed.
+
 ## 2026-10-03
 
 - **Group-vocals warning on Voice Swap** — browser-side check after the lead/backing split (backing within 6 dB of the lead, ≥10% of sung time and ≥10 s), amber note naming the time ranges under the stem cards and on Configure; no model, no cost; matches the 11-song prototype. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `b612153`
