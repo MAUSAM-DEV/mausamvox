@@ -4,6 +4,10 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-04
 
+- **Knob mouse wheel** — one notch = one step, page doesn't scroll over a knob. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `c33dd28`
+- **Hover sliders** (StepSlider: filled track, handle, live value bubble; arrows one step) on Style Intensity, Fine-tune and Song Studio length. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `13c35cf`
+- **Song-matched polish** (warmth/treble/reverb from the original singer; Raw · Match song · Reset to Studio). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `0c742b9`
+- **Voice Swap on our index engine with crepe (hop 64); Style Intensity default 3**; rollback `RVC_ENGINE=bare`. Clarity test 2 after the switch: crepe hop 128 ≈19% fewer dropouts than 64 at the same clarity and ~30% less compute (recommended, not applied). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `fc6c0d2`
 - **Voice-break & clarity tests (no app code; models repo: per-request `rmvpe_threshold`, engine `35029e83`).** Breaks are input-driven (faint high note tails); crepe pitch tracker is the main fix (words 85% vs 79%, dropouts −45%); Style Intensity 0.3 clearest (80% vs 75% at the 0.8 default, 62% at 0); new-recording clones slightly clearer than MKIPHONE; key −2/−3, levelling and lower RMVPE cut-off give little. 15 labelled clips saved. ≈ $0.52. `tsc --noEmit` clean; clean `npm ci && npm run build` passed.
 
 ## 2026-10-03

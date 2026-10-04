@@ -6,6 +6,16 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-04 — Voice Swap on our index engine + crepe, song-matched polish, hover sliders, knob wheel — ⚠️ founder live tests pending
+
+1. **Engine switch (`fc6c0d2`):** `RVC_ENGINE` unset → **indexed** = `mausam-dev/rvc-v2-index` `35029e83` with `mangio-crepe` hop 64; rollback `RVC_ENGINE=bare` (+ redeploy), `cover` kept. Warm pings (swap start, stems ready, Result screen) send `warm_only` to our engine (checked: cold boot 98 s, next conversion queued 0 s; app-shaped conversion used crepe + the voice index). Style Intensity default 8 → **3** (page + server); Regenerate steps +0.05 from the user's value; Fine-tune Voice strength starts at the swap's value; Smoothing slider hidden. **Live test:** a swap works; Vercel log shows the indexed version; Style Intensity 1 vs 10 sound different.
+2. **Song-matched polish (`0c742b9`):** `src/lib/polish-match.ts` + ResultStep — warmth 0–6 dB / treble ±4 dB / reverb 5–25% from the original lead vs the converted vocal; first save waits (8 s fallback to Studio); buttons Raw · Match song · Reset to Studio; never overrides touched knobs. Node check on 3 songs within ~1 dB of the prototype. **Live test:** new swap → note "matched to this song …" with values; Reset to Studio / Match song switch.
+3. **Hover sliders (`13c35cf`):** `src/components/ui/StepSlider.tsx` on Style Intensity, Fine-tune (start + 3 sliders) and Song Studio length — at-rest look unchanged; hover/focus/drag = thick filled track, white handle, live value bubble; arrows one step (browser-checked).
+4. **Knob wheel (`c33dd28`):** one notch = one step (1% / 1 dB), page doesn't scroll over a knob; notched wheels, Mac mouse and trackpad handled (simulated). **Live test on the founder's Mac mouse/trackpad** — tunables `KNOB_WHEEL_*` in ResultStep.
+5. Key control parked. Quick Voice (1-min guided recording) planned, not built.
+
+**Clarity test 2 (2026-10-04, our engine, Solo Test, MKIPHONE, SI 0.3; Studio-polished clips "Clarity 2 · …" in Saved Tracks):** crepe hop 32: 78% words, 23.8 dropouts/min, 108 s compute · **hop 64 (current) ×2: 85/77% (avg 81), 17.9/17.9** , ~60 s · **hop 128 ×2: 81/79% (avg 80), 13.4/15.6 (avg 14.5)**, 37–45 s · hop 64 + protect 0.33: 80%, 17.1 · protect 0.5: 83%, 20.1. Word scores vary ±8 points run-to-run; dropouts are steadier. → **Recommend hop 128** (≈19% fewer dropouts, same clarity, ~30% less compute) — one constant (`INDEXED_CREPE_HOP`), awaiting approval; protect: no clear difference, keep 0.2. ≈ $0.16.
+
 ## 🎤 VOICE BREAKS & WORD CLARITY TESTS (2026-10-04) — no app change; 15 labelled "Fix …" clips in Saved Tracks (Studio polish, 320 kbps)
 
 Song "Solo Test" (Lyria, solo male, high chorus notes to ~520 Hz; backing −21…−37 dB except last chorus −9 dB), app chain separation, MKIPHONE, our index engine, pitch 0 (app rule). Breaks = pYIN vs the original singer (calibrated: 0/min on the unconverted lead after MP3 round-trips); words = WhisperX large-v3 recall vs the original singer's transcript.
