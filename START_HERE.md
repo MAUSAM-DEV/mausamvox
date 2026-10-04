@@ -37,6 +37,7 @@ Users never see engine names (enforced in code).
 
 ## 4. Open items (most important first)
 
+0. **Awaiting decision (2026-10-04):** Style Intensity / Voice strength and Breath guard make no audible "more like you" difference → recommended to remove; Volume envelope → rename "Dynamics"; **Regenerate charges 200 cr for an inaudible change** → remove/redefine. The real lever is a voice model trained on singing (Quick Voice plan, any language).
 0. **Shipped 2026-10-04 — test on live:** Voice Swap on our index engine + crepe, Style Intensity default 3 (`fc6c0d2`); song-matched polish (`0c742b9`); hover sliders (`13c35cf`); knob wheel (`c33dd28`). Crepe hop 128 shipped (`07ca436`). Group-vocals warning confirmed live. Rollback: `RVC_ENGINE=bare`.
 0. **Just shipped (2026-10-03) — test on live:** voice-model link fix (`569428d`, verified live), 320 kbps saved tracks (`5a67aa9`), group-vocals warning (`b612153`). Tests listed at the top of PROJECT_STATUS.
 1. **Song Studio redesign (`9ef4b12`) is untested live.** Test: Simple flow in a non-English language, style chips/tempo/key reach the saved style, Reuse style, play while scrolling, phone layout.

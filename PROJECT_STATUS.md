@@ -6,6 +6,16 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎛️ STYLE INTENSITY & FINE-TUNE CHECK ON THE LIVE APP (2026-10-04) — no app change; recommendations AWAITING APPROVAL
+
+- **Live requests (Replicate records, 03:11–03:36 UTC):** the founder's live session sent our engine exactly 4 conversions — full swap index 0.3 (Style Intensity 3 default), Fine-tune preview 0.8, Apply-to-full 0.8, preview 0.8 with volume envelope 0.6 — all with crepe and `index file: added_IVF86…` loaded. **No swap at Style Intensity 1 or 10 reached the engine** (no result cache exists) — the 1-vs-10 comparison was most likely Fine-tune Voice strength 0.3 vs 0.8, or the Configure slider moved without re-running.
+- **Style Intensity (Configure) = Fine-tune "Voice strength" = the same engine setting (index_rate)** — two names for one thing.
+- **Audibility on the founder's live song** (same request reproduced; 2 runs per setting; run-to-run variation 1.98; anchors heard by the founder: rmvpe→crepe 2.89, MKIPHONE→singing clone 4.51): Voice strength 0.1 vs 1.0 = 3.55 (1.8×), 0.3 vs 1.0 = 3.25 (1.6×), 0.1 vs 0.3 = 1.98 (1.0× — none); **identity does not rise with it** (CAM++ speaker similarity to the founder's singing: 0.60 / 0.61 / 0.58 at 0.1 / 0.3 / 1.0; with the singing clone 0.73 → 0.71). Breath/consonant guard 0 vs 0.5 = 2.08 (1.05× — none; breath/consonant level identical). Volume envelope 0 vs 1 = 2.92 (1.5×; follows the original's loudness r 0.71 vs 0.47, loud-to-soft range 5.6 vs 7.4 dB). Preview start works (positional).
+- **What makes it sound like the founder is the voice model:** MKIPHONE (trained on speech) swaps are 0.60–0.62 like the founder's singing but 0.70–0.83 like the original singer; the clone trained on the founder's SINGING is 0.73–0.79 like him.
+- **⚠️ Regenerate charges 200 cr (400 duet) for +0.05 Voice strength** — inaudible and not more "you" → users pay for an essentially identical take.
+- **Recommended:** remove Style Intensity + Fine-tune Voice strength (fix index 0.3 internally); remove Breath/consonant guard (fix 0.2); keep Volume envelope renamed "Dynamics" (Follow the original singer ↔ Your own dynamics) if the founder hears check 4; keep Preview start; remove or redefine Regenerate; point users to a singing recording for their voice (Quick Voice). 10 labelled "Control check" clips in Saved Tracks. Spend ≈ $0.14.
+- **Quick Voice plan corrected:** guided verse in the user's chosen language (Song Studio's 26 languages + "Other"), or "Sing a song of my own"; universal parts (slides, soft high notes, vowels) unchanged.
+
 ## ✅ 2026-10-04 (later) — crepe hop 128 shipped (`07ca436`); group-vocals warning ✅ confirmed live
 
 - **Crepe hop 64 → 128 (`07ca436`)** — founder-approved after clarity test 2 (dropouts 14.5 vs 17.9/min, same clarity, ~30% less compute). One constant: `INDEXED_CREPE_HOP` in `src/lib/rvc-engine.ts`. **Live test:** one swap; it should finish a little faster than at hop 64.
