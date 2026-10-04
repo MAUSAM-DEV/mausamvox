@@ -22,7 +22,9 @@ export const INDEXED_RVC_VERSION = '35029e837dfbd4e043786f7fcf57ec7656897a9ca03f
 // words 85% vs 79%, voice dropouts 17.9 vs 33.5 per minute (2026-10-04);
 // ~3x the compute (~60 s vs ~20 s for a 2:15 song on T4, ≈ +$0.01).
 export const INDEXED_F0_METHOD = 'mangio-crepe'
-export const INDEXED_CREPE_HOP = 64
+// Hop 128 vs 64 (two runs each, 2026-10-04): voice dropouts 14.5 vs 17.9 per
+// minute, same word clarity (80% vs 81%), ~30% less compute (37–45 s vs ~60 s).
+export const INDEXED_CREPE_HOP = 128
 
 export type RvcEngine = 'indexed' | 'bare' | 'cover'
 
