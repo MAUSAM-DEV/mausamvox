@@ -725,6 +725,10 @@ export function ConfigStep({
           .vs-voice-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .vs-controls-grid { grid-template-columns: 1fr !important; }
           .vs-duet-modes { grid-template-columns: 1fr !important; }
+          /* Finger-sized controls on phones */
+          .vs-pitch-btn { width: 44px; height: 44px; font-size: 20px; }
+          .vs-seg-btn { padding: 11px 4px; font-size: 13px; }
+          .vs-pitch-thumb { width: 20px; height: 20px; }
         }
       `}</style>
     </>

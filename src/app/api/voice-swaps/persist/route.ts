@@ -164,7 +164,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Prediction not succeeded (status: ${prediction.status})` }, { status: 409 })
     }
     resultUrl = toUrlString(prediction.output)
-    if (!resultUrl) {
+    // Replicate deletes a prediction's output ~1 h after it ran. A swap saved
+    // later (the browser keeps its own copy of the voice) still has the full
+    // mix the browser uploaded — that is all we need.
+    if (!resultUrl && !mixedPath) {
       return NextResponse.json({ error: 'Could not parse Replicate output URL' }, { status: 502 })
     }
   } catch (err) {
@@ -215,6 +218,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[voice-swaps/persist] storage step threw:', err instanceof Error ? err.message : String(err))
+  }
+
+  // Nothing playable to store (no durable copy and no Replicate URL left) →
+  // fail loudly so the browser can say so, instead of saving an empty row.
+  if (!resultPath && !resultUrl) {
+    return NextResponse.json({ error: 'Could not store the track — upload it again' }, { status: 502 })
   }
 
   // ── Best-effort: persist the MUSIC-ONLY instrumental alongside ─────────────

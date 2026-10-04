@@ -207,7 +207,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // settings that produced it. "Save as full swap" (or Process Full Track with
   // the same settings) saves THIS take — no re-conversion — and charges only
   // 200 − what the preview already cost, so a user never pays twice.
-  const lastPreviewRef = useRef<{ key: string; predictionId: string; charged: number; at: number; saved: boolean } | null>(null)
+  // local = its converted voice is held in the page (never expires); otherwise
+  // it's Replicate's copy, deleted ~1 h after the conversion ran.
+  const lastPreviewRef = useRef<{ key: string; predictionId: string; charged: number; at: number; saved: boolean; local: boolean } | null>(null)
+  // Page-held copies (blob: URLs) of the converted voice(s) on the Result screen.
+  const localVocalUrlsRef = useRef<string[]>([])
   const [previewSaveCost, setPreviewSaveCost] = useState<number | null>(null)
   // Fingerprint of the last take SAVED as a full swap (preview-saved or converted).
   // Same settings again would produce the same sound → never charge for it.
@@ -571,6 +575,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const persisted = await res.json()
       console.log('[voice-swap] persisted swap', persisted.swapId, persisted.resaved ? '(re-saved — polish updated)' : persisted.persisted ? '→ storage path saved' : '(result_url only, no durable copy)')
       if (persisted.swapId) setPersistedSwapId(persisted.swapId)
+      if (!silent) showToast('Saved to your Saved Tracks ✓', 4000)
       // Refresh the Recent Swaps panel after the FIRST save (a re-save doesn't
       // change the row's identity or position — skip the needless query).
       if (!silent) {
@@ -988,8 +993,27 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const PREVIEW_SAVE_WINDOW_MS = 50 * 60 * 1000
   function savablePreview() {
     const p = lastPreviewRef.current
-    if (!p || p.saved || Date.now() - p.at > PREVIEW_SAVE_WINDOW_MS || p.key !== takeKey() || !convertedVocalsUrl) return null
+    if (!p || p.saved || (!p.local && Date.now() - p.at > PREVIEW_SAVE_WINDOW_MS) || p.key !== takeKey() || !convertedVocalsUrl) return null
     return p
+  }
+
+  // Keep the converted voice in the page: Replicate deletes its copy ~1 h after
+  // the conversion, and the Result screen re-reads the voice on every knob
+  // change and when saving (2026-10-04 live test: Save did nothing after ~50
+  // min). Falls back to Replicate's URL if the download fails.
+  async function keepLocal(url: string): Promise<{ url: string; local: boolean }> {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return { url: URL.createObjectURL(await res.blob()), local: true }
+    } catch (err) {
+      console.warn('[voice-swap] could not keep the converted voice locally:', err)
+      return { url, local: false }
+    }
+  }
+  function replaceLocalVocals(urls: { url: string; local: boolean }[]) {
+    localVocalUrlsRef.current.forEach((u) => URL.revokeObjectURL(u))
+    localVocalUrlsRef.current = urls.filter((u) => u.local).map((u) => u.url)
   }
 
   // Save the previewed take as the full swap: charge 200 − what the preview
@@ -1175,10 +1199,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [urlA, urlB] = await Promise.all([
+        const [remoteA, remoteB] = await Promise.all([
           pollJob(dataA.data.predictionId as string),
           pollJob(dataB.data.predictionId as string),
         ])
+        const [keptA, keptB] = await Promise.all([keepLocal(remoteA), keepLocal(remoteB)])
+        replaceLocalVocals([keptA, keptB])
+        const urlA = keptA.url, urlB = keptB.url
 
         setOvSteps(['done', 'done', 'active', 'pending'])
         await new Promise((r) => setTimeout(r, 350))
@@ -1273,7 +1300,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setCreditsRemaining(startData.creditsRemaining)
       }
 
-      const convertedUrl = await pollJob(startData.predictionId as string)
+      const kept = await keepLocal(await pollJob(startData.predictionId as string))
+      replaceLocalVocals([kept])
+      const convertedUrl = kept.url
 
       setOvSteps(['done', 'done', 'active', 'pending'])
       await new Promise((r) => setTimeout(r, 350))
@@ -1287,7 +1316,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setStep(3)
       if (type === 'preview') {
         const charged = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
-        lastPreviewRef.current = { key: takeKey(), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false }
+        lastPreviewRef.current = { key: takeKey(), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false, local: kept.local }
         setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
       } else {
         lastPreviewRef.current = null
@@ -1331,6 +1360,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setStemResult(null)
     setConvertedVocalsUrl(null)
     setConvertedVocalsUrl2(null)
+    replaceLocalVocals([])
     setDuetMode('one')
     setDuetSinger('male')
     setSelectedVoiceId2(null)
@@ -1339,7 +1369,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     lastPreviewRef.current = null // new track → no previewed take to save
     lastSavedKeyRef.current = null
     setPreviewSaveCost(null)
-    setKeyShift(0) // the key change is per song
+    // First-try defaults for every new song (Configure): original key, no auto-tune.
+    setKeyShift(0)
+    setAutotune('Off')
     setResultTake(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
@@ -1436,7 +1468,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 ].filter(Boolean).join(' + ') || null}
                 persistedSwapId={persistedSwapId}
                 previewSaveCost={savablePreview() ? previewSaveCost : null}
-                onSavePreview={() => { savePreviewAsFull() }}
+                onSavePreview={() => {
+                  if (!savePreviewAsFull()) showToast('This preview can no longer be saved — press ⚡ Process Full Track on Configure for a fresh full swap.', 7000)
+                }}
                 keyShift={resultTake?.keyShift ?? 0}
                 autotuneLabel={resultTake && resultTake.autotune !== 'Off' ? resultTake.autotune : null}
                 convertedSourceUrls={resultTake?.sourceUrls}

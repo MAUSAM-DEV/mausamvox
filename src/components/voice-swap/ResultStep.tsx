@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
@@ -892,8 +892,23 @@ export function ResultStep({
     return toBuffer(await dspShift(channelsOf(b), b.sampleRate, opts), b.sampleRate)
   }
 
-  // Music in the new key: drums stay as they are, everything else is shifted.
-  async function musicSources(): Promise<MixSource[]> {
+  // The song's original backing vocals / chorus (the lead/backing split's
+  // "backing" stem). The swap converts only the lead, so without this the
+  // chorus and harmonies vanished from the swapped song (2026-10-04 live test).
+  // Not for duets: their converted/partner stems come from the FULL vocal, so
+  // the backing is already inside them.
+  const backingUrl = stemResult?.leadVocalsUrl && stemResult.backingVocalsUrl && !convertedVocalsUrl2 && !duetUntouchedVocalsUrl
+    ? stemResult.backingVocalsUrl
+    : null
+
+  // Music for the swapped mix: in the take's key (drums stay as they are,
+  // everything else is shifted) plus, unless musicOnly, the original backing
+  // vocals at their own level (moved to the new key, formants kept).
+  async function musicSources(opts: { musicOnly?: boolean } = {}): Promise<MixSource[]> {
+    const backing: MixSource[] = backingUrl && !opts.musicOnly ? [await inKey(backingUrl)] : []
+    return [...await keyedMusic(), ...backing]
+  }
+  async function keyedMusic(): Promise<MixSource[]> {
     if (!keyShift || tonalUrls.length === 0) return musicUrlsAll
     const bed = await cached('bed', `bed|${keyShift}`, async () => shiftBuffer(await sumStems(tonalUrls), { semitones: keyShift }))
       .catch(fxFallback('the key change', null))
@@ -1013,6 +1028,7 @@ export function ResultStep({
   polishSigRef.current = polishSig
   const lastSavedSigRef = useRef<string | null>(null) // null = not yet saved
   const savingRef = useRef(false)                      // an upload is in flight
+  const saveRetriesRef = useRef(0)                     // automatic retries of a failed first save
   const savedFlashTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const [savedFlash, setSavedFlash] = useState(false)  // brief "Saved ✓" pip
 
@@ -1041,7 +1057,7 @@ export function ResultStep({
         let instrumentalPath: string | null | undefined
         if (musicUrlsAll.length > 0) {
           try {
-            const blob = await mixStems([], await musicSources())
+            const blob = await mixStems([], await musicSources({ musicOnly: true }))
             if (blob) {
               const url = URL.createObjectURL(blob)
               try { instrumentalPath = await uploadFullMixMp3(url, 'swap-instrumental.mp3') }
@@ -1069,7 +1085,17 @@ export function ResultStep({
       // Polish changed while we were uploading? Save the newer value now.
       if (polishSigRef.current !== sig && mixedSwappedRef.current) void savePolish()
     }
-    // On failure: no immediate retry (avoid hammering) — the next settled change re-runs the effect.
+    // A failed FIRST save (upload error) used to stay silent: retry twice, then
+    // say so. Later re-saves stay quiet — the previous version is still saved.
+    if (!saved && firstSave) {
+      if (saveRetriesRef.current < 2) {
+        saveRetriesRef.current++
+        setTimeout(() => { void savePolish() }, 3000)
+      } else {
+        onToast("Couldn't save your track — check your connection. Change any knob to try again, or download it now.")
+      }
+    }
+    if (saved) saveRetriesRef.current = 0
   }
 
   // Real playback state — driven only by the <audio> element's events
@@ -1159,7 +1185,8 @@ export function ResultStep({
     const mixStart = performance.now()
     Promise.all([
       // Original (reference) mix is never warmed — only the swapped vocal is.
-      mixStems([{ src: stemResult.leadVocalsUrl || stemResult.vocalsUrl, gain: 1 }], musicUrls),
+      // Original side: the original lead + the same music and backing vocals.
+      mixStems([{ src: stemResult.leadVocalsUrl || stemResult.vocalsUrl, gain: 1 }], [...musicUrls, ...(backingUrl ? [backingUrl] : [])]),
       renderSwapped('full', fxRef.current, { warmth: warmthRef.current, reverb: reverbRef.current, echo: echoRef.current, bass: bassRef.current, treble: trebleRef.current }),
     ])
       .then(([origBlob, swapBlob]) => {
@@ -1290,6 +1317,24 @@ export function ResultStep({
   }
   const activeUrl = srcFor(mode, ab)
 
+  // A knob / polish change swaps in a freshly rendered file. Changing an audio
+  // element's src stops playback WITHOUT a 'pause' event, so the button kept
+  // showing ⏸ over silence (2026-10-04 live test). Carry the position and
+  // play state across the swap (as the Original/Swapped toggle does). A layout
+  // effect: it must run before the new file's 'loadedmetadata' can fire.
+  const lastTimeRef = useRef(0)
+  const wasPlayingRef = useRef(false)
+  const prevActiveUrlRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const prev = prevActiveUrlRef.current
+    prevActiveUrlRef.current = activeUrl
+    if (!prev || !activeUrl || prev === activeUrl || seekingRef.current) return
+    pendingSeekRef.current = lastTimeRef.current
+    pendingPlayRef.current = wasPlayingRef.current
+    seekingRef.current = true
+    setAudioError(false)
+  }, [activeUrl])
+
   // Capture position + play state right before a source swap so we can restore.
   function captureForSwap() {
     const audio = audioRef.current
@@ -1334,7 +1379,7 @@ export function ResultStep({
     if (audio.duration && isFinite(audio.duration)) setDuration(audio.duration)
     if (seekingRef.current) {
       audio.currentTime = Math.min(pendingSeekRef.current, audio.duration || 0)
-      if (pendingPlayRef.current) audio.play().catch(() => setAudioError(true))
+      if (pendingPlayRef.current) audio.play().catch(() => setPlaying(false))
       seekingRef.current = false
     }
   }
@@ -1344,6 +1389,7 @@ export function ResultStep({
     if (!audio) return
     // Ignore the reset-to-0 tick that fires during a source swap.
     if (seekingRef.current) return
+    lastTimeRef.current = audio.currentTime
     setCurrentTime(audio.currentTime)
     setProgress(audio.duration ? audio.currentTime / audio.duration : 0)
   }
@@ -1410,15 +1456,18 @@ export function ResultStep({
           preload="metadata"
           onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={handleTimeUpdate}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
+          onPlay={() => { wasPlayingRef.current = true; setPlaying(true) }}
+          onPause={() => { if (!seekingRef.current) wasPlayingRef.current = false; setPlaying(false) }}
+          // New src loaded: playback stopped without a 'pause' event.
+          onEmptied={() => setPlaying(!(audioRef.current?.paused ?? true))}
           onEnded={() => {
             // Rewind the element too, so a toggle right after a track ends
             // captures position 0 — not the stale end-of-clip time.
             if (audioRef.current) audioRef.current.currentTime = 0
+            wasPlayingRef.current = false; lastTimeRef.current = 0
             setPlaying(false); setProgress(0); setCurrentTime(0)
           }}
-          onError={() => setAudioError(true)}
+          onError={() => { seekingRef.current = false; setPlaying(false); setAudioError(true) }}
         />
       )}
 
@@ -1433,7 +1482,7 @@ export function ResultStep({
           </div>
           <div>
             <div className="vs-result-score-lbl">Swap complete</div>
-            <div className="grad-text" style={{ fontFamily: 'var(--font-grotesk),"Space Grotesk",sans-serif', fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+            <div className="grad-text vs-result-title" style={{ fontFamily: 'var(--font-grotesk),"Space Grotesk",sans-serif', fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.15 }}>
               Your track is ready
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
@@ -1901,6 +1950,32 @@ export function ResultStep({
           background: transparent; border: 1px solid #3C3C6A; color: #C4C4E0;
         }
         .vs-dl-btn--outline:hover { border-color: #9D5CFF; color: #9D5CFF; }
+
+        /* Phones: finger-sized controls, rows that wrap, nothing wider than the screen */
+        @media (max-width: 600px) {
+          .vs-result-top { gap: 12px; }
+          .vs-result-check { width: 42px; height: 42px; }
+          .vs-result-title { font-size: 22px !important; }
+          .vs-player-tabs { flex-wrap: wrap; }
+          .vs-ptab { padding: 12px 14px; font-size: 13px; }
+          .vs-play-btn { width: 48px; height: 48px; font-size: 16px; }
+          .vs-polish { padding: 12px 10px; }
+          .vs-polish-head { flex-wrap: wrap; gap: 8px; }
+          .vs-polish-presets { width: 100%; justify-content: flex-start; margin-left: 0; gap: 6px; }
+          .vs-polish-preset { font-size: 12px; padding: 8px 12px; min-height: 36px; border-radius: 9px; }
+          .vs-fx-chip { font-size: 11px; padding: 8px 10px; }
+          .vs-knob-row { gap: 10px 4px; justify-content: space-around; }
+          .vs-knob { min-width: 30%; }
+          .vs-knob svg { width: 64px; height: 64px; }
+          .vs-knob-label { font-size: 13px; }
+          .vs-knob-val { font-size: 12px; }
+          .vs-harm-row { gap: 6px; }
+          .vs-harm-lbl { width: 100%; text-align: center; margin: 0 0 2px; }
+          .vs-save-preview-btn { width: 100%; padding: 12px 16px; font-size: 14px; }
+          .vs-dl-row { gap: 8px; }
+          .vs-dl-btn { flex: 1 1 calc(50% - 8px); padding: 12px 10px; min-height: 44px; }
+          .vs-dl-btn--primary { flex-basis: 100%; }
+        }
 
         /* Fine-tune panel */
         .vs-tune {
