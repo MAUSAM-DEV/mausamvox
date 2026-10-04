@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
+import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -160,6 +161,39 @@ const STUDIO_BASS = STUDIO_BASS_DB                                           // 
 const STUDIO_TREBLE = STUDIO_TREBLE_DB                                       // 0
 
 const STUDIO_PRESET = { warmth: STUDIO_WARMTH, reverb: STUDIO_REVERB, echo: STUDIO_ECHO, bass: STUDIO_BASS, treble: STUDIO_TREBLE }
+
+// Song-matched polish (src/lib/polish-match.ts) → knob units. Warmth/Reverb
+// knobs are 0–100 of their max; Treble/Bass knobs ARE dB. Echo/Bass stay 0.
+type PolishPreset = { warmth: number; reverb: number; echo: number; bass: number; treble: number }
+function matchedToPreset(m: MatchedPolish): PolishPreset {
+  return {
+    warmth: Math.round((m.warmthDb / WARMTH_MAX_DB) * 100),
+    reverb: Math.round((m.reverbWet / REVERB_MAX_WET) * 100),
+    echo: 0,
+    bass: 0,
+    treble: m.trebleDb,
+  }
+}
+const MATCH_SAMPLE_RATE = 22050   // enough for the 5–10 kHz band
+const MATCH_MAX_SECONDS = 90      // bounds decode memory
+const MATCH_TIMEOUT_MS = 8000     // then keep Studio and save as usual
+
+// Decode a URL to mono at 22.05 kHz (first 90 s). null on any failure.
+async function decodeForMatch(url: string): Promise<Float32Array | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const ctx = new OfflineAudioContext(1, 1, MATCH_SAMPLE_RATE)
+    const buf = await ctx.decodeAudioData(await res.arrayBuffer())
+    const n = Math.min(buf.length, MATCH_MAX_SECONDS * buf.sampleRate)
+    const out = new Float32Array(n)
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const ch = buf.getChannelData(c)
+      for (let i = 0; i < n; i++) out[i] += ch[i] / buf.numberOfChannels
+    }
+    return out
+  } catch { return null }
+}
 const RAW_PRESET = { warmth: 0, reverb: 0, echo: 0, bass: 0, treble: 0 }
 
 async function mixStems(
@@ -857,6 +891,43 @@ export function ResultStep({
     setWarmth(p.warmth); setReverb(p.reverb); setEcho(p.echo); setBass(p.bass); setTreble(p.treble)
   }
 
+  // ── Song-matched polish ─────────────────────────────────────────────────────
+  // On a new converted vocal, compare it with the original lead and set warmth /
+  // treble / reverb to match the original singer (within tasteful limits). Never
+  // overrides knobs the user has touched; the first save waits for it (or for
+  // MATCH_TIMEOUT_MS, after which Studio stays). "Reset to Studio" / "Raw" /
+  // "Match song" switch presets explicitly.
+  const [polishSource, setPolishSource] = useState<'studio' | 'matched' | 'custom' | 'raw'>('studio')
+  const [matchPending, setMatchPending] = useState(false)
+  const [matched, setMatched] = useState<{ preset: PolishPreset; info: MatchedPolish } | null>(null)
+  const polishTouchedRef = useRef(false)
+  const userSet = (setter: (v: number) => void) => (v: number) => {
+    polishTouchedRef.current = true
+    setPolishSource('custom')
+    setter(v)
+  }
+  const originalVocalUrl = stemResult?.leadVocalsUrl || stemResult?.vocalsUrl || ''
+  useEffect(() => {
+    if (!convertedVocalsUrl || !originalVocalUrl || polishTouchedRef.current) return
+    let cancelled = false
+    setMatchPending(true)
+    const timer = setTimeout(() => { if (!cancelled) setMatchPending(false) }, MATCH_TIMEOUT_MS)
+    ;(async () => {
+      const original = await decodeForMatch(originalVocalUrl)
+      const converted = original ? await decodeForMatch(convertedVocalsUrl) : null
+      if (cancelled || !original || !converted || polishTouchedRef.current) return
+      const info = matchPolish(original, converted, MATCH_SAMPLE_RATE)
+      const preset = matchedToPreset(info)
+      console.log('[polish-match]', info)
+      setMatched({ preset, info })
+      applyPreset(preset)
+      setPolishSource('matched')
+    })().catch(() => { /* keep Studio */ }).finally(() => {
+      if (!cancelled) { clearTimeout(timer); setMatchPending(false) }
+    })
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [convertedVocalsUrl, originalVocalUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auto re-persist (the saved track always reflects the CURRENT polish) ────
   // Signature of the currently-settled polish; the persist effect re-saves only
   // when this changes from what was last stored (no redundant uploads).
@@ -1107,11 +1178,12 @@ export function ResultStep({
     if (!persistMix || persistedRef.current) return
     if (fullMixState !== 'ready' || !mixedSwappedUrl) return
     if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo || debouncedBass !== bass || debouncedTreble !== treble) return // still settling
+    if (matchPending) return                    // song-matched polish still being worked out
     if (savingRef.current) return               // a save is in flight; its completion re-checks
     if (polishSig === lastSavedSigRef.current) return // this exact polish is already stored
     const t = setTimeout(() => { void savePolish() }, 1000)
     return () => clearTimeout(t)
-  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble, polishSig]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble, polishSig, matchPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
   // same warmth+reverb+echo as the Full-song mix, so soloing the vocal to judge
@@ -1432,8 +1504,11 @@ export function ResultStep({
               {warmthRendering && <span className="vs-polish-spin" />}
               {savedFlash && <span className="vs-polish-saved">Saved ✓</span>}
               <span className="vs-polish-presets">
-                <button className="vs-polish-preset" onClick={() => applyPreset(RAW_PRESET)} title="Zero all polish — the bone-dry converted vocal">Raw</button>
-                <button className="vs-polish-preset" onClick={() => applyPreset(STUDIO_PRESET)} title="Back to the default Studio polish">Reset to defaults</button>
+                <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('raw'); applyPreset(RAW_PRESET) }} title="Zero all polish — the bone-dry converted vocal">Raw</button>
+                {matched && (
+                  <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('matched'); applyPreset(matched.preset) }} title="Warmth, treble and reverb matched to the original singer's vocal">Match song</button>
+                )}
+                <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('studio'); applyPreset(STUDIO_PRESET) }} title="The standard Studio polish (warmth + light reverb)">Reset to Studio</button>
               </span>
             </div>
             <div className="vs-knob-row">
@@ -1442,7 +1517,7 @@ export function ResultStep({
                 label="Warmth"
                 hint="Adds body/warmth to the vocal — drag up/down, double-click to reset"
                 value={warmth}
-                onChange={setWarmth}
+                onChange={userSet(setWarmth)}
                 format={(v) => (v === 0 ? 'Off' : `+${((v / 100) * WARMTH_MAX_DB).toFixed(1)} dB`)}
               />
               <PolishKnob
@@ -1450,7 +1525,7 @@ export function ResultStep({
                 label="Bass"
                 hint="Low-shelf EQ (~100 Hz), −16 to +16 dB — drag up/down, double-click to reset"
                 value={bass}
-                onChange={setBass}
+                onChange={userSet(setBass)}
                 min={-BASS_MAX_DB} max={BASS_MAX_DB}
                 format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
               />
@@ -1459,7 +1534,7 @@ export function ResultStep({
                 label="Treble"
                 hint="High-shelf EQ (~8 kHz), −20 to +20 dB — drag up/down, double-click to reset"
                 value={treble}
-                onChange={setTreble}
+                onChange={userSet(setTreble)}
                 min={-TREBLE_MAX_DB} max={TREBLE_MAX_DB}
                 format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
               />
@@ -1468,7 +1543,7 @@ export function ResultStep({
                 label="Reverb"
                 hint="Adds space/room to the vocal — drag up/down, double-click to reset"
                 value={reverb}
-                onChange={setReverb}
+                onChange={userSet(setReverb)}
                 format={(v) => (v === 0 ? 'Off' : `${Math.round((v / 100) * REVERB_MAX_WET * 100)}% wet`)}
               />
               <PolishKnob
@@ -1476,11 +1551,18 @@ export function ResultStep({
                 label="Echo"
                 hint="Adds repeats/echo to the vocal — drag up/down, double-click to reset"
                 value={echo}
-                onChange={setEcho}
+                onChange={userSet(setEcho)}
                 format={(v) => (v === 0 ? 'Off' : `${Math.round((v / 100) * ECHO_MAX_WET * 100)}% wet`)}
               />
             </div>
-            <div className="vs-polish-foot">A default <strong>Studio</strong> polish (warmth + light reverb) is applied so it doesn&rsquo;t sound dry — tap <strong>Raw</strong> for the bone-dry output, or adjust the knobs. Free · client-side · applies to both tabs &amp; baked into the saved track.</div>
+            <div className="vs-polish-foot">
+              {matchPending
+                ? <>Matching the polish to this song…</>
+                : polishSource === 'matched' && matched
+                ? <>Polish <strong>matched to this song</strong> from the original singer&rsquo;s vocal — warmth +{matched.info.warmthDb} dB, treble {matched.info.trebleDb > 0 ? '+' : ''}{matched.info.trebleDb} dB, {Math.round(matched.info.reverbWet * 100)}% reverb. Tap <strong>Reset to Studio</strong> for the standard polish or <strong>Raw</strong> for the dry voice.</>
+                : <>A default <strong>Studio</strong> polish (warmth + light reverb) is applied so it doesn&rsquo;t sound dry — tap <strong>Raw</strong> for the bone-dry output, or adjust the knobs.</>}
+              {' '}Free · client-side · applies to both tabs &amp; baked into the saved track.
+            </div>
           </div>
         )}
 
