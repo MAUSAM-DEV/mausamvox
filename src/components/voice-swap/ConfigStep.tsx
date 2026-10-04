@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { StepSlider } from '@/components/ui/StepSlider'
 
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -33,8 +32,6 @@ interface ConfigStepProps {
   setSelectedVoiceId: (id: string) => void
   gender: Gender
   setGender: (g: Gender) => void
-  styleIntensity: number
-  setStyleIntensity: (v: number) => void
   pitchShift: number
   setPitchShift: (v: number) => void
   // Duet mode — only rendered when hasDuet is true (both male+female URLs present).
@@ -46,7 +43,7 @@ interface ConfigStepProps {
   selectedVoiceId2?: string | null
   setSelectedVoiceId2?: (id: string) => void
   // Guided (AI Cover) mode: hide the advanced Swap Controls (Gender Lock,
-  // Style Intensity, Pitch Shift) behind their defaults — pitch is still
+  // Pitch Shift) behind their defaults — pitch is still
   // auto-matched by the page — and show first-timer copy instead.
   guided?: boolean
   // Pre-formatted time ranges of loud group/backing vocals (src/lib/group-vocals.ts);
@@ -137,7 +134,7 @@ function VoiceGrid({
 export function ConfigStep({
   voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
   gender, setGender,
-  styleIntensity, setStyleIntensity, pitchShift, setPitchShift,
+  pitchShift, setPitchShift,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
 }: ConfigStepProps) {
@@ -254,15 +251,15 @@ export function ConfigStep({
           </div>
         )}
 
-        {/* Swap Controls — hidden in guided mode: the defaults (Style Intensity 3,
-            Pitch 0 + the page's auto key-match) apply untouched, and the copy
+        {/* Swap Controls — hidden in guided mode: the defaults
+            (Pitch 0 + the page's auto key-match) apply untouched, and the copy
             below says so honestly. Full control stays one link away. */}
         {guided ? (
           <>
             <div className="vs-divider" />
             <div className="vs-guided-note">
               ⚙️ Smart defaults applied — pitch is matched to your chosen voice
-              automatically. Want full control (style intensity, pitch shift, duets)?{' '}
+              automatically. Want full control (pitch shift, duets)?{' '}
               <Link href="/voice-swap" className="vs-guided-note-link">Use Voice Swap</Link>.
             </div>
           </>
@@ -290,27 +287,6 @@ export function ConfigStep({
               RVC exposes no parameter for any of them (see PROJECT_STATUS §6
               feasibility note) — showing them, even disabled, implied
               capabilities the pipeline can't deliver. */}
-
-          <div className="vs-ctrl-group vs-ctrl-full">
-            <label className="vs-ctrl-lbl">
-              Style Intensity
-              <span className="vs-ctrl-val">{styleIntensity}</span>
-            </label>
-            <StepSlider
-              min={1}
-              max={10}
-              step={1}
-              value={styleIntensity}
-              onChange={setStyleIntensity}
-              className="vs-range"
-              style={{ '--pct': `${(styleIntensity - 1) / 9 * 100}%` } as React.CSSProperties}
-              aria-label="Style Intensity"
-            />
-            <div className="vs-range-labels">
-              <span>Subtle (1)</span>
-              <span>Full replacement (10)</span>
-            </div>
-          </div>
 
           <div className="vs-ctrl-group vs-ctrl-full">
             <label className="vs-ctrl-lbl">

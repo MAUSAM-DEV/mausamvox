@@ -14,7 +14,6 @@ import { VToast } from './VToast'
 import { trimAudioToClip } from './audioClip'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
 import { detectMedianF0, autoOctaveShiftSemitones, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
-import type { TuneParams } from './ResultStep'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -440,9 +439,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // ('male') — previously 'Female', which silently converted the female stem and
   // left the original male untouched when a user picked "male" in the duet picker.
   const [gender, setGender] = useState<Gender>('Male')
-  // Default 3 (index 0.3): clearest words on a solo test song (80% vs 75% at the
-  // old default 8, 62% at 0 — 2026-10-04). Users can still set 1–10.
-  const [styleIntensity, setStyleIntensity] = useState(3)
   const [pitchShift, setPitchShift] = useState(0)
 
   // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
@@ -914,9 +910,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   }
 
   // `charge` controls whether credits are deducted (defaults to true so the
-  // normal Preview/Full buttons bill as before). `indexRateOverride`, when set,
-  // forces a specific RVC index_rate (0–1) instead of deriving it from the
-  // styleIntensity slider — used by Regenerate to step voice strength up.
+  // normal Preview/Full buttons bill as before). Index strength and the other
+  // conversion settings are fixed server-side (VOICE_SWAP_* in rvc-engine.ts).
   // ── Auto key-match helpers ──────────────────────────────────────────────────
   // Median F0 (+ voiced-frame confidence) of the target voice, from its reference
   // sample (cached per voice). Null on any failure → no auto shift for that voice.
@@ -983,12 +978,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     type: 'preview' | 'full',
     opts: {
       charge?: boolean
-      indexRateOverride?: number
       // Fine-tune overrides for the remaining RVC quality params; omitted on
       // normal swaps so the server applies its defaults.
-      protectOverride?: number
-      filterRadiusOverride?: number
-      rmsMixRateOverride?: number
       // Only Regenerate counts toward the per-track voice-strength cap. Apply-to-full
       // from the tuning panel also sets indexRateOverride but must NOT burn a regen.
       isRegen?: boolean
@@ -996,10 +987,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   ) {
     const {
       charge = true,
-      indexRateOverride,
-      protectOverride,
-      filterRadiusOverride,
-      rmsMixRateOverride,
       isRegen = false,
     } = opts
     if (!stemResult) {
@@ -1106,13 +1093,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               vocalsPath: stemResult.maleVocalsPath || undefined,
               voiceId: voice.id,
               pitchShift: effPitchA,
-              styleIntensity,
-              // Regenerate forces a stepped-up index_rate; omitted (undefined)
-              // on normal swaps so the server derives it from styleIntensity.
-              indexRate: indexRateOverride,
-              protect: protectOverride,
-              filterRadius: filterRadiusOverride,
-              rmsMixRate: rmsMixRateOverride,
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -1125,8 +1105,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               vocalsPath: stemResult.femaleVocalsPath || undefined,
               voiceId: voice2.id,
               pitchShift: effPitchB,
-              styleIntensity,
-              indexRate: indexRateOverride,
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -1217,13 +1195,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift: effectivePitch,
-          styleIntensity,
-          // Regenerate forces a stepped-up index_rate; omitted (undefined) on
-          // normal swaps so the server derives it from styleIntensity.
-          indexRate: indexRateOverride,
-          protect: protectOverride,
-          filterRadius: filterRadiusOverride,
-          rmsMixRate: rmsMixRateOverride,
           // Previews are gated + charged server-side (first 2 per track free,
           // 3rd+ costs 50). trackKey is the upload storagePath; empty for
           // manual-extracted stems, which are always free.
@@ -1323,10 +1294,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // A regen persists a NEW row — clear the old id so Share can't briefly
     // point a link at the previous take while the new save is in flight.
     setPersistedSwapId(null)
-    // Each regen steps voice strength up +0.05 from the user's Style Intensity
-    // (index = styleIntensity / 10), capped at 1.
-    const indexRate = Math.min(1, styleIntensity / 10 + 0.05 * (regenCount + 1))
-    await handleProcess('full', { charge: true, indexRateOverride: indexRate, isRegen: true })
+    await handleProcess('full', { charge: true, isRegen: true })
   }
 
   // Resolve the single-voice vocal stem to convert — mirrors handleProcess by
@@ -1343,7 +1311,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // params, without disturbing the committed full result. Trims+uploads the clip
   // once per source vocal (cached), then runs voice-convert as a preview and
   // returns the converted 12 s vocal URL. Returns null on any failure (toasted).
-  async function runTunedPreview(params: TuneParams, startSeconds = 0): Promise<string | null> {
+  async function runTunedPreview(startSeconds = 0): Promise<string | null> {
     if (!stemResult) { showToast('Upload a track first'); return null }
     const voice = voices.find((v) => v.id === selectedVoiceId)
     if (!voice) { showToast('Select a voice first'); return null }
@@ -1404,7 +1372,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         tunedClipRef.current = clip
       }
 
-      // 2. Run voice-convert on the clip as a preview with the tuned params.
+      // 2. Run voice-convert on the clip as a preview (server-fixed settings).
       const startRes = await fetch('/api/voice-convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1414,10 +1382,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift: effectivePitch,
-          indexRate: params.indexRate,
-          protect: params.protect,
-          filterRadius: params.filterRadius,
-          rmsMixRate: params.rmsMixRate,
           isPreview: true,
           trackKey: stemResult.storagePath || '',
         }),
@@ -1447,18 +1411,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     }
   }
 
-  // Fine-tune panel: commit the chosen params to a real full-song render. Routes
-  // through handleProcess('full') with the param overrides (isRegen:false, so it
-  // doesn't consume the regenerate cap).
-  async function handleApplyToFull(params: TuneParams) {
-    await handleProcess('full', {
-      charge: true,
-      indexRateOverride: params.indexRate,
-      protectOverride: params.protect,
-      filterRadiusOverride: params.filterRadius,
-      rmsMixRateOverride: params.rmsMixRate,
-    })
-  }
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1518,8 +1470,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 setSelectedVoiceId={setSelectedVoiceId}
                 gender={gender}
                 setGender={handleSetGender}
-                styleIntensity={styleIntensity}
-                setStyleIntensity={setStyleIntensity}
                 pitchShift={pitchShift}
                 setPitchShift={setPitchShift}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}
@@ -1535,13 +1485,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             )}
             {step === 3 && (
               <ResultStep
-                styleIntensity={styleIntensity}
                 onNewSwap={handleNewSwap}
                 onRegenerate={handleRegenerate}
                 regenCapReached={regenCount >= MAX_REGENS}
                 onToast={showToast}
                 onTunedPreview={runTunedPreview}
-                onApplyToFull={handleApplyToFull}
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}

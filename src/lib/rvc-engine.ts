@@ -26,6 +26,15 @@ export const INDEXED_F0_METHOD = 'mangio-crepe'
 // minute, same word clarity (80% vs 81%), ~30% less compute (37–45 s vs ~60 s).
 export const INDEXED_CREPE_HOP = 128
 
+// Conversion settings — FIXED, server-side (no user controls). Checked on the
+// founder's own song, 2 runs each (2026-10-04): the founder heard no difference
+// across the full range of any of these, and none made the voice more "him"
+// (identity comes from the voice model). index 0.3 had the clearest words.
+export const VOICE_SWAP_INDEX_RATE = 0.3
+export const VOICE_SWAP_PROTECT = 0.2
+export const VOICE_SWAP_RMS_MIX_RATE = 0.25
+export const VOICE_SWAP_FILTER_RADIUS = 4 // only used by the 'harvest' tracker (none of ours)
+
 export type RvcEngine = 'indexed' | 'bare' | 'cover'
 
 // Absent/unset env means 'indexed'. 'bare' / 'cover' are rollbacks.

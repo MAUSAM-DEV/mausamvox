@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { INDEXED_CREPE_HOP, INDEXED_F0_METHOD, rvcEngine, rvcVersion } from '@/lib/rvc-engine'
+import { INDEXED_CREPE_HOP, INDEXED_F0_METHOD, VOICE_SWAP_FILTER_RADIUS, VOICE_SWAP_INDEX_RATE, VOICE_SWAP_PROTECT, VOICE_SWAP_RMS_MIX_RATE, rvcEngine, rvcVersion } from '@/lib/rvc-engine'
 
 export const maxDuration = 30
 
@@ -65,14 +65,6 @@ export async function POST(req: NextRequest) {
       voiceModelUrl?: string
       voiceId?: string
       pitchShift?: number
-      styleIntensity?: number
-      indexRate?: number
-      // Fine-tune panel overrides for the remaining RVC quality params. Each is
-      // optional; when omitted the prior hardcoded default is used (so normal
-      // swaps are unchanged). All clamped server-side to their valid ranges.
-      protect?: number
-      filterRadius?: number
-      rmsMixRate?: number
       isPreview?: boolean
       trackKey?: string
     }
@@ -82,7 +74,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 3, indexRate: indexRateOverride, protect, filterRadius, rmsMixRate, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -242,26 +234,14 @@ export async function POST(req: NextRequest) {
 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
-    // Style Intensity (1–10, "Subtle" → "Full replacement") maps onto RVC's
-    // index_rate, which controls how much of the target voice's character
-    // replaces the source vs. how much of the original accent/tone leaks through.
-    // Regenerate sends an explicit indexRate to step voice strength up; when
-    // present (and a finite number) it overrides the styleIntensity formula.
-    // Either way the result is clamped to [0, 1].
-    const rawIndexRate = typeof indexRateOverride === 'number' && Number.isFinite(indexRateOverride)
-      ? indexRateOverride
-      : styleIntensity / 10
-    const indexRate = Math.min(1, Math.max(0, rawIndexRate))
-
-    // Remaining RVC quality params: use the client override when supplied (clamped
-    // to RVC's valid range), else the prior hardcoded default. filter_radius must
-    // be an integer. Defaults match the values these were pinned at before tuning.
-    const protectVal = typeof protect === 'number' && Number.isFinite(protect)
-      ? clamp(protect, 0, 0.5) : 0.2
-    const filterRadiusVal = typeof filterRadius === 'number' && Number.isFinite(filterRadius)
-      ? Math.round(clamp(filterRadius, 0, 7)) : 4
-    const rmsMixRateVal = typeof rmsMixRate === 'number' && Number.isFinite(rmsMixRate)
-      ? clamp(rmsMixRate, 0, 1) : 0.25
+    // Index strength, consonant guard, loudness envelope and smoothing are fixed
+    // server-side (VOICE_SWAP_* in rvc-engine.ts) — there are no user controls:
+    // none of them was audible to the founder across its full range (2026-10-04),
+    // so values sent by older clients are ignored.
+    const indexRate = VOICE_SWAP_INDEX_RATE
+    const protectVal = VOICE_SWAP_PROTECT
+    const filterRadiusVal = VOICE_SWAP_FILTER_RADIUS
+    const rmsMixRateVal = VOICE_SWAP_RMS_MIX_RATE
 
     // Final pitch shift (semitones) for the converted vocal. The client folds its
     // auto key-match (octave snap) and the manual Pitch Shift control into this

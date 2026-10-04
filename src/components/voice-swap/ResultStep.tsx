@@ -27,8 +27,7 @@ interface ResultStepProps {
   // starting at an optional offset (seconds) so the user can skip music-only
   // intros (resolves to the converted vocal URL, or null on failure), and commit
   // a chosen take to a full-song render.
-  onTunedPreview: (p: TuneParams, startSeconds?: number) => Promise<string | null>
-  onApplyToFull: (p: TuneParams) => void
+  onTunedPreview: (startSeconds?: number) => Promise<string | null>
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
   // Duet Mode 1: the singer that was NOT converted. When present, the swapped
@@ -53,8 +52,6 @@ interface ResultStepProps {
   // Share needs it (a public link points at the SAVED track); null disables
   // the Share button with a "saving…" hint until the save lands.
   persistedSwapId?: string | null
-  // Style Intensity the swap ran at (1–10) — seeds Fine-tune's Voice strength.
-  styleIntensity?: number
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -622,32 +619,12 @@ function PolishKnob({
 }
 
 // ---------------------------------------------------------------------------
-// Fine-tune panel — adjust RVC params, render a short 12 s preview, A/B compare
+// Section preview — pick a start point and render a short 12 s preview.
+// (The tuning sliders, A/B and "Apply to full track" were removed 2026-10-04:
+// none of the settings was audible to the founder across its full range, and
+// Apply charged 200 cr for a take that sounded the same. Settings are fixed
+// server-side — VOICE_SWAP_* in src/lib/rvc-engine.ts.)
 // ---------------------------------------------------------------------------
-export interface TuneParams {
-  indexRate: number
-  protect: number
-  filterRadius: number
-  rmsMixRate: number
-}
-
-// Seeded from the same defaults voice-convert applies, so the first preview
-// reproduces the committed take before the user moves anything.
-// indexRate default = Style Intensity 3's 0.3 (see VoiceSwapPage). filterRadius stays
-// in the params (sent as 4) but has no slider: it only affects the 'harvest' pitch
-// tracker, which no engine uses — it changed nothing (2026-10-03 tests).
-const TUNE_DEFAULTS: TuneParams = { indexRate: 0.3, protect: 0.2, filterRadius: 4, rmsMixRate: 0.25 }
-
-const TUNE_SLIDERS: {
-  key: keyof TuneParams; label: string; hint: string
-  min: number; max: number; step: number; fmt: (n: number) => string
-}[] = [
-  { key: 'indexRate',    label: 'Voice strength',          hint: 'index_rate',    min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
-  { key: 'protect',      label: 'Breath / consonant guard', hint: 'protect',       min: 0, max: 0.5, step: 0.05, fmt: (n) => n.toFixed(2) },
-  { key: 'rmsMixRate',   label: 'Volume envelope',         hint: 'rms_mix_rate',  min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
-]
-
-interface Take { id: number; params: TuneParams; url: string }
 
 // Clip length the preview renders — mirrors PREVIEW_CLIP_SECONDS in
 // VoiceSwapPage (kept local to avoid a circular import). Only used here to bound
@@ -661,27 +638,18 @@ const fmtMSS = (s: number) => {
 }
 
 function FineTunePanel({
-  onTunedPreview, onApplyToFull, onToast, durationSeconds, baseIndexRate,
+  onTunedPreview, onToast, durationSeconds,
 }: {
-  onTunedPreview: (p: TuneParams, startSeconds?: number) => Promise<string | null>
-  onApplyToFull: (p: TuneParams) => void
+  onTunedPreview: (startSeconds?: number) => Promise<string | null>
   onToast: (msg: string) => void
   // Source song length (seconds) — bounds the start-point control. 0 until the
   // main player has loaded metadata, or when unknown.
   durationSeconds: number
-  // The swap's own Style Intensity as index_rate, so "Voice strength" starts
-  // where the swap actually was (defaults to TUNE_DEFAULTS when absent).
-  baseIndexRate?: number
 }) {
-  const defaults: TuneParams = baseIndexRate === undefined ? TUNE_DEFAULTS : { ...TUNE_DEFAULTS, indexRate: baseIndexRate }
   const [open, setOpen] = useState(false)
-  const [params, setParams] = useState<TuneParams>(defaults)
   const [startSeconds, setStartSeconds] = useState(0)
-  const [prevTake, setPrevTake] = useState<Take | null>(null)
-  const [curTake, setCurTake] = useState<Take | null>(null)
-  const [ab, setAb] = useState<'A' | 'B'>('B')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const takeIdRef = useRef(0)
 
   // Latest valid start point: 0..(duration − clip). When the song is shorter than
   // one clip (or duration unknown), there's no room to move the start.
@@ -694,43 +662,28 @@ function FineTunePanel({
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
 
-  const selected = ab === 'A' ? prevTake : curTake
-  const selectedUrl = selected?.url ?? null
-
   async function handlePreview() {
     if (busy) return
     setBusy(true)
     onToast('Rendering 12-sec preview…')
-    const url = await onTunedPreview(params, clampedStart)
+    const url = await onTunedPreview(clampedStart)
     setBusy(false)
     if (!url) return // failure already toasted upstream
-    const take: Take = { id: ++takeIdRef.current, params: { ...params }, url }
-    setPrevTake(curTake) // current take slides into the A slot
-    setCurTake(take)
-    setAb('B')
-    onToast('Preview ready — compare A / B')
+    setPreviewUrl(url)
+    onToast('Preview ready')
   }
 
   function handleTogglePlay() {
     const a = audioRef.current
-    if (!a || !selectedUrl) return
+    if (!a || !previewUrl) return
     if (a.paused) a.play().catch(() => {})
     else a.pause()
   }
 
-  const setParam = (key: keyof TuneParams, value: number) =>
-    setParams((p) => ({ ...p, [key]: value }))
-
-  // Reset every slider back to the seeded defaults in one click. Sliders only —
-  // does not touch takes, A/B, or the player.
-  const atDefaults = (Object.keys(defaults) as (keyof TuneParams)[])
-    .every((k) => params[k] === defaults[k])
-  const handleReset = () => setParams({ ...defaults })
-
   return (
     <div className="vs-tune">
       <button className="vs-tune-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="vs-tune-head-title">⚙ Fine-tune voice <span className="vs-tune-adv">Advanced</span></span>
+        <span className="vs-tune-head-title">🎧 Preview a section <span className="vs-tune-adv">12 sec</span></span>
         <span className="vs-tune-chev">{open ? '▲' : '▼'}</span>
       </button>
 
@@ -757,89 +710,34 @@ function FineTunePanel({
             />
           </div>
 
-          {TUNE_SLIDERS.map((s) => (
-            <div key={s.key} className="vs-tune-row">
-              <div className="vs-tune-rowtop">
-                <span className="vs-tune-label">{s.label} <span className="vs-tune-hint">{s.hint}</span></span>
-                <span className="vs-tune-val">{s.fmt(params[s.key])}</span>
-              </div>
-              <StepSlider
-                className="vs-tune-slider"
-                min={s.min} max={s.max} step={s.step}
-                value={params[s.key]}
-                disabled={busy}
-                onChange={(v) => setParam(s.key, v)}
-                format={s.fmt}
-                aria-label={s.label}
-              />
-            </div>
-          ))}
-
           <div className="vs-tune-actions">
             <button className="vs-tune-preview-btn" onClick={handlePreview} disabled={busy}>
               {busy ? '⏳ Rendering…' : '▶ Preview 12 sec'}
             </button>
-            <button
-              type="button"
-              className="vs-tune-reset-btn"
-              onClick={handleReset}
-              disabled={busy || atDefaults}
-            >
-              ↺ Reset to defaults
-            </button>
             <span className="vs-tune-cost">First 2/track free · 50 cr after</span>
           </div>
 
-          {(prevTake || curTake) && (
+          {previewUrl && (
             <div className="vs-tune-compare">
-              {/* A/B take toggle */}
-              <div className="vs-toggle-group vs-tune-ab">
-                <button
-                  className={`vs-ptab ${ab === 'A' ? 'vs-ptab--active' : ''}`}
-                  onClick={() => setAb('A')}
-                  disabled={!prevTake}
-                  title={prevTake ? undefined : 'No previous take yet'}
-                >A · Previous</button>
-                <button
-                  className={`vs-ptab ${ab === 'B' ? 'vs-ptab--active' : ''}`}
-                  onClick={() => setAb('B')}
-                  disabled={!curTake}
-                >B · New</button>
+              <audio
+                ref={audioRef}
+                src={previewUrl}
+                preload="metadata"
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+                onEnded={() => { setPlaying(false); setProgress(0) }}
+                onTimeUpdate={() => {
+                  const a = audioRef.current
+                  if (a && a.duration) setProgress(a.currentTime / a.duration)
+                }}
+              />
+              <div className="vs-tune-mini">
+                <button className="vs-play-btn" onClick={handleTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+                  {playing ? '⏸' : '▶'}
+                </button>
+                <div className="vs-tune-bar"><div className="vs-tune-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
+                <span className="vs-tune-side">Preview</span>
               </div>
-
-              {/* Mini vocals-only player for the selected take */}
-              {selectedUrl && (
-                <>
-                  <audio
-                    ref={audioRef}
-                    src={selectedUrl}
-                    preload="metadata"
-                    onPlay={() => setPlaying(true)}
-                    onPause={() => setPlaying(false)}
-                    onEnded={() => { setPlaying(false); setProgress(0) }}
-                    onTimeUpdate={() => {
-                      const a = audioRef.current
-                      if (a && a.duration) setProgress(a.currentTime / a.duration)
-                    }}
-                  />
-                  <div className="vs-tune-mini">
-                    <button className="vs-play-btn" onClick={handleTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-                      {playing ? '⏸' : '▶'}
-                    </button>
-                    <div className="vs-tune-bar"><div className="vs-tune-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
-                    <span className="vs-tune-side">{ab === 'A' ? 'Previous' : 'New'} take</span>
-                  </div>
-                </>
-              )}
-
-              <button
-                className="vs-tune-apply"
-                onClick={() => selected && onApplyToFull(selected.params)}
-                disabled={!selected}
-                title="Re-render the full song with the selected take's settings (200 cr)"
-              >
-                ✓ Apply {ab === 'A' ? 'Previous' : 'New'} to Full Track · 200 cr
-              </button>
             </div>
           )}
         </div>
@@ -853,9 +751,9 @@ function FineTunePanel({
 // ---------------------------------------------------------------------------
 export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
-  onTunedPreview, onApplyToFull,
+  onTunedPreview,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, styleIntensity,
+  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -1617,10 +1515,8 @@ export function ResultStep({
         {!convertedVocalsUrl2 && (
           <FineTunePanel
             onTunedPreview={onTunedPreview}
-            onApplyToFull={onApplyToFull}
             onToast={onToast}
             durationSeconds={duration}
-            baseIndexRate={styleIntensity !== undefined ? styleIntensity / 10 : undefined}
           />
         )}
 

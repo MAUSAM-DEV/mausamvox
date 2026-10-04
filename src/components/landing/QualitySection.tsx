@@ -6,8 +6,8 @@ import { useReveal } from './useReveal'
 // Mock of the REAL Fine-tune/Polish controls (not measurements) — the old
 // "quality confidence score" card was removed with the fake-score feature.
 const controlBars = [
-  { label: 'Voice Strength', pct: 70, id: 'b1' },
-  { label: 'Warmth',         pct: 40, id: 'b2' },
+  { label: 'Warmth',         pct: 40, id: 'b1' },
+  { label: 'Treble',         pct: 55, id: 'b2' },
   { label: 'Reverb',         pct: 25, id: 'b3' },
 ]
 
@@ -65,14 +65,14 @@ export function QualitySection() {
           </h2>
           <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '420px', lineHeight: 1.75 }}>
             Preview your swap and A/B it against the original before you commit.
-            Not happy? Fine-tune the voice settings, polish the vocal, and regenerate —
-            every take is your call.
+            Then polish the vocal — warmth, treble and reverb start matched to the song,
+            and every knob is yours to change, free.
           </p>
           <div style={{ marginTop: '36px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {[
               'Free previews — first 2 on every track',
               'A/B player — compare original vs swapped',
-              'Fine-tune your voice settings and regenerate anytime',
+              'Polish matched to the song — adjust it free, anytime',
             ].map((item) => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', color: '#C8C8E8' }}>
                 <span
@@ -124,7 +124,7 @@ export function QualitySection() {
               }}
             />
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#9494BC', marginBottom: '12px' }}>
-              Fine-tune &amp; Polish
+              Polish
             </div>
             <div
               className="grad-text"
@@ -196,8 +196,8 @@ export function QualitySection() {
                 <path d="M4 4v5h5M20 20v-5h-5" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
                 <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              Not happy with a take?{' '}
-              <strong style={{ color: '#9D5CFF', fontWeight: 600 }}>Adjust and regenerate</strong> anytime
+              Want it warmer, brighter or drier?{' '}
+              <strong style={{ color: '#9D5CFF', fontWeight: 600 }}>Adjust the polish</strong> anytime — free
             </div>
           </div>
         </div>

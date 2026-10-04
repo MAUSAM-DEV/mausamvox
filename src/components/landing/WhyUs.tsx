@@ -10,8 +10,8 @@ const reasons = [
   },
   {
     num: '02',
-    title: 'See quality before you spend a single credit',
-    desc: 'Every voice swap renders a free 30-second preview. A quality confidence score (0–100) is shown before every download. If the score is low, regenerate for free within a 10-minute window.',
+    title: 'Hear it before you spend a single credit',
+    desc: 'Your first 2 previews on every song are free. Hear your voice on the track and A/B it against the original before you pay for the full swap — and if a song has loud group vocals, we tell you where before you start.',
   },
   {
     num: '03',

@@ -6,8 +6,8 @@ const features = [
   {
     icon: '🔄',
     title: 'Precision Voice Swap',
-    desc: 'Replace any song\'s vocals with your cloned voice. Full gender lock, age range, accent selector, and style intensity slider. The AI actually follows your instructions. See a 30-second preview before spending any credits.',
-    pills: ['Gender Lock', 'Accent Selector', '30-sec Preview', 'Quality Score', 'A/B Compare', 'Free Regenerate'],
+    desc: 'Replace any song\'s vocals with your cloned voice, in any language. Hear a free preview first, compare it with the original, then polish the vocal — warmth, treble and reverb start matched to the song. Songs with loud group vocals get an honest heads-up.',
+    pills: ['Gender Lock', 'Free Previews', 'A/B Compare', 'Song-matched Polish', 'Group-vocals Warning'],
     tag: 'Core Feature',
     tagType: 'v',
     wide: true,
