@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-04
 
+- **7 audible Voice Swap controls** — Song Key ±4 and Auto-tune (Configure; new engine version 255794a3 with `autotune`), Level / Blend / Character / Add harmony (scale-following 3rds in clear major keys, octaves otherwise) and Concert Hall / Lo-fi / Radio presets (Result). Signalsmith Stretch (MIT) WASM in a Web Worker. Verified in Node, a real browser and 3 live conversions (~$0.03). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `6d94845`
 - **Full swap saves the previewed take — never pay twice** (charge 200 − preview cost; no re-conversion; identical saved take can't be re-bought; 'Preview a section' removed). Plus: 17 labelled test clips for replacement controls (blend, character, auto-tune, level, harmony, key, presets) + plan with licences. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `ced3cdc`
 - **Regenerate removed** — it charged 200 cr (400 duet) for a take that sounded the same. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `65e46ed`
 - **Inaudible Voice Swap controls removed** (Style Intensity, Fine-tune Voice strength / Breath guard / Volume envelope, Apply to full track) — settings fixed server-side; Result panel → "Preview a section"; landing claims made honest. Also: "Mausam (Singing)" voice added to the founder's My Voices (data, verified via the live proxy + one conversion). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `f426e34`

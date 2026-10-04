@@ -6,6 +6,28 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-04 (night) — 7 audible Voice Swap controls (`6d94845`) — ⚠️ founder live tests pending
+
+Founder heard a clear difference in all 17 "Option test" clips → all 7 built.
+
+- **Configure (part of the conversion, no extra cost):** **Song Key** ±4 (voice converted at autoShift + Pitch Shift + key; music except drums shifted in the browser) and **Auto-tune** Off / Light 0.5 / Strong 1 — new engine input `autotune` (mausam-dev/rvc-v2-index **`255794a3…`**, models repo `7e5bb06`: snaps the pitch curve to the nearest semitone before synthesis). Both are in the take fingerprint (save-previewed-take).
+- **Result → Voice panel (free, instant, baked into the saved track, auto re-saved):** Level ±9 dB · Blend 0–50% (the exact converted stem(s), key-shifted if needed) · Character ±4 st formants · Add harmony Off / 2 / 4 voices.
+- **Harmony rule:** clearly major key (score ≥ 0.6, beats minor by 0.05 and runner-up by 0.03) → scale-following 3rd (+3/+4 per sung note), 4 voices add a 5th (+6/+7) and low octave; minor or unclear → octaves (Choir's Octaves preset). Founder's song reads **B♭ minor → octaves**.
+- **Polish presets:** Match song · Studio · **Concert Hall** (3.2 s hall impulse, 40 ms pre-delay, 35% wet) · **Lo-fi** / **Radio** (whole-mix chains, as in the clips) · Raw.
+- **How:** Signalsmith Stretch (MIT) WASM core vendored in `src/lib/vendor/signalsmith-stretch` (factory only, Node paths off), run offline in a Web Worker (`dsp.worker.ts` / `dspClient.ts`); 92 KB engine loads only in the worker (page +5 kB). DSP in `src/lib/audio-dsp/` (stretch, key-detect, pitch-track, harmony, harmony-mode).
+- **Verified:**
+  - Shifter: time-aligned to the sample (0 lag; identity −99 dB; ~100× real time in Node).
+  - Key finder: on 5 songs, the scale-vs-octaves decision agreed with a librosa CQT key finder on all 5.
+  - Scale harmony: 93% of notes in key vs 35% for a fixed +4 (E-minor test song).
+  - Real browser (local dev, founder's song stems, real Result screen): all 7 controls render with no fallbacks; Character ±4 moved brightness +1.1/−1.5 dB (as strong as the WORLD clips); Key ±2 relabels harmony keys correctly; everything on at once ≈ 14 s in the dev build.
+  - Auto-tune engine, 3 live conversions (≈ $0.03), held notes within ±10 cents: Off 41.9% = today 41.7% (spectral diff 0.43 < run-to-run 0.54); Light 54.8%; Strong 68.1%.
+- **Live tests:**
+  1. Configure → Key +2 → swap → song higher, drums steady; "Key +2" chip on Result.
+  2. Auto-tune Strong → notes snap (compare Off).
+  3. Result: Level / Blend / Character knobs, Harmony 2 & 4 voices (says "octaves — B♭ minor" on your song), Concert Hall / Lo-fi / Radio.
+  4. Saved Tracks plays what you last heard.
+- **Watch:** first heavy change on a long song can take several seconds (spinner); memory use grows with key change + harmony on long songs (phones).
+
 ## ✅ SHIPPED 2026-10-04 (late) — Full swap saves the previewed take (`ced3cdc`); replacement-control candidates TESTED (clips), awaiting founder's ears
 
 **`ced3cdc`:** after a preview, "💾 Save as full swap · 150/200 cr" (Result) and "Save previewed take" (Configure, same settings) save the take you heard — no re-conversion — charging 200 − what the preview cost (`/api/voice-convert` returns `previewCharged`), so the total never exceeds 200. After 50 min (preview audio expires) a same-settings full swap re-converts but still subtracts the preview's cost once. Re-running an already-saved identical take is blocked (no charge). "Preview a section" removed. **Live tests:** (1) free preview → Save → −200 cr, track in Saved Tracks; (2) paid 3rd preview (−50) → Save → −150 (total 200); (3) change voice after a preview → button returns to "Process Full Track" (200); (4) press Full again after saving → "already in your Saved Tracks", no charge.

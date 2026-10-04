@@ -37,6 +37,7 @@ Users never see engine names (enforced in code).
 
 ## 4. Open items (most important first)
 
+0. **Shipped 2026-10-04 (night) — test on live:** 7 audible controls (`6d94845`): Song Key + Auto-tune on Configure; Level / Blend / Character / Add harmony + Concert Hall / Lo-fi / Radio on Result. Engine now `255794a3` (rollback: previous version id in git history of `src/lib/rvc-engine.ts`).
 0. **Shipped 2026-10-04 (late) — test on live:** Full swap saves the previewed take, total never above 200 cr (`ced3cdc`). **Your ears needed:** 17 "Option test" clips for replacement controls — only clearly audible ones get built.
 0. **Shipped 2026-10-04 (evening) — test on live:** inaudible controls removed (`f426e34`), Regenerate removed (`65e46ed`), "Mausam (Singing)" voice added. Open: should section previews / preview→full re-conversion cost anything? Plan ready: "Sing, don't speak" + Quick Voice (any language).
 0. **Shipped 2026-10-04 — test on live:** Voice Swap on our index engine + crepe, Style Intensity default 3 (`fc6c0d2`); song-matched polish (`0c742b9`); hover sliders (`13c35cf`); knob wheel (`c33dd28`). Crepe hop 128 shipped (`07ca436`). Group-vocals warning confirmed live. Rollback: `RVC_ENGINE=bare`.
