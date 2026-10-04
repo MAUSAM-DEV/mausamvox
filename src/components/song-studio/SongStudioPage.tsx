@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { StepSlider } from '@/components/ui/StepSlider'
 import { createClient } from '@/lib/supabase/client'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { VSidebar } from '@/components/voice-swap/VSidebar'
@@ -648,9 +649,9 @@ export function SongStudioPage({ engine = 'elevenlabs' }: { engine?: SongEngine 
                   className={`ss-pill${autoLength ? ' ss-pill--on' : ''}`} onClick={() => setAutoLength((a) => !a)} disabled={generating}>
                   Auto
                 </button>
-                <input id="ss-length" type="range" className="ss-len-slider" min={SONG_MIN_SECONDS} max={maxLengthSeconds}
-                  step={SONG_LENGTH_STEP_SECONDS} value={lengthValue} onChange={(e) => setLengthSeconds(Number(e.target.value))}
-                  disabled={autoLength || generating} aria-valuetext={formatMSS(lengthValue)} />
+                <StepSlider id="ss-length" className="ss-len-slider" min={SONG_MIN_SECONDS} max={maxLengthSeconds}
+                  step={SONG_LENGTH_STEP_SECONDS} value={lengthValue} onChange={setLengthSeconds}
+                  disabled={autoLength || generating} format={formatMSS} aria-valuetext={formatMSS(lengthValue)} />
                 <span className={`ss-len-val${autoLength ? ' ss-len-val--off' : ''}`}>{formatMSS(lengthValue)}</span>
               </div>
               <p className="ss-note">

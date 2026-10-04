@@ -133,3 +133,41 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: 0 0 0 5px rgba(157, 92, 255, 0.3);
 }
+
+/* ── StepSlider (src/components/ui/StepSlider.tsx) ──
+   At rest: the slider's own look. On hover / keyboard focus / drag: a thicker
+   track with a filled bar (--fill), a visible handle and a live value bubble.
+   The wrapper's fixed height stops the page jumping when the look changes. */
+.step-slider { position: relative; display: flex; align-items: center; width: 100%; min-height: 22px; }
+.step-slider-bubble {
+  position: absolute; bottom: calc(100% + 2px);
+  left: calc(9px + (100% - 18px) * var(--fill-n)); transform: translateX(-50%);
+  padding: 2px 7px; border-radius: 6px; background: #1E1E3C; border: 1px solid #4A4A7A;
+  color: #F0F0FF; font-size: 11px; font-weight: 600; line-height: 1.4; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity 0.12s; z-index: 2;
+}
+.step-slider:not(.step-slider--off):hover .step-slider-bubble,
+.step-slider:focus-within .step-slider-bubble,
+.step-slider--drag .step-slider-bubble { opacity: 1; }
+.step-slider:not(.step-slider--off):hover input.step-slider-input,
+.step-slider input.step-slider-input:focus-visible,
+.step-slider--drag input.step-slider-input {
+  -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none;
+  background: linear-gradient(to right, #9D5CFF 0%, #F9459E var(--fill), #2E2E56 var(--fill), #2E2E56 100%) !important;
+  accent-color: auto;
+}
+.step-slider:not(.step-slider--off):hover input.step-slider-input::-webkit-slider-thumb,
+.step-slider input.step-slider-input:focus-visible::-webkit-slider-thumb,
+.step-slider--drag input.step-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid #9D5CFF; box-shadow: 0 0 0 4px rgba(157, 92, 255, 0.25);
+}
+.step-slider:not(.step-slider--off):hover input.step-slider-input::-moz-range-thumb,
+.step-slider input.step-slider-input:focus-visible::-moz-range-thumb,
+.step-slider--drag input.step-slider-input::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #9D5CFF;
+}
+.step-slider:not(.step-slider--off):hover input.step-slider-input::-moz-range-track,
+.step-slider input.step-slider-input:focus-visible::-moz-range-track,
+.step-slider--drag input.step-slider-input::-moz-range-track { height: 8px; border-radius: 4px; background: transparent; }
+@media (prefers-reduced-motion: reduce) { .step-slider-bubble { transition: none; } }

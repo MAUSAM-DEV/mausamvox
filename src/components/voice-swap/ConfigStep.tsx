@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { StepSlider } from '@/components/ui/StepSlider'
 
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -295,14 +296,15 @@ export function ConfigStep({
               Style Intensity
               <span className="vs-ctrl-val">{styleIntensity}</span>
             </label>
-            <input
-              type="range"
+            <StepSlider
               min={1}
               max={10}
+              step={1}
               value={styleIntensity}
-              onChange={(e) => setStyleIntensity(Number(e.target.value))}
+              onChange={setStyleIntensity}
               className="vs-range"
               style={{ '--pct': `${(styleIntensity - 1) / 9 * 100}%` } as React.CSSProperties}
+              aria-label="Style Intensity"
             />
             <div className="vs-range-labels">
               <span>Subtle (1)</span>

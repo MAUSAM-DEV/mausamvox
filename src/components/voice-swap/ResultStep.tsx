@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
+import { StepSlider } from '@/components/ui/StepSlider'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -702,13 +703,14 @@ function FineTunePanel({
                   : `${fmtMSS(clampedStart)} – ${fmtMSS(clampedStart + FINE_TUNE_CLIP_SECONDS)}`}
               </span>
             </div>
-            <input
-              type="range"
+            <StepSlider
               className="vs-tune-slider"
               min={0} max={Math.max(maxStart, 1)} step={1}
               value={clampedStart}
               disabled={startDisabled}
-              onChange={(e) => setStartSeconds(Number(e.target.value))}
+              onChange={setStartSeconds}
+              format={fmtMSS}
+              aria-label="Preview start"
             />
           </div>
 
@@ -718,13 +720,14 @@ function FineTunePanel({
                 <span className="vs-tune-label">{s.label} <span className="vs-tune-hint">{s.hint}</span></span>
                 <span className="vs-tune-val">{s.fmt(params[s.key])}</span>
               </div>
-              <input
-                type="range"
+              <StepSlider
                 className="vs-tune-slider"
                 min={s.min} max={s.max} step={s.step}
                 value={params[s.key]}
                 disabled={busy}
-                onChange={(e) => setParam(s.key, Number(e.target.value))}
+                onChange={(v) => setParam(s.key, v)}
+                format={s.fmt}
+                aria-label={s.label}
               />
             </div>
           ))}
