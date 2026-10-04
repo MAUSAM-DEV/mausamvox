@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-04
 
+- **Crepe hop length 64 → 128 for Voice Swap** (dropouts 14.5 vs 17.9/min, same clarity, ~30% less compute); group-vocals warning confirmed live on Harmony Test. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `07ca436`
 - **Knob mouse wheel** — one notch = one step, page doesn't scroll over a knob. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `c33dd28`
 - **Hover sliders** (StepSlider: filled track, handle, live value bubble; arrows one step) on Style Intensity, Fine-tune and Song Studio length. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `13c35cf`
 - **Song-matched polish** (warmth/treble/reverb from the original singer; Raw · Match song · Reset to Studio). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `0c742b9`

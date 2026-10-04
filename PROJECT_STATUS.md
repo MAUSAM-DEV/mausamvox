@@ -6,6 +6,11 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-04 (later) — crepe hop 128 shipped (`07ca436`); group-vocals warning ✅ confirmed live
+
+- **Crepe hop 64 → 128 (`07ca436`)** — founder-approved after clarity test 2 (dropouts 14.5 vs 17.9/min, same clarity, ~30% less compute). One constant: `INDEXED_CREPE_HOP` in `src/lib/rvc-engine.ts`. **Live test:** one swap; it should finish a little faster than at hop 64.
+- **Group-vocals warning (`b612153`) ✅ confirmed live** by the founder on Harmony Test: the amber note appeared after the Lead & Backing cards loaded.
+
 ## ✅ SHIPPED 2026-10-04 — Voice Swap on our index engine + crepe, song-matched polish, hover sliders, knob wheel — ⚠️ founder live tests pending
 
 1. **Engine switch (`fc6c0d2`):** `RVC_ENGINE` unset → **indexed** = `mausam-dev/rvc-v2-index` `35029e83` with `mangio-crepe` hop 64; rollback `RVC_ENGINE=bare` (+ redeploy), `cover` kept. Warm pings (swap start, stems ready, Result screen) send `warm_only` to our engine (checked: cold boot 98 s, next conversion queued 0 s; app-shaped conversion used crepe + the voice index). Style Intensity default 8 → **3** (page + server); Regenerate steps +0.05 from the user's value; Fine-tune Voice strength starts at the swap's value; Smoothing slider hidden. **Live test:** a swap works; Vercel log shows the indexed version; Style Intensity 1 vs 10 sound different.
