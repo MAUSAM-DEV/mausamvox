@@ -11,7 +11,6 @@ import { ResultStep } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
-import { trimAudioToClip } from './audioClip'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
 import { detectMedianF0, autoOctaveShiftSemitones, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
 
@@ -22,7 +21,6 @@ const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 // Length of the short clip the Fine-tune panel renders for previews — keeps a
 // tuning render to ~12 s of vocal instead of the whole song (faster + cheaper).
-const PREVIEW_CLIP_SECONDS = 12
 // Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
 // premium-split button's affordability state; the server remains the real gate.
 const GENDER_SPLIT_COST = 250
@@ -205,14 +203,15 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // ResultStep's Share button point a public link at the SAVED track. Null
   // until the save lands (Share stays disabled) and reset on a new swap.
   const [persistedSwapId, setPersistedSwapId] = useState<string | null>(null)
-  // Caches the trimmed+uploaded 12 s preview clip for the current source vocal so
-  // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
-  // Keyed on sourceUrl + start + length: changing the start point (or clip length)
-  // must rebuild the clip, never serve the stale cached segment.
-  const tunedClipRef = useRef<{
-    sourceUrl: string; startSeconds: number; lengthSeconds: number
-    clipUrl: string; clipPath: string
-  } | null>(null)
+  // The last PREVIEW: its prediction, what it cost, and a fingerprint of the
+  // settings that produced it. "Save as full swap" (or Process Full Track with
+  // the same settings) saves THIS take — no re-conversion — and charges only
+  // 200 − what the preview already cost, so a user never pays twice.
+  const lastPreviewRef = useRef<{ key: string; predictionId: string; charged: number; at: number; saved: boolean } | null>(null)
+  const [previewSaveCost, setPreviewSaveCost] = useState<number | null>(null)
+  // Fingerprint of the last take SAVED as a full swap (preview-saved or converted).
+  // Same settings again would produce the same sound → never charge for it.
+  const lastSavedKeyRef = useRef<string | null>(null)
   // Deferred persist for full swaps: we wait until ResultStep has built + uploaded
   // the full-song mix, then persist with its path so Recent Swaps saves the FULL
   // track. The ref holds the swap context; armMixUpload tells ResultStep to upload
@@ -970,16 +969,77 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     return shift
   }
 
+  // Settings that determine a single-voice take. Same key → same sound (the
+  // engine settings are fixed server-side), so a saved preview IS the full swap.
+  function takeKey(): string {
+    return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
+  }
+  const FULL_SWAP_CREDITS = 200
+  // A preview's converted vocal comes from Replicate and expires after ~1 h, so
+  // only offer to save it within 50 minutes (after that, a normal full swap runs
+  // — still discounted by what the preview cost).
+  const PREVIEW_SAVE_WINDOW_MS = 50 * 60 * 1000
+  function savablePreview() {
+    const p = lastPreviewRef.current
+    if (!p || p.saved || Date.now() - p.at > PREVIEW_SAVE_WINDOW_MS || p.key !== takeKey() || !convertedVocalsUrl) return null
+    return p
+  }
+
+  // Save the previewed take as the full swap: charge 200 − what the preview
+  // cost, then let ResultStep build/upload the mix and persist it (the same path
+  // a full swap uses) — no new conversion.
+  function savePreviewAsFull() {
+    const p = savablePreview()
+    if (!p) return false
+    const cost = Math.max(0, FULL_SWAP_CREDITS - p.charged)
+    if (!isAdmin && creditsRemaining !== null && creditsRemaining < cost) {
+      showToast(`Saving this swap costs ${cost} credits, and you don't have enough. Top up to continue.`)
+      return true
+    }
+    if (!isAdmin && cost > 0) deductCredits(cost, 'voice_swap_full')
+    p.saved = true
+    lastSavedKeyRef.current = p.key
+    setPreviewSaveCost(null)
+    persistContextRef.current = {
+      predictionId: p.predictionId,
+      songName: stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+      voiceUsed: voices.find((v) => v.id === selectedVoiceId)?.name ?? 'Unknown Voice',
+    }
+    setArmMixUpload(true)
+    setStep(3)
+    showToast(p.charged > 0 ? `Saving your swap — ${cost} cr (your ${p.charged} cr preview counts toward it)` : 'Saving your swap — no re-conversion needed')
+    return true
+  }
+
+  // "Process Full Track": if this exact take was just previewed, save it (no
+  // re-conversion); if it was previewed but the preview audio has expired,
+  // re-convert but still subtract what the preview cost; otherwise a normal swap.
+  function handleFullClick() {
+    if (savePreviewAsFull()) return
+    if (lastSavedKeyRef.current === takeKey()) {
+      showToast('This exact take is already in your Saved Tracks — change the voice or pitch for a new one.', 6000)
+      return
+    }
+    const p = lastPreviewRef.current
+    const discount = p && !p.saved && p.key === takeKey() ? p.charged : 0
+    if (p && discount > 0) p.saved = true // the discount is used once
+    void handleProcess('full', { discount })
+  }
+
   async function handleProcess(
     type: 'preview' | 'full',
     opts: {
       charge?: boolean
+      // Credits already paid for a preview of this same take (re-convert path
+      // after the preview's audio expired) — deducted from the full price.
+      discount?: number
       // Fine-tune overrides for the remaining RVC quality params; omitted on
       // normal swaps so the server applies its defaults.
     } = {},
   ) {
     const {
       charge = true,
+      discount = 0,
     } = opts
     if (!stemResult) {
       showToast('Upload a track first')
@@ -1125,6 +1185,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
+        lastPreviewRef.current = null // a two-voice take replaced the result
+        setPreviewSaveCost(null)
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
           predictionId: dataA.data.predictionId as string,
@@ -1211,13 +1273,22 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setConvertedVocalsUrl(convertedUrl)
       setProcessing(false)
       setStep(3)
+      if (type === 'preview') {
+        const charged = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
+        lastPreviewRef.current = { key: takeKey(), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false }
+        setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
+      } else {
+        lastPreviewRef.current = null
+        setPreviewSaveCost(null)
+        lastSavedKeyRef.current = takeKey()
+      }
       if (type === 'full') console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full`)
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
 
       // Deduct credits and record swap (non-blocking).
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
       if (type === 'full') {
-        if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
+        if (charge && !isAdmin && FULL_SWAP_CREDITS - discount > 0) deductCredits(FULL_SWAP_CREDITS - discount, 'voice_swap_full')
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
           predictionId: startData.predictionId as string,
@@ -1253,124 +1324,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setSelectedVoiceId2(null)
     setIsDuet(false)
     setPersistedSwapId(null) // new track → Share must wait for its own save
-    tunedClipRef.current = null // new track → drop the cached preview clip
+    lastPreviewRef.current = null // new track → no previewed take to save
+    lastSavedKeyRef.current = null
+    setPreviewSaveCost(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
-
-  // Resolve the single-voice vocal stem to convert — mirrors handleProcess by
-  // reading the same duetTarget() source of truth, so the fine-tune preview tunes
-  // the exact stem the full swap will convert. Returns null when no source/voice.
-  function pickTuningVocalUrl(): string | null {
-    if (!stemResult) return null
-    const target = duetTarget()
-    if (target) return target.convertUrl
-    return (stemResult.leadVocalsUrl || stemResult.vocalsUrl) ?? null
-  }
-
-  // Fine-tune panel: render a SHORT (12 s) preview of the swap with the given RVC
-  // params, without disturbing the committed full result. Trims+uploads the clip
-  // once per source vocal (cached), then runs voice-convert as a preview and
-  // returns the converted 12 s vocal URL. Returns null on any failure (toasted).
-  async function runTunedPreview(startSeconds = 0): Promise<string | null> {
-    if (!stemResult) { showToast('Upload a track first'); return null }
-    const voice = voices.find((v) => v.id === selectedVoiceId)
-    if (!voice) { showToast('Select a voice first'); return null }
-    if (!voice.modelUrl && !voice.isLibrary) {
-      showToast(`"${voice.name}" is sample-only — train it in Voice Lab to tune.`)
-      return null
-    }
-    const sourceUrl = pickTuningVocalUrl()
-    if (!sourceUrl) { showToast('No vocal available to preview'); return null }
-
-    // Same auto key-match as the full swap (shared cache, and isDuetStem from the
-    // same duetTarget() source of truth), so the preview's pitch matches the
-    // committed render — including being skipped for duet stems.
-    const autoShift = await autoKeyShift(sourceUrl, voice.id, !!duetTarget())
-    const effectivePitch = clampPitch(autoShift + pitchShift)
-
-    try {
-      // 1. Reuse the cached clip for this source + segment, else trim → upload →
-      //    sign once. A different start point (or clip length) is a different
-      //    segment, so it must miss the cache and rebuild — never serve a stale clip.
-      const startFloor = Math.max(0, startSeconds)
-      let clip = tunedClipRef.current
-      if (
-        !clip ||
-        clip.sourceUrl !== sourceUrl ||
-        clip.startSeconds !== startFloor ||
-        clip.lengthSeconds !== PREVIEW_CLIP_SECONDS
-      ) {
-        const blob = await trimAudioToClip(sourceUrl, PREVIEW_CLIP_SECONDS, startFloor)
-
-        const presignRes = await fetch('/api/upload-stem/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: 'tuning-preview-12s.mp3', contentType: 'audio/mpeg' }),
-        })
-        const presign = await presignRes.json()
-        if (!presignRes.ok) throw new Error(presign.error ?? 'Failed to get upload URL')
-
-        const putRes = await fetch(presign.uploadUrl, {
-          method: 'PUT',
-          body: blob,
-          headers: { 'Content-Type': 'audio/mpeg', 'x-upsert': 'false' },
-        })
-        if (!putRes.ok) throw new Error(`Clip upload failed (${putRes.status})`)
-
-        const signRes = await fetch('/api/upload-stem/sign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: presign.path }),
-        })
-        const sign = await signRes.json()
-        if (!signRes.ok) throw new Error(sign.error ?? 'Failed to sign clip URL')
-
-        clip = {
-          sourceUrl, startSeconds: startFloor, lengthSeconds: PREVIEW_CLIP_SECONDS,
-          clipUrl: sign.url, clipPath: presign.path,
-        }
-        tunedClipRef.current = clip
-      }
-
-      // 2. Run voice-convert on the clip as a preview (server-fixed settings).
-      const startRes = await fetch('/api/voice-convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vocalsUrl: clip.clipUrl,
-          vocalsPath: clip.clipPath, // server re-signs from audio-uploads
-          voiceModelUrl: voice.modelUrl,
-          voiceId: voice.id,
-          pitchShift: effectivePitch,
-          isPreview: true,
-          trackKey: stemResult.storagePath || '',
-        }),
-      })
-      const startData = await startRes.json()
-      if (!startRes.ok) throw new Error(startData.error ?? 'Preview failed to start')
-      if (typeof startData.creditsRemaining === 'number') setCreditsRemaining(startData.creditsRemaining)
-
-      // 3. Poll to completion (clip is short, so this resolves fast).
-      const POLL_INTERVAL_MS = 4000
-      const MAX_ATTEMPTS = 150
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        const res = await fetch(`/api/voice-convert?id=${startData.predictionId}`)
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error ?? 'Preview failed')
-        if (data.status === 'succeeded') return data.convertedVocalsUrl as string
-        if (data.status === 'failed' || data.status === 'canceled') {
-          throw new Error(data.error ?? 'Preview failed')
-        }
-      }
-      throw new Error('Preview timed out')
-    } catch (err) {
-      console.error('[voice-swap] runTunedPreview threw:', err)
-      showToast(err instanceof Error ? err.message : 'Preview failed', 8000)
-      return null
-    }
-  }
-
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1447,7 +1405,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <ResultStep
                 onNewSwap={handleNewSwap}
                 onToast={showToast}
-                onTunedPreview={runTunedPreview}
                 convertedVocalsUrl={convertedVocalsUrl}
                 convertedVocalsUrl2={convertedVocalsUrl2}
                 stemResult={stemResult}
@@ -1460,6 +1417,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                   convertedVocalsUrl2 ? voices.find((v) => v.id === selectedVoiceId2)?.name : null,
                 ].filter(Boolean).join(' + ') || null}
                 persistedSwapId={persistedSwapId}
+                previewSaveCost={savablePreview() ? previewSaveCost : null}
+                onSavePreview={() => { savePreviewAsFull() }}
               />
             )}
           </div>
@@ -1474,7 +1433,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <span className="vs-credit-hint">
                 {isDualMode
                   ? 'Full swap ~400 cr (2 voices)'
-                  : 'Preview ~50 cr · Full swap ~200 cr'}
+                  : 'Preview free (first 2 per song), then 50 cr · Full swap 200 cr — a paid preview counts toward it'}
               </span>
               <div className="vs-action-btns">
                 <button
@@ -1508,9 +1467,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                     className="vs-btn-solid"
                     disabled={genderSplitting}
                     title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
-                    onClick={() => handleProcess('full')}
+                    onClick={handleFullClick}
                   >
-                    {guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
+                    {savablePreview()
+                      ? `💾 Save previewed take · ${previewSaveCost ?? FULL_SWAP_CREDITS} cr`
+                      : guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
                   </button>
                 )}
               </div>

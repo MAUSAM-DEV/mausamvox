@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
-import { StepSlider } from '@/components/ui/StepSlider'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -16,11 +15,6 @@ type FullMixState = 'mixing' | 'ready' | 'error' | 'no-stems'
 interface ResultStepProps {
   onNewSwap: () => void
   onToast: (msg: string) => void
-  // Fine-tune panel: render a short 12 s preview with the given RVC params,
-  // starting at an optional offset (seconds) so the user can skip music-only
-  // intros (resolves to the converted vocal URL, or null on failure), and commit
-  // a chosen take to a full-song render.
-  onTunedPreview: (startSeconds?: number) => Promise<string | null>
   convertedVocalsUrl: string | null
   stemResult: StemResult | null
   // Duet Mode 1: the singer that was NOT converted. When present, the swapped
@@ -45,6 +39,10 @@ interface ResultStepProps {
   // Share needs it (a public link points at the SAVED track); null disables
   // the Share button with a "saving…" hint until the save lands.
   persistedSwapId?: string | null
+  // Set while the result is an UNSAVED preview that can be saved as the full
+  // swap without re-converting: the credits it will cost (200 − paid preview).
+  previewSaveCost?: number | null
+  onSavePreview?: () => void
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -612,141 +610,14 @@ function PolishKnob({
 }
 
 // ---------------------------------------------------------------------------
-// Section preview — pick a start point and render a short 12 s preview.
-// (The tuning sliders, A/B and "Apply to full track" were removed 2026-10-04:
-// none of the settings was audible to the founder across its full range, and
-// Apply charged 200 cr for a take that sounded the same. Settings are fixed
-// server-side — VOICE_SWAP_* in src/lib/rvc-engine.ts.)
-// ---------------------------------------------------------------------------
-
-// Clip length the preview renders — mirrors PREVIEW_CLIP_SECONDS in
-// VoiceSwapPage (kept local to avoid a circular import). Only used here to bound
-// the start-point control; the real window is clamped server-side in trimAudioToClip.
-const FINE_TUNE_CLIP_SECONDS = 12
-
-// Format a number of seconds as m:ss for the start-point label.
-const fmtMSS = (s: number) => {
-  const t = Math.max(0, Math.floor(s))
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
-}
-
-function FineTunePanel({
-  onTunedPreview, onToast, durationSeconds,
-}: {
-  onTunedPreview: (startSeconds?: number) => Promise<string | null>
-  onToast: (msg: string) => void
-  // Source song length (seconds) — bounds the start-point control. 0 until the
-  // main player has loaded metadata, or when unknown.
-  durationSeconds: number
-}) {
-  const [open, setOpen] = useState(false)
-  const [startSeconds, setStartSeconds] = useState(0)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  // Latest valid start point: 0..(duration − clip). When the song is shorter than
-  // one clip (or duration unknown), there's no room to move the start.
-  const maxStart = Math.max(0, Math.floor(durationSeconds) - FINE_TUNE_CLIP_SECONDS)
-  const startDisabled = busy || maxStart <= 0
-  const clampedStart = Math.min(startSeconds, maxStart)
-
-  // Mini player — vocals-only, 12 s, independent of the main full-song player.
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-
-  async function handlePreview() {
-    if (busy) return
-    setBusy(true)
-    onToast('Rendering 12-sec preview…')
-    const url = await onTunedPreview(clampedStart)
-    setBusy(false)
-    if (!url) return // failure already toasted upstream
-    setPreviewUrl(url)
-    onToast('Preview ready')
-  }
-
-  function handleTogglePlay() {
-    const a = audioRef.current
-    if (!a || !previewUrl) return
-    if (a.paused) a.play().catch(() => {})
-    else a.pause()
-  }
-
-  return (
-    <div className="vs-tune">
-      <button className="vs-tune-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="vs-tune-head-title">🎧 Preview a section <span className="vs-tune-adv">12 sec</span></span>
-        <span className="vs-tune-chev">{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
-        <div className="vs-tune-body">
-          {/* Preview start point — skip music-only intros, audition any 12 s window. */}
-          <div className="vs-tune-row">
-            <div className="vs-tune-rowtop">
-              <span className="vs-tune-label">Preview start <span className="vs-tune-hint">m:ss</span></span>
-              <span className="vs-tune-val">
-                {startDisabled && maxStart <= 0
-                  ? '0:00 (full clip)'
-                  : `${fmtMSS(clampedStart)} – ${fmtMSS(clampedStart + FINE_TUNE_CLIP_SECONDS)}`}
-              </span>
-            </div>
-            <StepSlider
-              className="vs-tune-slider"
-              min={0} max={Math.max(maxStart, 1)} step={1}
-              value={clampedStart}
-              disabled={startDisabled}
-              onChange={setStartSeconds}
-              format={fmtMSS}
-              aria-label="Preview start"
-            />
-          </div>
-
-          <div className="vs-tune-actions">
-            <button className="vs-tune-preview-btn" onClick={handlePreview} disabled={busy}>
-              {busy ? '⏳ Rendering…' : '▶ Preview 12 sec'}
-            </button>
-            <span className="vs-tune-cost">First 2/track free · 50 cr after</span>
-          </div>
-
-          {previewUrl && (
-            <div className="vs-tune-compare">
-              <audio
-                ref={audioRef}
-                src={previewUrl}
-                preload="metadata"
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
-                onEnded={() => { setPlaying(false); setProgress(0) }}
-                onTimeUpdate={() => {
-                  const a = audioRef.current
-                  if (a && a.duration) setProgress(a.currentTime / a.duration)
-                }}
-              />
-              <div className="vs-tune-mini">
-                <button className="vs-play-btn" onClick={handleTogglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-                  {playing ? '⏸' : '▶'}
-                </button>
-                <div className="vs-tune-bar"><div className="vs-tune-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
-                <span className="vs-tune-side">Preview</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
   onNewSwap, onToast,
-  onTunedPreview,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId,
+  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -1503,14 +1374,16 @@ export function ResultStep({
           </div>
         )}
 
-        {/* Fine-tune panel — single-voice swaps only for v1 (duet tuning is a
-            follow-up). Hidden when a second converted vocal is present. */}
-        {!convertedVocalsUrl2 && (
-          <FineTunePanel
-            onTunedPreview={onTunedPreview}
-            onToast={onToast}
-            durationSeconds={duration}
-          />
+
+        {/* Unsaved preview → save it as the full swap (no re-conversion) */}
+        {previewSaveCost != null && onSavePreview && (
+          <div className="vs-save-preview">
+            <div className="vs-save-preview-txt">
+              <strong>This is a preview — not saved yet.</strong> Like it? Save this exact take as your full swap —
+              no re-conversion{previewSaveCost < 200 ? <>, and the {200 - previewSaveCost} cr you paid for the preview counts toward it</> : null}.
+            </div>
+            <button className="vs-save-preview-btn" onClick={onSavePreview}>💾 Save as full swap · {previewSaveCost} cr</button>
+          </div>
         )}
 
         {/* Download / Share */}
@@ -1679,6 +1552,17 @@ export function ResultStep({
           font-variant-numeric: tabular-nums;
         }
         .vs-polish-foot { font-size: 11px; color: #8E8EB4; margin-top: 8px; text-align: center; }
+        .vs-save-preview {
+          display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+          padding: 12px 14px; margin-bottom: 14px; border-radius: 10px;
+          background: rgba(157,92,255,.08); border: 1px solid rgba(157,92,255,.35);
+        }
+        .vs-save-preview-txt { font-size: 12px; color: #C4C4E0; line-height: 1.5; flex: 1 1 260px; }
+        .vs-save-preview-txt strong { color: #F0F0FF; }
+        .vs-save-preview-btn {
+          padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+          background: linear-gradient(135deg,#9D5CFF,#F9459E); color: #fff; font-size: 13px; font-weight: 700;
+        }
         .vs-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-dl-btn {
           padding: 10px 20px; border-radius: 8px;

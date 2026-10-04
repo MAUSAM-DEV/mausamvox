@@ -179,6 +179,9 @@ export async function POST(req: NextRequest) {
     // that triggered auth); user is guaranteed non-null here when isPreview is true.
     let previewRefund: { userId: string; trackKey: string; amount: number } | null = null
     let creditsRemaining: number | null = null
+    // Credits this preview cost (0 = free preview / admin / full swap). The client
+    // subtracts it when the same take is saved as the full swap (never pay twice).
+    let previewCharged = 0
     if (isPreview) {
       if (!user) {
         // Defensive — can't happen: auth ran above when isPreview is true.
@@ -208,6 +211,7 @@ export async function POST(req: NextRequest) {
         }
         if (row.charged > 0) {
           previewRefund = { userId: user.id, trackKey, amount: row.charged }
+          previewCharged = row.charged
         }
         // Surface the new balance so the client can update its display.
         creditsRemaining = row.credits_remaining
@@ -333,7 +337,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status})`)
 
-    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining })
+    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining, previewCharged })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-convert] unhandled error:', msg)
