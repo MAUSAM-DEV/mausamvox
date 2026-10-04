@@ -201,13 +201,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
-  // Number of regenerates done on the current track (0–2). Each regenerate
-  // steps index_rate up (0.80 → 0.85 → 0.90) for a progressively stronger
-  // voice match. Reset to 0 on a new track (handleNewSwap). Capped at 2.
-  const [regenCount, setRegenCount] = useState(0)
   // The saved voice_swaps row id from the latest successful persist — lets
   // ResultStep's Share button point a public link at the SAVED track. Null
-  // until the save lands (Share stays disabled) and reset on new swap/regen.
+  // until the save lands (Share stays disabled) and reset on a new swap.
   const [persistedSwapId, setPersistedSwapId] = useState<string | null>(null)
   // Caches the trimmed+uploaded 12 s preview clip for the current source vocal so
   // repeated Fine-tune previews reuse the same segment (consistent A/B, no re-upload).
@@ -224,7 +220,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const persistContextRef = useRef<{ predictionId: string; songName: string; voiceUsed: string } | null>(null)
   const [armMixUpload, setArmMixUpload] = useState(false)
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
-  // per target voiceId and per source stem URL, so repeated swaps / regenerates of
+  // per target voiceId and per source stem URL, so repeated swaps of
   // the same pair don't re-fetch + re-decode the same audio.
   const targetF0Ref = useRef<Record<string, MedianF0 | null>>({})
   const sourceF0Ref = useRef<Record<string, MedianF0 | null>>({})
@@ -980,14 +976,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       charge?: boolean
       // Fine-tune overrides for the remaining RVC quality params; omitted on
       // normal swaps so the server applies its defaults.
-      // Only Regenerate counts toward the per-track voice-strength cap. Apply-to-full
-      // from the tuning panel also sets indexRateOverride but must NOT burn a regen.
-      isRegen?: boolean
     } = {},
   ) {
     const {
       charge = true,
-      isRegen = false,
     } = opts
     if (!stemResult) {
       showToast('Upload a track first')
@@ -1133,10 +1125,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
-        // A regenerate succeeded — count it toward the per-track cap. Only on
-        // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
-        // also sets indexRateOverride but passes isRegen:false, so it's exempt.
-        if (isRegen) setRegenCount((c) => c + 1)
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
           predictionId: dataA.data.predictionId as string,
@@ -1230,10 +1218,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
       if (type === 'full') {
         if (charge && !isAdmin) deductCredits(200, 'voice_swap_full')
-        // A regenerate succeeded — count it toward the per-track cap. Only on
-        // success, so a failed regen doesn't burn a take. Apply-to-full (tuning)
-        // also sets indexRateOverride but passes isRegen:false, so it's exempt.
-        if (isRegen) setRegenCount((c) => c + 1)
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
           predictionId: startData.predictionId as string,
@@ -1268,33 +1252,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setDuetSinger('male')
     setSelectedVoiceId2(null)
     setIsDuet(false)
-    setRegenCount(0) // new track → reset the voice-strength ladder
     setPersistedSwapId(null) // new track → Share must wait for its own save
     tunedClipRef.current = null // new track → drop the cached preview clip
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
-  }
-
-  // Max regenerates allowed per track (3 total takes: 1 initial + 2 regens).
-  const MAX_REGENS = 2
-
-  // Re-runs the current swap with a stepped-up index_rate for a progressively
-  // stronger voice match: regen 1 → 0.85, regen 2 → 0.90 (initial swap is 0.80).
-  // Capped at MAX_REGENS per track; each regenerate charges credits normally.
-  async function handleRegenerate() {
-    if (regenCount >= MAX_REGENS) {
-      showToast('Maximum voice strength reached for this track.')
-      return
-    }
-    const isDualMode = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl) && (duetMode === "both-split" || duetMode === "both-same")
-    const regenCost = isDualMode ? 400 : 200
-    if (creditsRemaining !== null && creditsRemaining < regenCost) {
-      showToast(`Regenerating costs ${regenCost} credits, and you don't have enough. Top up to continue.`)
-      return
-    }
-    // A regen persists a NEW row — clear the old id so Share can't briefly
-    // point a link at the previous take while the new save is in flight.
-    setPersistedSwapId(null)
-    await handleProcess('full', { charge: true, isRegen: true })
   }
 
   // Resolve the single-voice vocal stem to convert — mirrors handleProcess by
@@ -1486,8 +1446,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             {step === 3 && (
               <ResultStep
                 onNewSwap={handleNewSwap}
-                onRegenerate={handleRegenerate}
-                regenCapReached={regenCount >= MAX_REGENS}
                 onToast={showToast}
                 onTunedPreview={runTunedPreview}
                 convertedVocalsUrl={convertedVocalsUrl}

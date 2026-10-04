@@ -15,13 +15,6 @@ type FullMixState = 'mixing' | 'ready' | 'error' | 'no-stems'
 
 interface ResultStepProps {
   onNewSwap: () => void
-  // Each regenerate steps index_rate up for a progressively stronger voice
-  // match and always charges credits. The page owns the per-track cap (max 2
-  // regenerates / 3 total takes); this component just disables the button and
-  // shows the cap message when regenCapReached is set.
-  onRegenerate: () => void
-  // True once the per-track regenerate cap is hit — disables the button.
-  regenCapReached: boolean
   onToast: (msg: string) => void
   // Fine-tune panel: render a short 12 s preview with the given RVC params,
   // starting at an optional offset (seconds) so the user can skip music-only
@@ -750,7 +743,7 @@ function FineTunePanel({
 // ResultStep
 // ---------------------------------------------------------------------------
 export function ResultStep({
-  onNewSwap, onRegenerate, regenCapReached, onToast,
+  onNewSwap, onToast,
   onTunedPreview,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId,
@@ -954,9 +947,9 @@ export function ResultStep({
   const pendingPlayRef = useRef(false)
   const seekingRef = useRef(false)
 
-  // Pre-warm the bare-RVC pool the moment the result screen appears: a
-  // regenerate or fine-tune "Apply to Full Track" from here starts minutes
-  // from now, past the pool's observed re-chill window (<7 min, 2026-07-05).
+  // Pre-warm the RVC pool the moment the result screen appears: a "Preview a
+  // section" render from here can start minutes from now, past the pool's
+  // observed re-chill window (<7 min, 2026-07-05).
   // Fire-and-forget — the server no-ops on the cover engine and rate-limits.
   useEffect(() => {
     fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {})
@@ -1520,26 +1513,6 @@ export function ResultStep({
           />
         )}
 
-        {/* Regen row */}
-        <div className="vs-regen-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#8E8EB4' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M4 4v5h5M20 20v-5h-5" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
-              <path d="M20 9A8 8 0 0 0 5.66 5.66M4 15a8 8 0 0 0 14.34 3.34" stroke="#9D5CFF" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            {regenCapReached ? (
-              <>Maximum voice strength reached for this track.</>
-            ) : (
-              <>Regenerate for a <strong style={{ color: '#9D5CFF' }}>stronger voice match</strong> · costs <strong style={{ color: '#9D5CFF' }}>200 cr</strong></>
-            )}
-          </div>
-          <button
-            className="vs-regen-btn"
-            onClick={() => onRegenerate()}
-            disabled={regenCapReached}
-          >↺ Regenerate</button>
-        </div>
-
         {/* Download / Share */}
         <div className="vs-dl-row">
           <button
@@ -1706,18 +1679,6 @@ export function ResultStep({
           font-variant-numeric: tabular-nums;
         }
         .vs-polish-foot { font-size: 11px; color: #8E8EB4; margin-top: 8px; text-align: center; }
-        .vs-regen-row {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 10px 14px; background: #0E0E20; border: 1px solid #2E2E56;
-          border-radius: 10px; margin-bottom: 14px;
-        }
-        .vs-regen-btn {
-          padding: 5px 14px; border-radius: 6px;
-          border: 1px solid rgba(157,92,255,.3); background: rgba(157,92,255,.08);
-          color: #9D5CFF; font-size: 12px; font-weight: 600;
-          cursor: pointer; transition: all 0.2s;
-        }
-        .vs-regen-btn:hover { background: rgba(157,92,255,.16); }
         .vs-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-dl-btn {
           padding: 10px 20px; border-radius: 8px;
