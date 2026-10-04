@@ -4,6 +4,8 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-04
 
+- **Regenerate removed** — it charged 200 cr (400 duet) for a take that sounded the same. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `65e46ed`
+- **Inaudible Voice Swap controls removed** (Style Intensity, Fine-tune Voice strength / Breath guard / Volume envelope, Apply to full track) — settings fixed server-side; Result panel → "Preview a section"; landing claims made honest. Also: "Mausam (Singing)" voice added to the founder's My Voices (data, verified via the live proxy + one conversion). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `f426e34`
 - **Live check of Style Intensity & Fine-tune (no app code).** Live session sent index 0.3 and 0.8 only (no 1/10 swaps reached the engine); index always loaded. Style Intensity = Voice strength (same index_rate). Effects vs run-to-run on the founder's song: Voice strength 0.1↔1.0 1.8× but identity flat; protect 1.05× (none); volume envelope 1.5× (measurable dynamics). Identity is driven by the voice model (singing clone 0.73–0.79 vs speech-trained MKIPHONE 0.60). Regenerate charges 200 cr for an inaudible change — flagged. Recommendations + corrected Quick Voice plan await approval. `tsc --noEmit` clean; clean `npm ci && npm run build` passed.
 - **Crepe hop length 64 → 128 for Voice Swap** (dropouts 14.5 vs 17.9/min, same clarity, ~30% less compute); group-vocals warning confirmed live on Harmony Test. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `07ca436`
 - **Knob mouse wheel** — one notch = one step, page doesn't scroll over a knob. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `c33dd28`

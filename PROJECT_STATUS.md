@@ -6,6 +6,19 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-04 (evening) — inaudible controls + Regenerate removed; "Mausam (Singing)" voice added — ⚠️ founder live tests pending
+
+1. **Controls removed (`f426e34`):** Style Intensity (Configure), Fine-tune Voice strength, Breath/consonant guard, Volume envelope, and "Apply to full track" (charged 200 cr for an identical take). Settings fixed server-side in `src/lib/rvc-engine.ts` (`VOICE_SWAP_INDEX_RATE` 0.3, `_PROTECT` 0.2, `_RMS_MIX_RATE` 0.25, `_FILTER_RADIUS` 4); `/api/voice-convert` ignores client values. Result panel is now **"Preview a section"** (Preview start + 12-sec preview, 2 free/track then 50 cr). Landing made honest (no fine-tune/regenerate, style-intensity/age/accent, quality-score or free-regenerate claims). **Live test:** Configure shows no Style Intensity; Result shows "Preview a section" only.
+2. **Regenerate removed (`65e46ed`)** — button, 200/400-cr charge, per-track counter. **Live test:** no Regenerate row on the Result screen.
+3. **"Mausam (Singing)" in My Voices** (voice `12e16c4b…`, type studio, ready): the 3-min / 50-epoch clone from the founder's singing recording; model at `voice-models/<uid>/12e16c4b….zip` (103.9 MB), singing sample `voice-samples/<uid>/1791090476358-sample.mp3` (auto key-match); proxy returns 307 + downloads; an app-shaped conversion through it succeeded (crepe + index loaded). **Live test:** pick it in Voice Swap.
+4. **Open question:** "Preview a section" re-renders the same settings as the finished swap (paid after 2/track); and Configure's ▶ Preview converts the whole song, then Full swap converts it again for 200 cr — both may conflict with "never pay for a take that sounds the same". Founder to decide.
+
+**PLAN (not built) — "Sing, don't speak" in Voice Lab + Quick Voice recorder:**
+- **Why (copy):** "Your voice model learns from what you give it. If you talk, it learns how you talk — so on a song the high notes, held notes and slides fall back to the original singer. Sing instead. In our test, a model trained on 3 minutes of singing matched the singer's own voice clearly better than one trained on speech (voice-match 0.73–0.79 vs 0.60)."
+- **Where:** Voice Lab setup cards (Express/Studio), Quick/Pro record headers, the upload step ("Upload a recording of you **singing** — no music"), and replace the read-aloud scripts (`recordingScripts.ts`) with singing prompts.
+- **Upload check (optional, free):** flag recordings that look like speech (few sustained pitched notes) → "This sounds like talking — sing for a better voice"; never blocks.
+- **Quick Voice recorder (1 min, any language):** language picker (Song Studio's 26 + "Other") or "Sing a song of my own"; 0:00–0:10 hum + slides · 0:10–0:30 a verse in the chosen language (pre-written & native-checked for main languages, AI-drafted & editable for others) · 0:30–0:45 chorus higher with 2 held high notes · 0:45–0:55 soft quiet high notes + held vowels · 0:55–1:00 a fast wordy line; quiet-room check + level meter reused; train at 50 epochs (≈ $0.07; 1 min ≈ 3 min in tests); phone-first.
+
 ## 🎛️ STYLE INTENSITY & FINE-TUNE CHECK ON THE LIVE APP (2026-10-04) — no app change; recommendations AWAITING APPROVAL
 
 - **Live requests (Replicate records, 03:11–03:36 UTC):** the founder's live session sent our engine exactly 4 conversions — full swap index 0.3 (Style Intensity 3 default), Fine-tune preview 0.8, Apply-to-full 0.8, preview 0.8 with volume envelope 0.6 — all with crepe and `index file: added_IVF86…` loaded. **No swap at Style Intensity 1 or 10 reached the engine** (no result cache exists) — the 1-vs-10 comparison was most likely Fine-tune Voice strength 0.3 vs 0.8, or the Configure slider moved without re-running.
