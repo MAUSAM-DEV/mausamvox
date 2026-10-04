@@ -20,7 +20,7 @@ Founder heard a clear difference in all 17 "Option test" clips → all 7 built.
   - Key finder: on 5 songs, the scale-vs-octaves decision agreed with a librosa CQT key finder on all 5.
   - Scale harmony: 93% of notes in key vs 35% for a fixed +4 (E-minor test song).
   - Real browser (local dev, founder's song stems, real Result screen): all 7 controls render with no fallbacks; Character ±4 moved brightness +1.1/−1.5 dB (as strong as the WORLD clips); Key ±2 relabels harmony keys correctly; everything on at once ≈ 14 s in the dev build.
-  - Auto-tune engine, 3 live conversions (≈ $0.03), held notes within ±10 cents: Off 41.9% = today 41.7% (spectral diff 0.43 < run-to-run 0.54); Light 54.8%; Strong 68.1%.
+  - Auto-tune engine, 3 live conversions (≈ $0.03), held notes within ±10 cents: Off 41.9% = today 41.7% (spectral diff 0.43 < run-to-run 0.54); Light 54.8%; Strong 68.1%. Finer check (2-cent resolution, held notes only), median off-pitch: today 9.5 c · Off 9.5 c · Light 5.5 c · Strong 1.5 c = the WORLD clip 3b the founder heard (1.5 c); within ±10 c: Strong 90.9% vs clip 97.7%.
 - **Live tests:**
   1. Configure → Key +2 → swap → song higher, drums steady; "Key +2" chip on Result.
   2. Auto-tune Strong → notes snap (compare Off).
