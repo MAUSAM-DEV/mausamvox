@@ -494,6 +494,12 @@ function PlayerWaveCanvas({ playing }: { playing: boolean }) {
 // a unipolar range (resetTo = min) it fills from the left end exactly as before.
 // ---------------------------------------------------------------------------
 const KNOB_SWEEP = 270 // degrees of dial travel; gap centered at the bottom
+// Mouse-wheel tuning for the knobs (see PolishKnob): deltas at least this big are
+// notched-wheel clicks; smaller isolated events (gap > KNOB_WHEEL_GAP_MS) count as
+// one notch; continuous small deltas (trackpad / Magic Mouse) add up per step.
+const KNOB_WHEEL_NOTCH_PX = 40
+const KNOB_WHEEL_GAP_MS = 120
+const KNOB_WHEEL_SMOOTH_PX = 20
 
 function PolishKnob({
   id, label, hint, value, onChange, format, min = 0, max = 100, step = 1, resetTo = 0,
@@ -503,6 +509,43 @@ function PolishKnob({
   min?: number; max?: number; step?: number; resetTo?: number
 }) {
   const drag = useRef<{ startY: number; startValue: number } | null>(null)
+  // Mouse wheel over the knob: one notch = one step (1% on the % knobs, 1 dB on
+  // Bass/Treble); wheel up = more. A native NON-passive listener so the page
+  // doesn't scroll while the pointer is over the knob (React's onWheel is passive).
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const live = useRef({ value, onChange, min, max, step })
+  live.current = { value, onChange, min, max, step }
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    let acc = 0, last = 0
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const now = performance.now(), isolated = now - last > KNOB_WHEEL_GAP_MS
+      last = now
+      const dir = -Math.sign(e.deltaY)
+      if (dir === 0) return
+      let steps = 0
+      if (e.deltaMode === 1) {                       // lines (Firefox): 3 lines ≈ 1 notch
+        acc += -e.deltaY / 3; steps = Math.trunc(acc); acc -= steps
+      } else if (e.deltaMode === 2) {                // pages
+        steps = dir
+      } else if (Math.abs(e.deltaY) >= KNOB_WHEEL_NOTCH_PX) {
+        steps = dir * Math.max(1, Math.round(Math.abs(e.deltaY) / 100))  // classic notched wheel (~100 px)
+        acc = 0
+      } else if (isolated) {                         // a lone small event = one Mac mouse notch
+        steps = dir; acc = 0
+      } else {                                       // trackpad / Magic Mouse stream
+        acc += -e.deltaY / KNOB_WHEEL_SMOOTH_PX; steps = Math.trunc(acc); acc -= steps
+      }
+      if (steps === 0) return
+      const k = live.current
+      const next = Math.max(k.min, Math.min(k.max, Math.round((k.value + steps * k.step) / k.step) * k.step))
+      if (next !== k.value) k.onChange(next)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
   const r = 19, c = 24, circ = 2 * Math.PI * r
   const sweepFrac = KNOB_SWEEP / 360
   const range = max - min
@@ -524,7 +567,7 @@ function PolishKnob({
   }
 
   return (
-    <div className="vs-knob" title={hint}>
+    <div className="vs-knob" title={hint} ref={wrapRef}>
       <svg
         width="48" height="48" viewBox="0 0 48 48"
         role="slider" tabIndex={0} aria-label={label}
