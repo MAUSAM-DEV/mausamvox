@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-05
+
+- **Instant knobs + reliable Play/Pause** (live Web Audio mix graph; saved/downloaded file = same graph offline), **Auto Song Key** default (median sung note → voice's; Pehla Pyaar −3 = Diagnosis 6), **backing without the second voice** (same-note doubles of the original lead removed), Studio default polish. Diagnosis: MVSEP karaoke tested (2 jobs) + 1 conversion (~$0.02). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `f48cba0`
+
 ## 2026-10-04
 
 - **Live-test fixes:** Save works after 50 min (converted voice kept in the page; persist accepts the browser mix after Replicate deletes its output; never silent), backing vocals/chorus restored in both mixes, Play/Pause follows the player across re-renders, phone layout for Result/Configure, Key + Auto-tune reset per song. Diagnosis: robotic = Auto-tune Strong, two voices = Blend; engine fine on high notes (4 conversions ≈ $0.06, 7 Diagnosis clips). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `5f037ca`

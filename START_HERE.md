@@ -37,6 +37,7 @@ Users never see engine names (enforced in code).
 
 ## 4. Open items (most important first)
 
+0. **Shipped 2026-10-05 — test on live:** instant knobs + Play/Pause (live mix), Auto Song Key, backing without the second voice (`f48cba0`). Listen: 10 "Second voice" clips.
 0. **Shipped 2026-10-04 (late night) — test on live:** live-test fixes (`5f037ca`): Save after a long session, backing vocals back, Play/Pause state, phones. Listen: 7 "Diagnosis" clips (two voices = Blend, robotic = Auto-tune Strong).
 0. **Shipped 2026-10-04 (night) — test on live:** 7 audible controls (`6d94845`): Song Key + Auto-tune on Configure; Level / Blend / Character / Add harmony + Concert Hall / Lo-fi / Radio on Result. Engine now `255794a3` (rollback: previous version id in git history of `src/lib/rvc-engine.ts`).
 0. **Shipped 2026-10-04 (late) — test on live:** Full swap saves the previewed take, total never above 200 cr (`ced3cdc`). **Your ears needed:** 17 "Option test" clips for replacement controls — only clearly audible ones get built.

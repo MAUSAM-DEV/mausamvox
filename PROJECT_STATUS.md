@@ -6,6 +6,33 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-05 — instant knobs, Play/Pause, Auto key, no second voice (`f48cba0`) — ⚠️ founder live tests pending
+
+Founder: Diagnosis 6 (Key −3) sounds most like him, 5 also great; 6 still had two voices; Play/Pause still wrong; knobs slow.
+
+- **Diagnosis 5 vs 6 settings:**
+  - Both: Mausam (Singing); engine index 0.3, protect 0.2, rms 0.25, crepe hop 128; auto-tune, blend, character and harmony off; Studio polish; backing vocals mixed in.
+  - 5: key 0. 6: key −3 (music except drums, backing and voice).
+- **Second voice in 6:**
+  - Not Blend (6 had none).
+  - Not lead leaking into the backing: coherence with the lead 0.06, the same as drums.
+  - Cause: the backing stem sings the lead's notes (doubles / unison).
+    - UVR KARA_2: 19.5 s at −27 dB; leaves 34.5 s of faint chorus in the lead.
+    - MVSEP BS-Roformer karaoke (sep_type 49, add_opt1 6 — API sep_type = algorithm render_id): 91 s at −18.5 dB; only 7.6 s of chorus left in the lead.
+  - 10 labelled "Second voice" clips in Saved Tracks.
+  - Fix shipped = clip 4 approach: `src/lib/audio-dsp/doubles.ts` cuts the backing −20 dB on the original lead's harmonics only where the lead sings; harmonies/chorus elsewhere untouched.
+  - Pehla Pyaar: doubles −20.5 → −32.4 dB under the lead, backing overall −1.7 dB, 1.6 s per song. The Original side keeps the raw backing.
+  - MVSEP not adopted (more doubles in its backing; extra cost per song).
+- **Auto Song Key (default):** song's median sung note → the voice sample's median (YIN, `pitchStats`), ±4, Original if < 20 s of clear pitch.
+  - Pehla Pyaar / live song / harmony song → −3 each for Mausam (Singing) (= Diagnosis 6).
+  - High-note (p95) rules were rejected: three pitch trackers disagreed by up to 12 st on the top of the range.
+  - Configure shows "Auto · −3" with Auto / Original buttons; − / + switch to manual. Duet stems: Auto = Original.
+- **Instant knobs / Play/Pause (`liveMix.ts`):** one Web Audio graph (MixGraph) played live by LivePlayer and rendered offline for the saved/downloaded file (same nodes, seeded reverb).
+  - Final stage: ×0.7 headroom → limiter (−3 dB) → −1 dB trim.
+  - Verified locally (Pehla Pyaar): 13 knob/preset/tab changes while playing all kept Pause + time moving; paused stays paused; Level −9 vs 0 = −8.5 dB within 0.4 s; Radio −7 dB treble; download 272.6 s rendered in ~9 s, peak −1.3 dB, 0 clipped (Level +9: −0.2 dB, 0 clipped).
+  - Instant: Level, Blend, Warmth, Bass, Treble, Reverb, Echo, presets, Vocals only, Original/Swapped. A few seconds: Character, Harmony (worker). Key: conversion.
+- **Default polish:** Studio (as in 6); Match song worked out in the background, one tap.
+
 ## ✅ SHIPPED 2026-10-04 (late night) — live-test fixes (`5f037ca`) + "two voices / robotic" diagnosis — ⚠️ founder live tests pending
 
 Founder live test (Pehla Pyaar, Mausam (Singing), Key +2, Auto-tune Strong, Blend 20%, Character −1): all knobs worked; 7 issues reported.
