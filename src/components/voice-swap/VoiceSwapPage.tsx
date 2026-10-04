@@ -440,7 +440,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // ('male') — previously 'Female', which silently converted the female stem and
   // left the original male untouched when a user picked "male" in the duet picker.
   const [gender, setGender] = useState<Gender>('Male')
-  const [styleIntensity, setStyleIntensity] = useState(8)
+  // Default 3 (index 0.3): clearest words on a solo test song (80% vs 75% at the
+  // old default 8, 62% at 0 — 2026-10-04). Users can still set 1–10.
+  const [styleIntensity, setStyleIntensity] = useState(3)
   const [pitchShift, setPitchShift] = useState(0)
 
   // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
@@ -1321,8 +1323,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // A regen persists a NEW row — clear the old id so Share can't briefly
     // point a link at the previous take while the new save is in flight.
     setPersistedSwapId(null)
-    // Initial swap = 0.80 (styleIntensity 8). Each regen steps +0.05.
-    const indexRate = 0.8 + 0.05 * (regenCount + 1)
+    // Each regen steps voice strength up +0.05 from the user's Style Intensity
+    // (index = styleIntensity / 10), capped at 1.
+    const indexRate = Math.min(1, styleIntensity / 10 + 0.05 * (regenCount + 1))
     await handleProcess('full', { charge: true, indexRateOverride: indexRate, isRegen: true })
   }
 
@@ -1532,6 +1535,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             )}
             {step === 3 && (
               <ResultStep
+                styleIntensity={styleIntensity}
                 onNewSwap={handleNewSwap}
                 onRegenerate={handleRegenerate}
                 regenCapReached={regenCount >= MAX_REGENS}

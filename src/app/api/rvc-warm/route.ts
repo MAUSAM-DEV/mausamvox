@@ -7,7 +7,7 @@ export const maxDuration = 15
 
 // POST /api/rvc-warm
 //
-// Auth-gated, fire-and-forget pre-warm of the bare-RVC pool (PROJECT_STATUS
+// Auth-gated, fire-and-forget pre-warm of the RVC pool (indexed or bare) (PROJECT_STATUS
 // §6). The client calls this when the Result screen mounts: a regenerate or
 // fine-tune "Apply to Full Track" from there lands minutes later — past the
 // pool's observed re-chill window (<7 min, 2026-07-05) — so the stem-split
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   }
 
-  if (rvcEngine() !== 'bare') {
+  if (rvcEngine() === 'cover') {
     return NextResponse.json({ warmed: false, reason: 'cover engine — no pre-warm needed' })
   }
 

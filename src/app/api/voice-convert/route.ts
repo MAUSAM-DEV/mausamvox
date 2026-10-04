@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { BARE_RVC_VERSION, COVER_RVC_VERSION, rvcEngine } from '@/lib/rvc-engine'
+import { INDEXED_CREPE_HOP, INDEXED_F0_METHOD, rvcEngine, rvcVersion } from '@/lib/rvc-engine'
 
 export const maxDuration = 30
 
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 8, indexRate: indexRateOverride, protect, filterRadius, rmsMixRate, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, styleIntensity = 3, indexRate: indexRateOverride, protect, filterRadius, rmsMixRate, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -285,7 +285,24 @@ export async function POST(req: NextRequest) {
     // The cog re-downloads the model zip every run (overwrite=True), so the
     // proxy URL's fresh signing is what matters; its filename parsing strips
     // query strings correctly (no Errno-36 class bug there).
-    const input = rvcEngine() === 'bare'
+    const engine = rvcEngine()
+    const input = engine === 'indexed'
+      ? {
+          // Our engine: same 1:1 Fine-tune mapping as bare, but the voice's
+          // index is really applied (index_rate = Style Intensity) and pitch is
+          // tracked with crepe (fewer breaks on faint high notes).
+          input_audio: effectiveVocalsUrl,
+          custom_rvc_model_download_url: effectiveModelUrl,
+          pitch_change: pitchChangeAll,
+          index_rate: indexRate,
+          filter_radius: filterRadiusVal,
+          rms_mix_rate: rmsMixRateVal,
+          f0_method: INDEXED_F0_METHOD,
+          crepe_hop_length: INDEXED_CREPE_HOP,
+          protect: protectVal,
+          output_format: 'wav',
+        }
+      : engine === 'bare'
       ? {
           input_audio: effectiveVocalsUrl,
           custom_rvc_model_download_url: effectiveModelUrl,
@@ -319,7 +336,7 @@ export async function POST(req: NextRequest) {
     let prediction
     try {
       prediction = await replicate.predictions.create({
-        version: rvcEngine() === 'bare' ? BARE_RVC_VERSION : COVER_RVC_VERSION,
+        version: rvcVersion(engine),
         input,
       })
     } catch (createErr) {

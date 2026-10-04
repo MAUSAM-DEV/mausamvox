@@ -51,6 +51,8 @@ interface ResultStepProps {
   // Share needs it (a public link points at the SAVED track); null disables
   // the Share button with a "saving…" hint until the save lands.
   persistedSwapId?: string | null
+  // Style Intensity the swap ran at (1–10) — seeds Fine-tune's Voice strength.
+  styleIntensity?: number
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -553,7 +555,10 @@ export interface TuneParams {
 
 // Seeded from the same defaults voice-convert applies, so the first preview
 // reproduces the committed take before the user moves anything.
-const TUNE_DEFAULTS: TuneParams = { indexRate: 0.8, protect: 0.2, filterRadius: 4, rmsMixRate: 0.25 }
+// indexRate default = Style Intensity 3's 0.3 (see VoiceSwapPage). filterRadius stays
+// in the params (sent as 4) but has no slider: it only affects the 'harvest' pitch
+// tracker, which no engine uses — it changed nothing (2026-10-03 tests).
+const TUNE_DEFAULTS: TuneParams = { indexRate: 0.3, protect: 0.2, filterRadius: 4, rmsMixRate: 0.25 }
 
 const TUNE_SLIDERS: {
   key: keyof TuneParams; label: string; hint: string
@@ -561,7 +566,6 @@ const TUNE_SLIDERS: {
 }[] = [
   { key: 'indexRate',    label: 'Voice strength',          hint: 'index_rate',    min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
   { key: 'protect',      label: 'Breath / consonant guard', hint: 'protect',       min: 0, max: 0.5, step: 0.05, fmt: (n) => n.toFixed(2) },
-  { key: 'filterRadius', label: 'Smoothing',               hint: 'filter_radius', min: 0, max: 7,   step: 1,    fmt: (n) => String(n) },
   { key: 'rmsMixRate',   label: 'Volume envelope',         hint: 'rms_mix_rate',  min: 0, max: 1,   step: 0.05, fmt: (n) => n.toFixed(2) },
 ]
 
@@ -579,7 +583,7 @@ const fmtMSS = (s: number) => {
 }
 
 function FineTunePanel({
-  onTunedPreview, onApplyToFull, onToast, durationSeconds,
+  onTunedPreview, onApplyToFull, onToast, durationSeconds, baseIndexRate,
 }: {
   onTunedPreview: (p: TuneParams, startSeconds?: number) => Promise<string | null>
   onApplyToFull: (p: TuneParams) => void
@@ -587,9 +591,13 @@ function FineTunePanel({
   // Source song length (seconds) — bounds the start-point control. 0 until the
   // main player has loaded metadata, or when unknown.
   durationSeconds: number
+  // The swap's own Style Intensity as index_rate, so "Voice strength" starts
+  // where the swap actually was (defaults to TUNE_DEFAULTS when absent).
+  baseIndexRate?: number
 }) {
+  const defaults: TuneParams = baseIndexRate === undefined ? TUNE_DEFAULTS : { ...TUNE_DEFAULTS, indexRate: baseIndexRate }
   const [open, setOpen] = useState(false)
-  const [params, setParams] = useState<TuneParams>(TUNE_DEFAULTS)
+  const [params, setParams] = useState<TuneParams>(defaults)
   const [startSeconds, setStartSeconds] = useState(0)
   const [prevTake, setPrevTake] = useState<Take | null>(null)
   const [curTake, setCurTake] = useState<Take | null>(null)
@@ -637,9 +645,9 @@ function FineTunePanel({
 
   // Reset every slider back to the seeded defaults in one click. Sliders only —
   // does not touch takes, A/B, or the player.
-  const atDefaults = (Object.keys(TUNE_DEFAULTS) as (keyof TuneParams)[])
-    .every((k) => params[k] === TUNE_DEFAULTS[k])
-  const handleReset = () => setParams({ ...TUNE_DEFAULTS })
+  const atDefaults = (Object.keys(defaults) as (keyof TuneParams)[])
+    .every((k) => params[k] === defaults[k])
+  const handleReset = () => setParams({ ...defaults })
 
   return (
     <div className="vs-tune">
@@ -767,7 +775,7 @@ export function ResultStep({
   onNewSwap, onRegenerate, regenCapReached, onToast,
   onTunedPreview, onApplyToFull,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId,
+  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, styleIntensity,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -1484,6 +1492,7 @@ export function ResultStep({
             onApplyToFull={onApplyToFull}
             onToast={onToast}
             durationSeconds={duration}
+            baseIndexRate={styleIntensity !== undefined ? styleIntensity / 10 : undefined}
           />
         )}
 

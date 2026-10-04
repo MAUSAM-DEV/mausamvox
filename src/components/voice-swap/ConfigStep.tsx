@@ -253,7 +253,7 @@ export function ConfigStep({
           </div>
         )}
 
-        {/* Swap Controls — hidden in guided mode: the defaults (Style Intensity 8,
+        {/* Swap Controls — hidden in guided mode: the defaults (Style Intensity 3,
             Pitch 0 + the page's auto key-match) apply untouched, and the copy
             below says so honestly. Full control stays one link away. */}
         {guided ? (
