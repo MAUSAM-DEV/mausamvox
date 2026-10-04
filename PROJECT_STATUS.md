@@ -6,6 +6,37 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-04 (late night) — live-test fixes (`5f037ca`) + "two voices / robotic" diagnosis — ⚠️ founder live tests pending
+
+Founder live test (Pehla Pyaar, Mausam (Singing), Key +2, Auto-tune Strong, Blend 20%, Character −1): all knobs worked; 7 issues reported.
+
+1. **Save as full swap did nothing.**
+   - Vercel's runtime logs were already gone (Hobby keeps ~1 h), and Replicate had deleted the inputs and logs.
+   - DB/storage: no saved-mix upload and no row after the 12:42 preview.
+   - Most likely cause: the 50-min preview-save window had passed while the banner stayed on screen, so the click returned silently.
+   - Latent bug on the same path: the converted voice was Replicate's URL, deleted ~1 h after a run, so knob changes and saves failed silently after that.
+   - **Fix:** the converted voice is downloaded once into the page (blob URL), so there's no time limit while the Result screen is open. The persist route accepts the browser's mix after Replicate's output is gone. A "Saved ✓" toast shows on success; a failed first save retries twice, then says so; a click that can't save explains why.
+2. **Backing vocals / chorus missing.**
+   - The lead/backing split's backing stem was never mixed in.
+   - **Fix:** it is now under the swapped lead and on the Original side (×0.8, as music), key-shifted with formants kept. Not added for duets (their stems contain it) or the music-only backing.
+   - Verified in the browser (correlation with the backing stem 0.42 both sides vs 0.03 control).
+3. **"Two voices + robotic" = the settings, not the engine.**
+   - 4 live conversions of Pehla Pyaar (≈ $0.06) plus pYIN analysis, using the app's shifter for Blend and Character.
+   - Auto-tune Strong: within-note pitch movement 10 → 0 cents (robotic).
+   - Blend 20%: the original singer sits only 10–12 dB under the swapped voice (an audible second singer); the two pitches are ~12–14 cents apart either way.
+   - Engine at Key +2 vs the original key: voice drops ~2% on high notes (same as elsewhere), 0 octave slips, input lead clean on high notes.
+   - Key −3 (high notes inside the founder's sung range) was slightly WORSE (drops 3.3%, octave slips 2.3%), so no automatic key-to-range.
+   - 7 labelled "Diagnosis" clips in Saved Tracks (high-note passage 3:50–4:10: your settings → remove one setting at a time → engine only → Key −3 → original).
+4. **First-try defaults:**
+   - Already Key Original / Auto-tune Off / Blend 0 / Character 0 / Harmony Off / Polish Match song (auto-applied, confirmed in the browser).
+   - Key and Auto-tune now also reset for every new song.
+   - Auto-tune stays Off: the engine follows the original singer's (in-tune) pitch; Light only flattens natural movement.
+5. **Play/Pause:** a re-rendered mix kept the ⏸ icon over silence (src change = no 'pause' event). Now it follows the player and carries position and play state across re-renders (layout effect). Verified: play → knob → keeps playing from the same spot; pause → knob → stays paused.
+6. **Phones:**
+   - Result screen: 64 px knobs, 36–44 px buttons, wrapping rows. Configure: 44 px +/−, taller Auto-tune buttons.
+   - Checked at 375×812: no sideways scroll on the Result screen, Configure or the page frame; knob drag works.
+7. **Pitch Shift** stays visible on Voice Swap Configure (also on phones); hidden only in AI Cover's guided mode, as before.
+
 ## ✅ SHIPPED 2026-10-04 (night) — 7 audible Voice Swap controls (`6d94845`) — ⚠️ founder live tests pending
 
 Founder heard a clear difference in all 17 "Option test" clips → all 7 built.
