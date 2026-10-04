@@ -6,6 +6,24 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ SHIPPED 2026-10-04 (late) — Full swap saves the previewed take (`ced3cdc`); replacement-control candidates TESTED (clips), awaiting founder's ears
+
+**`ced3cdc`:** after a preview, "💾 Save as full swap · 150/200 cr" (Result) and "Save previewed take" (Configure, same settings) save the take you heard — no re-conversion — charging 200 − what the preview cost (`/api/voice-convert` returns `previewCharged`), so the total never exceeds 200. After 50 min (preview audio expires) a same-settings full swap re-converts but still subtracts the preview's cost once. Re-running an already-saved identical take is blocked (no charge). "Preview a section" removed. **Live tests:** (1) free preview → Save → −200 cr, track in Saved Tracks; (2) paid 3rd preview (−50) → Save → −150 (total 200); (3) change voice after a preview → button returns to "Process Full Track" (200); (4) press Full again after saving → "already in your Saved Tracks", no charge.
+
+**Replacement controls — 17 labelled "Option test" clips** (live song's solo verse 0:34–0:54, voice "Mausam (Singing)", Studio polish; spend ≈ $0.03). Mix-level change vs today's sound (same music in every clip, so numbers run smaller than voice-only ones; vocal ±6 dB ≈ 2.2–2.8): blend 85/15 1.34 · 50/50 3.56 · character deeper 2.02 / brighter 2.72 (vs a processed reference) · auto-tune 50% 0.69 / 100% 0.83 (pitch snapping isn't captured by this measure — ears decide) · vocal level −6 2.18 / +6 2.80 · harmony 2 voices 2.26 / 4 voices 3.92 · key −2 5.64 / +2 5.89 · Concert Hall 1.23 · Lo-fi 7.87 · Radio 7.26.
+
+| Candidate | How it would work | After the swap | Library / licence |
+|---|---|---|---|
+| Voice blend | mix the separated original lead under the converted voice (same timing) in mixStems | instant, free (like Polish) | none (Web Audio) |
+| Voice character | formant shift of the converted vocal in the browser | near-instant (a few s per song), free | Signalsmith Stretch (MIT; npm `signalsmith-stretch` 1.3.2, `formantSemitones`) — test clips used WORLD/pyworld (MIT wrapper, modified-BSD core), quality will differ |
+| Auto-tune | snap the pitch curve inside our engine before synthesis | re-conversion ≈ 40 s, ≈ $0.01 per song (engine change in our MIT copy) | none new |
+| Vocal level | vocal gain in mixStems | instant, free | none |
+| Add harmony | Choir's ffmpeg harmonizer on the converted vocal (server) or Web Audio + Signalsmith in the browser | ~5–15 s; free to run (Choir charges 25 cr today) | ffmpeg (already used server-side) / Signalsmith (MIT) |
+| Key change | voice: re-convert with pitch ±n (best) or shift the converted vocal; music: bass + "other" shifted in the browser, drums untouched | music instant/free; voice re-conversion ≈ $0.01 or instant shift | Signalsmith Stretch (MIT) |
+| Polish presets | Web Audio chains: Concert Hall (long reverb), Lo-fi / Radio (whole-mix band-limit, crush/compress) | instant, free | none |
+
+Not suitable: Rubber Band (GPL / paid licence), SoundTouchJS (LGPL).
+
 ## ✅ SHIPPED 2026-10-04 (evening) — inaudible controls + Regenerate removed; "Mausam (Singing)" voice added — ⚠️ founder live tests pending
 
 1. **Controls removed (`f426e34`):** Style Intensity (Configure), Fine-tune Voice strength, Breath/consonant guard, Volume envelope, and "Apply to full track" (charged 200 cr for an identical take). Settings fixed server-side in `src/lib/rvc-engine.ts` (`VOICE_SWAP_INDEX_RATE` 0.3, `_PROTECT` 0.2, `_RMS_MIX_RATE` 0.25, `_FILTER_RADIUS` 4); `/api/voice-convert` ignores client values. Result panel is now **"Preview a section"** (Preview start + 12-sec preview, 2 free/track then 50 cr). Landing made honest (no fine-tune/regenerate, style-intensity/age/accent, quality-score or free-regenerate claims). **Live test:** Configure shows no Style Intensity; Result shows "Preview a section" only.
