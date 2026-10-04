@@ -155,3 +155,19 @@ export function autoOctaveShiftSemitones(sourceF0: number | null, targetF0: numb
   const clamped = Math.max(-MAX_OCTAVES, Math.min(MAX_OCTAVES, nearest))
   return clamped * 12
 }
+
+// ── Auto Song Key ────────────────────────────────────────────────────────────
+// Move the whole song (voice + music) so its melody sits where the voice
+// usually sings: the clone sounds most like the singer inside its own range
+// (founder, 2026-10-04: Pehla Pyaar at Key −3 — the value this rule gives for
+// "Mausam (Singing)" — "sounds most like me"). Uses the MEDIAN sung note of the
+// whole song and of the voice's sample (pitch-track.ts; two different pitch
+// trackers agreed within ~1.5 semitones on medians, but not on the top notes).
+// octaveShift = the auto octave already applied to the voice alone.
+export const AUTO_KEY_MAX = 4
+export const AUTO_KEY_MIN_VOICED_S = 20 // less clear singing than this → Original key
+export function autoKeySemitones(songMedianMidi: number, voiceMedianMidi: number, octaveShift: number): number {
+  if (!Number.isFinite(songMedianMidi) || !Number.isFinite(voiceMedianMidi)) return 0
+  const raw = voiceMedianMidi - songMedianMidi - octaveShift
+  return Math.max(-AUTO_KEY_MAX, Math.min(AUTO_KEY_MAX, Math.round(raw)))
+}

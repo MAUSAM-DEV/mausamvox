@@ -12,7 +12,8 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
-import { detectMedianF0, autoOctaveShiftSemitones, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
+import { detectMedianF0, autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
+import { dspPitchStats } from './dspClient'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -440,7 +441,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const [gender, setGender] = useState<Gender>('Male')
   const [pitchShift, setPitchShift] = useState(0)
   // Key change (voice + music) and Auto-tune — part of the conversion.
-  const [keyShift, setKeyShift] = useState(0)
+  // Song Key: 'Auto' (default) fits the song to the chosen voice's range
+  // (pitchDetect.autoKeySemitones); − / + switch to a manual value.
+  const [keyAuto, setKeyAuto] = useState(true)
+  const [manualKey, setManualKey] = useState(0)
+  const [autoKey, setAutoKey] = useState<{ id: string; value: number | null }>({ id: '', value: null })
   const [autotune, setAutotune] = useState<Autotune>('Off')
   // Settings of the take on the Result screen (fixed once converted, even if
   // Configure is changed afterwards): its key change, auto-tune, and the
@@ -944,6 +949,46 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     return f0
   }
 
+  // Median sung note of a recording (whole song / whole sample), cached per URL.
+  const pitchStatsRef = useRef<Record<string, Promise<{ medianMidi: number; voicedSeconds: number } | null>>>({})
+  function pitchStatsOf(url: string) {
+    pitchStatsRef.current[url] ??= (async () => {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      const buf = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await res.arrayBuffer())
+      const mono = new Float32Array(buf.length)
+      for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) mono[i] += d[i] / buf.numberOfChannels }
+      return dspPitchStats(mono, buf.sampleRate)
+    })().catch(() => null)
+    return pitchStatsRef.current[url]
+  }
+  async function voiceSampleUrl(voiceId: string): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/voice-lab/sample-url?id=${voiceId}`)
+      if (!res.ok) return null
+      const { signedUrl } = await res.json()
+      return typeof signedUrl === 'string' ? signedUrl : null
+    } catch { return null }
+  }
+  // Auto Song Key for this song + voice (0 = Original). Duet stems: always 0
+  // (their pitch reads unreliably — same rule as the octave match).
+  const autoKeyRef = useRef<Record<string, Promise<number>>>({})
+  function computeAutoKey(sourceUrl: string, voiceId: string, isDuetStem: boolean): Promise<number> {
+    if (isDuetStem) return Promise.resolve(0)
+    autoKeyRef.current[`${sourceUrl}|${voiceId}`] ??= (async () => {
+      const sample = await voiceSampleUrl(voiceId)
+      const [song, voice, octave] = await Promise.all([pitchStatsOf(sourceUrl), sample ? pitchStatsOf(sample) : null, autoKeyShift(sourceUrl, voiceId, false)])
+      if (!song || !voice || song.voicedSeconds < AUTO_KEY_MIN_VOICED_S || voice.voicedSeconds < AUTO_KEY_MIN_VOICED_S) return 0
+      const key = autoKeySemitones(song.medianMidi, voice.medianMidi, octave)
+      console.log('[voice-swap] auto song key', { voiceId, songMedian: song.medianMidi.toFixed(1), voiceMedian: voice.medianMidi.toFixed(1), octave, key })
+      return key
+    })().catch(() => 0)
+    return autoKeyRef.current[`${sourceUrl}|${voiceId}`]
+  }
+  const autoKeyId = `${stemResult?.leadVocalsUrl || stemResult?.vocalsUrl || ''}|${selectedVoiceId ?? ''}|${duetMode === 'one' && stemResult?.maleVocalsUrl ? duetSinger : ''}`
+  // The key this take will use.
+  const keyShift = keyAuto ? (autoKey.id === autoKeyId && autoKey.value !== null ? autoKey.value : 0) : manualKey
+
   // Octave shift (semitones) to bring `sourceUrl` into `voiceId`'s natural range.
   // Returns 0 (never throws) so swaps that don't clearly need a shift are unchanged.
   //
@@ -983,9 +1028,20 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
   // Settings that determine a single-voice take. Same key → same sound (the
   // engine settings are fixed server-side), so a saved preview IS the full swap.
-  function takeKey(): string {
-    return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, keyShift, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
+  function takeKey(key = keyShift): string {
+    return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, key, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
   }
+  // Work out the Auto key as soon as a song + voice are chosen (shown on Configure).
+  useEffect(() => {
+    if (step !== 2 || !stemResult || !selectedVoiceId || !keyAuto) return
+    const id = autoKeyId
+    if (autoKey.id === id) return
+    setAutoKey({ id, value: null })
+    const target = duetTarget()
+    computeAutoKey(target ? target.convertUrl : (stemResult.leadVocalsUrl || stemResult.vocalsUrl), selectedVoiceId, !!target)
+      .then((value) => setAutoKey((cur) => (cur.id === id ? { id, value } : cur)))
+  }, [step, autoKeyId, keyAuto]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const FULL_SWAP_CREDITS = 200
   // A preview's converted vocal comes from Replicate and expires after ~1 h, so
   // only offer to save it within 50 minutes (after that, a normal full swap runs
@@ -1158,8 +1214,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           autoKeyShift(stemResult.maleVocalsUrl!, voice.id, true),
           autoKeyShift(stemResult.femaleVocalsUrl!, voice2.id, true),
         ])
-        const effPitchA = clampPitch(autoShiftA + pitchShift + keyShift)
-        const effPitchB = clampPitch(autoShiftB + pitchShift + keyShift)
+        const takeKeyShift = keyAuto ? 0 : manualKey // Auto: duet stems stay in the original key
+        const effPitchA = clampPitch(autoShiftA + pitchShift + takeKeyShift)
+        const effPitchB = clampPitch(autoShiftB + pitchShift + takeKeyShift)
         if (autoShiftA !== 0 || autoShiftB !== 0) {
           showToast(`Auto key-match — male ${fmtSt(autoShiftA)}, female ${fmtSt(autoShiftB)}`, 4000)
         }
@@ -1214,7 +1271,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setOvSteps(['done', 'done', 'done', 'done'])
 
         setConvertedVocalsUrl(urlA)
-        setResultTake({ keyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!] })
+        setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!] })
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
@@ -1270,7 +1327,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // and low-confidence detections; 0 otherwise leaves correct swaps unchanged.
       // Manual pitchShift adds on top.
       const autoShift = await autoKeyShift(vocalsToConvert, voice.id, !!target)
-      const effectivePitch = clampPitch(autoShift + pitchShift + keyShift)
+      // Auto Song Key: wait for it if it isn't worked out yet.
+      const takeKeyShift = keyAuto ? await computeAutoKey(vocalsToConvert, voice.id, !!target) : manualKey
+      if (keyAuto) setAutoKey({ id: autoKeyId, value: takeKeyShift })
+      const effectivePitch = clampPitch(autoShift + pitchShift + takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
       const startRes = await fetch('/api/voice-convert', {
@@ -1311,17 +1371,17 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setOvSteps(['done', 'done', 'done', 'done'])
 
       setConvertedVocalsUrl(convertedUrl)
-      setResultTake({ keyShift, autotune, sourceUrls: [vocalsToConvert] })
+      setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [vocalsToConvert] })
       setProcessing(false)
       setStep(3)
       if (type === 'preview') {
         const charged = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
-        lastPreviewRef.current = { key: takeKey(), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false, local: kept.local }
+        lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false, local: kept.local }
         setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
       } else {
         lastPreviewRef.current = null
         setPreviewSaveCost(null)
-        lastSavedKeyRef.current = takeKey()
+        lastSavedKeyRef.current = takeKey(takeKeyShift)
       }
       if (type === 'full') console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full`)
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
@@ -1369,8 +1429,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     lastPreviewRef.current = null // new track → no previewed take to save
     lastSavedKeyRef.current = null
     setPreviewSaveCost(null)
-    // First-try defaults for every new song (Configure): original key, no auto-tune.
-    setKeyShift(0)
+    // First-try defaults for every new song (Configure): Auto key, no auto-tune.
+    setKeyAuto(true)
+    setManualKey(0)
     setAutotune('Off')
     setResultTake(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
@@ -1437,7 +1498,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 pitchShift={pitchShift}
                 setPitchShift={setPitchShift}
                 keyShift={keyShift}
-                setKeyShift={setKeyShift}
+                setKeyShift={(v) => { setKeyAuto(false); setManualKey(v) }}
+                keyAuto={keyAuto}
+                autoKeyPending={keyAuto && !(autoKey.id === autoKeyId && autoKey.value !== null)}
+                setKeyAuto={setKeyAuto}
                 autotune={autotune}
                 setAutotune={setAutotune}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}

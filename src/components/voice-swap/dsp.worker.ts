@@ -1,10 +1,12 @@
 // Background thread for Voice Swap's heavier sound processing (key change,
-// voice character, harmony, key finding) so the page never freezes. Pure
+// voice character, harmony, backing clean-up, key finding, Auto Song Key) so the page never freezes. Pure
 // number-crunching on Float32Arrays — see src/lib/audio-dsp.
 
 import { shiftAudio } from '@/lib/audio-dsp/stretch'
 import { detectKey } from '@/lib/audio-dsp/key-detect'
 import { renderHarmony } from '@/lib/audio-dsp/harmony'
+import { removeDoubles } from '@/lib/audio-dsp/doubles'
+import { pitchStats } from '@/lib/audio-dsp/pitch-track'
 import type { DspRequest, DspResponse } from './dspClient'
 
 const ctx = self as unknown as {
@@ -18,6 +20,11 @@ ctx.onmessage = async (e) => {
     if (req.op === 'shift') {
       const channels = await shiftAudio(req.channels, req.sampleRate, req.options)
       ctx.postMessage({ id: req.id, ok: true, channels }, channels.map((c) => c.buffer))
+    } else if (req.op === 'doubles') {
+      const channels = removeDoubles(req.channels, req.sampleRate, req.lead)
+      ctx.postMessage({ id: req.id, ok: true, channels }, channels.map((c) => c.buffer))
+    } else if (req.op === 'pitchStats') {
+      ctx.postMessage({ id: req.id, ok: true, stats: pitchStats(req.mono, req.sampleRate) })
     } else if (req.op === 'key') {
       ctx.postMessage({ id: req.id, ok: true, key: detectKey(req.mono, req.sampleRate) })
     } else {

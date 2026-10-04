@@ -55,3 +55,10 @@ export function trackPitch(mono: Float32Array, sampleRate: number): PitchTrack {
   }
   return { midi, hopSeconds: HOP / rate }
 }
+
+// Median sung note (MIDI) and seconds of clear pitch — for the Auto Song Key.
+export function pitchStats(mono: Float32Array, sampleRate: number): { medianMidi: number; voicedSeconds: number } {
+  const { midi, hopSeconds } = trackPitch(mono, sampleRate)
+  const v = Array.from(midi).filter((m) => !Number.isNaN(m)).sort((a, b) => a - b)
+  return { medianMidi: v.length ? v[Math.floor(v.length / 2)] : NaN, voicedSeconds: v.length * hopSeconds }
+}

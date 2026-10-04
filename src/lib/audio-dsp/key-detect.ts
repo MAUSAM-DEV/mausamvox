@@ -29,8 +29,8 @@ const HOP = 4096
 const F_LO = 55, F_HI = 2000  // A1 … ~B6
 const MAX_SECONDS = 300
 
-// In-place radix-2 complex FFT (re, im of length 2^k).
-function fft(re: Float64Array, im: Float64Array) {
+// In-place radix-2 complex FFT (re, im of length 2^k). Inverse: swap re/im in and out.
+export function fft(re: Float64Array, im: Float64Array) {
   const n = re.length
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1

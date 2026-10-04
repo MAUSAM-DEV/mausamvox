@@ -41,7 +41,10 @@ interface ConfigStepProps {
   pitchShift: number
   setPitchShift: (v: number) => void
   keyShift: number
-  setKeyShift: (v: number) => void
+  setKeyShift: (v: number) => void      // a manual value (turns Auto off)
+  keyAuto: boolean
+  autoKeyPending: boolean
+  setKeyAuto: (v: boolean) => void
   autotune: Autotune
   setAutotune: (v: Autotune) => void
   // Duet mode — only rendered when hasDuet is true (both male+female URLs present).
@@ -144,7 +147,7 @@ function VoiceGrid({
 export function ConfigStep({
   voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
   gender, setGender,
-  pitchShift, setPitchShift, keyShift, setKeyShift, autotune, setAutotune,
+  pitchShift, setPitchShift, keyShift, setKeyShift, keyAuto, autoKeyPending, setKeyAuto, autotune, setAutotune,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
 }: ConfigStepProps) {
@@ -340,7 +343,8 @@ export function ConfigStep({
             <label className="vs-ctrl-lbl">
               Song Key
               <span className="vs-ctrl-val">
-                {keyShift === 0 ? 'Original' : `${keyShift > 0 ? '+' : ''}${keyShift} st`}
+                {keyAuto ? (autoKeyPending ? 'Auto · finding…' : `Auto · ${keyShift === 0 ? 'Original' : `${keyShift > 0 ? '+' : ''}${keyShift} st`}`)
+                  : keyShift === 0 ? 'Original' : `${keyShift > 0 ? '+' : ''}${keyShift} st`}
               </span>
             </label>
             <div className="vs-pitch-row">
@@ -359,7 +363,13 @@ export function ConfigStep({
               </div>
               <button className="vs-pitch-btn" onClick={() => setKeyShift(Math.min(KEY_SHIFT_MAX, keyShift + 1))}>+</button>
             </div>
-            <div className="vs-ctrl-hint">Moves the whole song — your voice and the music together (drums stay as they are). Pitch Shift above moves only the voice.</div>
+            <div className="vs-key-modes">
+              <button className={`vs-key-mode${keyAuto ? ' vs-key-mode--on' : ''}`} onClick={() => setKeyAuto(true)}>Auto</button>
+              <button className={`vs-key-mode${!keyAuto && keyShift === 0 ? ' vs-key-mode--on' : ''}`} onClick={() => setKeyShift(0)}>Original</button>
+            </div>
+            <div className="vs-ctrl-hint">
+              Moves the whole song — your voice and the music together (drums stay as they are). <strong>Auto</strong> fits the song to where the chosen voice usually sings, so it sounds most like you. Pitch Shift above moves only the voice.
+            </div>
           </div>
 
           <div className="vs-ctrl-group vs-ctrl-full">
@@ -377,6 +387,12 @@ export function ConfigStep({
 
       <style suppressHydrationWarning>{`
         .vs-ctrl-hint { font-size: 11px; color: #8E8EB4; margin-top: 6px; line-height: 1.45; }
+        .vs-key-modes { display: flex; gap: 6px; margin-top: 8px; }
+        .vs-key-mode {
+          border: 1px solid #3C3C6A; background: transparent; color: #A0A0C8; border-radius: 7px;
+          font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer;
+        }
+        .vs-key-mode--on { border-color: #9D5CFF; color: #F0F0FF; background: rgba(157,92,255,.18); }
         .vs-section-lbl {
           font-size: 11px;
           font-weight: 700;

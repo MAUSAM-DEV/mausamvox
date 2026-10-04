@@ -8,10 +8,12 @@ import type { HarmonyMode, HarmonyVoices } from '@/lib/audio-dsp/harmony-mode'
 
 type ShiftReq = { op: 'shift'; channels: Float32Array[]; sampleRate: number; options: ShiftOptions }
 type KeyReq = { op: 'key'; mono: Float32Array; sampleRate: number }
+type DoublesReq = { op: 'doubles'; channels: Float32Array[]; sampleRate: number; lead: Float32Array }
+type PitchStatsReq = { op: 'pitchStats'; mono: Float32Array; sampleRate: number }
 type HarmonyReq = { op: 'harmony'; mono: Float32Array; sampleRate: number; voices: HarmonyVoices; key: KeyEstimate | null; formantSemitones: number }
-export type DspRequest = (ShiftReq | KeyReq | HarmonyReq) & { id: number }
+export type DspRequest = (ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq) & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number } }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -52,6 +54,14 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
     const { shiftAudio } = await import('@/lib/audio-dsp/stretch')
     return { id: req.id, ok: true, channels: await shiftAudio(req.channels, req.sampleRate, req.options) }
   }
+  if (req.op === 'doubles') {
+    const { removeDoubles } = await import('@/lib/audio-dsp/doubles')
+    return { id: req.id, ok: true, channels: removeDoubles(req.channels, req.sampleRate, req.lead) }
+  }
+  if (req.op === 'pitchStats') {
+    const { pitchStats } = await import('@/lib/audio-dsp/pitch-track')
+    return { id: req.id, ok: true, stats: pitchStats(req.mono, req.sampleRate) }
+  }
   if (req.op === 'key') {
     const { detectKey } = await import('@/lib/audio-dsp/key-detect')
     return { id: req.id, ok: true, key: detectKey(req.mono, req.sampleRate) }
@@ -61,7 +71,7 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
   return { id: req.id, ok: true, channels: [stem], mode }
 }
 
-function call(req: ShiftReq | KeyReq | HarmonyReq, transfer: Transferable[]): Promise<DspResponse> {
+function call(req: ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq, transfer: Transferable[]): Promise<DspResponse> {
   const full = { ...req, id: nextId++ } as DspRequest
   const w = getWorker()
   if (!w) return runInline(full)
@@ -75,6 +85,20 @@ function call(req: ShiftReq | KeyReq | HarmonyReq, transfer: Transferable[]): Pr
 export async function dspShift(channels: Float32Array[], sampleRate: number, options: ShiftOptions): Promise<Float32Array[]> {
   const r = await call({ op: 'shift', channels, sampleRate, options }, channels.map((c) => c.buffer))
   return (r.ok && r.channels) || []
+}
+
+// Backing vocals with the lead's same-note doubles removed (doubles.ts).
+export async function dspRemoveDoubles(channels: Float32Array[], sampleRate: number, lead: Float32Array): Promise<Float32Array[]> {
+  const r = await call({ op: 'doubles', channels, sampleRate, lead }, [...channels.map((c) => c.buffer), lead.buffer])
+  if (!r.ok || !r.channels?.length) throw new Error('Backing clean-up failed')
+  return r.channels
+}
+
+// Median sung note + seconds of clear pitch (Auto Song Key).
+export async function dspPitchStats(mono: Float32Array, sampleRate: number): Promise<{ medianMidi: number; voicedSeconds: number }> {
+  const r = await call({ op: 'pitchStats', mono, sampleRate }, [mono.buffer])
+  if (!r.ok || !r.stats) throw new Error('Pitch analysis failed')
+  return r.stats
 }
 
 export async function dspKey(mono: Float32Array, sampleRate: number): Promise<KeyEstimate> {
