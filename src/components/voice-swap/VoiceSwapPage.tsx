@@ -6,7 +6,7 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
-import { ConfigStep, VoiceOption, DuetMode } from './ConfigStep'
+import { ConfigStep, VoiceOption, DuetMode, AUTOTUNE_AMOUNT, type Autotune } from './ConfigStep'
 import { ResultStep } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
@@ -435,6 +435,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // left the original male untouched when a user picked "male" in the duet picker.
   const [gender, setGender] = useState<Gender>('Male')
   const [pitchShift, setPitchShift] = useState(0)
+  // Key change (voice + music) and Auto-tune — part of the conversion.
+  const [keyShift, setKeyShift] = useState(0)
+  const [autotune, setAutotune] = useState<Autotune>('Off')
+  // Settings of the take on the Result screen (fixed once converted, even if
+  // Configure is changed afterwards): its key change, auto-tune, and the
+  // vocal stem(s) that were converted (Voice blend mixes these back in).
+  const [resultTake, setResultTake] = useState<{ keyShift: number; autotune: Autotune; sourceUrls: string[] } | null>(null)
 
   // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
   // Gender Lock (Male lock → male singer, Female lock → female). Neutral leaves the
@@ -972,7 +979,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Settings that determine a single-voice take. Same key → same sound (the
   // engine settings are fixed server-side), so a saved preview IS the full swap.
   function takeKey(): string {
-    return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
+    return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, keyShift, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
   }
   const FULL_SWAP_CREDITS = 200
   // A preview's converted vocal comes from Replicate and expires after ~1 h, so
@@ -1017,7 +1024,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   function handleFullClick() {
     if (savePreviewAsFull()) return
     if (lastSavedKeyRef.current === takeKey()) {
-      showToast('This exact take is already in your Saved Tracks — change the voice or pitch for a new one.', 6000)
+      showToast('This exact take is already in your Saved Tracks — change the voice, pitch, key or auto-tune for a new one.', 6000)
       return
     }
     const p = lastPreviewRef.current
@@ -1127,8 +1134,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           autoKeyShift(stemResult.maleVocalsUrl!, voice.id, true),
           autoKeyShift(stemResult.femaleVocalsUrl!, voice2.id, true),
         ])
-        const effPitchA = clampPitch(autoShiftA + pitchShift)
-        const effPitchB = clampPitch(autoShiftB + pitchShift)
+        const effPitchA = clampPitch(autoShiftA + pitchShift + keyShift)
+        const effPitchB = clampPitch(autoShiftB + pitchShift + keyShift)
         if (autoShiftA !== 0 || autoShiftB !== 0) {
           showToast(`Auto key-match — male ${fmtSt(autoShiftA)}, female ${fmtSt(autoShiftB)}`, 4000)
         }
@@ -1145,6 +1152,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               vocalsPath: stemResult.maleVocalsPath || undefined,
               voiceId: voice.id,
               pitchShift: effPitchA,
+              autotune: AUTOTUNE_AMOUNT[autotune],
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -1157,6 +1165,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               vocalsPath: stemResult.femaleVocalsPath || undefined,
               voiceId: voice2.id,
               pitchShift: effPitchB,
+              autotune: AUTOTUNE_AMOUNT[autotune],
               isPreview: false,
               trackKey: stemResult.storagePath || '',
             }),
@@ -1178,6 +1187,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setOvSteps(['done', 'done', 'done', 'done'])
 
         setConvertedVocalsUrl(urlA)
+        setResultTake({ keyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!] })
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
@@ -1233,7 +1243,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // and low-confidence detections; 0 otherwise leaves correct swaps unchanged.
       // Manual pitchShift adds on top.
       const autoShift = await autoKeyShift(vocalsToConvert, voice.id, !!target)
-      const effectivePitch = clampPitch(autoShift + pitchShift)
+      const effectivePitch = clampPitch(autoShift + pitchShift + keyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
       const startRes = await fetch('/api/voice-convert', {
@@ -1245,6 +1255,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceModelUrl: voice.modelUrl,
           voiceId: voice.id,
           pitchShift: effectivePitch,
+          autotune: AUTOTUNE_AMOUNT[autotune],
           // Previews are gated + charged server-side (first 2 per track free,
           // 3rd+ costs 50). trackKey is the upload storagePath; empty for
           // manual-extracted stems, which are always free.
@@ -1271,6 +1282,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setOvSteps(['done', 'done', 'done', 'done'])
 
       setConvertedVocalsUrl(convertedUrl)
+      setResultTake({ keyShift, autotune, sourceUrls: [vocalsToConvert] })
       setProcessing(false)
       setStep(3)
       if (type === 'preview') {
@@ -1327,6 +1339,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     lastPreviewRef.current = null // new track → no previewed take to save
     lastSavedKeyRef.current = null
     setPreviewSaveCost(null)
+    setKeyShift(0) // the key change is per song
+    setResultTake(null)
     try { localStorage.removeItem(STEM_CACHE_KEY) } catch { /* ignore */ }
   }
 
@@ -1390,6 +1404,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 setGender={handleSetGender}
                 pitchShift={pitchShift}
                 setPitchShift={setPitchShift}
+                keyShift={keyShift}
+                setKeyShift={setKeyShift}
+                autotune={autotune}
+                setAutotune={setAutotune}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}
                 duetMode={duetMode}
                 setDuetMode={setDuetMode}
@@ -1419,6 +1437,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 persistedSwapId={persistedSwapId}
                 previewSaveCost={savablePreview() ? previewSaveCost : null}
                 onSavePreview={() => { savePreviewAsFull() }}
+                keyShift={resultTake?.keyShift ?? 0}
+                autotuneLabel={resultTake && resultTake.autotune !== 'Off' ? resultTake.autotune : null}
+                convertedSourceUrls={resultTake?.sourceUrls}
               />
             )}
           </div>

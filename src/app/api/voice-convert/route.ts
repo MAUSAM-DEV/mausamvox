@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
       voiceModelUrl?: string
       voiceId?: string
       pitchShift?: number
+      autotune?: number
       isPreview?: boolean
       trackKey?: string
     }
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -252,6 +253,10 @@ export async function POST(req: NextRequest) {
     // value; we round + clamp defensively to a sane range here. Default 0 = no
     // shift, identical to the prior behaviour.
     const pitchChangeAll = Math.round(clamp(pitchShift, -24, 24))
+    // Auto-tune (Configure step): 0 = natural pitch, 1 = every note snapped to
+    // the nearest semitone inside the engine. Only our indexed engine has it;
+    // sent only when on, so a rollback engine never sees an unknown input.
+    const autotuneAmount = Math.round(clamp(Number(autotune) || 0, 0, 1) * 100) / 100
 
     // WAV output on both engines so the converted vocal isn't re-compressed:
     // the vocal already took one lossy encode at Demucs separation, and an mp3
@@ -285,6 +290,7 @@ export async function POST(req: NextRequest) {
           crepe_hop_length: INDEXED_CREPE_HOP,
           protect: protectVal,
           output_format: 'wav',
+          ...(autotuneAmount > 0 ? { autotune: autotuneAmount } : {}),
         }
       : engine === 'bare'
       ? {

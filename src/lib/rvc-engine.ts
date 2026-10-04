@@ -15,9 +15,11 @@ import Replicate from 'replicate'
 
 export const BARE_RVC_VERSION = 'd18e2e0a6a6d3af183cc09622cebba8555ec9a9e66983261fc64c8b1572b7dce'
 export const COVER_RVC_VERSION = '0a9c7c558af4c0f20667c1bd1260ce32a2879944a0b9e44e1398660c077b1550'
-// mausam-dev/rvc-v2-index, version with the per-request rmvpe_threshold input
-// (2026-10-04). Public model: billed only while working; predictions stay private.
-export const INDEXED_RVC_VERSION = '35029e837dfbd4e043786f7fcf57ec7656897a9ca03f6cd9cf8bf1147983934b'
+// mausam-dev/rvc-v2-index, version with the autotune input (2026-10-04,
+// models repo 7e5bb06; autotune 0 = identical to the previous version
+// 35029e83…: same pitch accuracy, spectral difference below run-to-run noise).
+// Public model: billed only while working; predictions stay private.
+export const INDEXED_RVC_VERSION = '255794a34d41dce493af67ce5ed3a67f06bed79ee09ae99fe01bffed0d21d6fe'
 // Pitch tracker for the indexed engine. crepe vs rmvpe on a solo test song:
 // words 85% vs 79%, voice dropouts 17.9 vs 33.5 per minute (2026-10-04);
 // ~3x the compute (~60 s vs ~20 s for a 2:15 song on T4, ≈ +$0.01).

@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
 import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS, createReverbImpulse } from './audioClip'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
+import { keyName, type KeyEstimate } from '@/lib/audio-dsp/key-detect'
+import { harmonyMode } from '@/lib/audio-dsp/harmony-mode'
+import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
+import { dspHarmony, dspKey, dspShift } from './dspClient'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -43,6 +47,14 @@ interface ResultStepProps {
   // swap without re-converting: the credits it will cost (200 − paid preview).
   previewSaveCost?: number | null
   onSavePreview?: () => void
+  // Key change chosen on Configure for THIS take (semitones). The voice was
+  // converted in the new key; the music (not drums) is shifted here to match.
+  keyShift?: number
+  // Auto-tune used for this take ('Light' / 'Strong'), shown as a chip.
+  autotuneLabel?: string | null
+  // The exact vocal stem(s) that were converted, in convertedVocalsUrl(2)
+  // order — Voice blend mixes these (the original singer) under the new voice.
+  convertedSourceUrls?: string[]
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -185,16 +197,118 @@ async function decodeForMatch(url: string): Promise<Float32Array | null> {
 }
 const RAW_PRESET = { warmth: 0, reverb: 0, echo: 0, bass: 0, treble: 0 }
 
+// ── Voice controls (Result screen, free + instant like Polish) ─────────────
+// Picked from the founder's "Option test" clips (2026-10-04) — each was
+// clearly audible at the low and high test settings (±6 dB, 15/50% blend,
+// ±2 st character, 2/4 harmony voices).
+const LEVEL_MAX_DB = 9      // Vocal level: −9…+9 dB vs the music
+const BLEND_MAX = 50        // Voice blend: up to 50% original singer
+const CHARACTER_MAX = 4     // Voice character: formants −4…+4 semitones
+type HarmonySetting = 'off' | '2' | '4'
+// Polish style: 'hall' = long hall reverb on the voice; 'lofi' / 'radio'
+// colour the WHOLE swapped mix (as in the test clips).
+type PolishStyle = 'none' | 'hall' | 'lofi' | 'radio'
+interface VoiceFx { level: number; blend: number; character: number; harmony: HarmonySetting; style: PolishStyle }
+const DEFAULT_FX: VoiceFx = { level: 0, blend: 0, character: 0, harmony: 'off', style: 'none' }
+const fxIsDefault = (f: VoiceFx) => f.level === 0 && f.blend === 0 && f.character === 0 && f.harmony === 'off' && f.style === 'none'
+
+// Concert Hall: a longer, slower-decaying space than Studio's 1.8 s room, with
+// a short pre-delay, at 35% wet (Reverb knob 70). ConvolverNode normalises the
+// impulse's power, so only the length/shape and the wet share change.
+const HALL_IR_SECONDS = 3.2
+const HALL_IR_DECAY = 1.6
+const HALL_PREDELAY_S = 0.04
+const HALL_REVERB = 70
+const BUTTERWORTH_Q_DB = -3.01 // Web Audio low/high-pass Q is in dB; −3.01 dB = Q 0.707
+
+// 12-bit quantiser curve for Lo-fi's crunch (mixed in at 25%).
+function bitcrushCurve(bits: number): Float32Array {
+  const n = 65536, steps = 2 ** (bits - 1), curve = new Float32Array(n)
+  for (let i = 0; i < n; i++) curve[i] = Math.round(((i / (n - 1)) * 2 - 1) * steps) / steps
+  return curve
+}
+
+// Whole-mix colour for the Lo-fi / Radio presets (same recipe as the test
+// clips' ffmpeg chains). Returns the node the mix should feed; 'none'/'hall'
+// feed the destination directly (graph unchanged).
+function styleOutput(ctx: BaseAudioContext, style: PolishStyle): AudioNode {
+  if (style !== 'lofi' && style !== 'radio') return ctx.destination
+  const gain = (v: number) => { const g = ctx.createGain(); g.gain.value = v; return g }
+  const input = gain(1)
+  const hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter()
+  hp.type = 'highpass'; lp.type = 'lowpass'
+  hp.Q.value = BUTTERWORTH_Q_DB; lp.Q.value = BUTTERWORTH_Q_DB
+  input.connect(hp); hp.connect(lp)
+  const comp = ctx.createDynamicsCompressor()
+  let tail: AudioNode
+  if (style === 'lofi') {
+    // band-limit 250 Hz–3.8 kHz, 25% 12-bit crunch, 25 ms slap-back, squash
+    hp.frequency.value = 250; lp.frequency.value = 3800
+    const crush = ctx.createWaveShaper()
+    crush.curve = bitcrushCurve(12) as Float32Array<ArrayBuffer>
+    const sum = gain(1), dry = gain(0.75), wet = gain(0.25)
+    lp.connect(dry); dry.connect(sum)
+    lp.connect(crush); crush.connect(wet); wet.connect(sum)
+    const slap = ctx.createDelay(0.1); slap.delayTime.value = 0.025
+    const slapGain = gain(0.19)
+    sum.connect(slap); slap.connect(slapGain)
+    comp.threshold.value = -8; comp.knee.value = 0; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.1
+    sum.connect(comp); slapGain.connect(comp)
+    tail = gain(1.4); comp.connect(tail)
+  } else {
+    // band-limit 400 Hz–3.5 kHz, heavy compression (AM-radio sound)
+    hp.frequency.value = 400; lp.frequency.value = 3500
+    comp.threshold.value = -22; comp.knee.value = 3; comp.ratio.value = 6; comp.attack.value = 0.005; comp.release.value = 0.08
+    lp.connect(comp)
+    tail = gain(2); comp.connect(tail)
+  }
+  tail.connect(ctx.destination)
+  return input
+}
+
+// Decode a URL to an AudioBuffer at 44.1 kHz (throws on failure) and move
+// audio between AudioBuffers and plain arrays for the worker. One shared
+// OfflineAudioContext decodes everything: it holds no audio hardware, so the
+// several decodes an effect needs can't hit a browser's live-context limit.
+let decodeCtx: OfflineAudioContext | null = null
+async function decodeUrl(url: string): Promise<AudioBuffer> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`fetch failed (${res.status})`)
+  if (!decodeCtx) decodeCtx = new OfflineAudioContext(2, 1, 44100)
+  return decodeCtx.decodeAudioData(await res.arrayBuffer())
+}
+const channelsOf = (b: AudioBuffer) => Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c).slice())
+function monoOf(b: AudioBuffer): Float32Array {
+  const out = new Float32Array(b.length)
+  for (let c = 0; c < b.numberOfChannels; c++) {
+    const d = b.getChannelData(c)
+    for (let i = 0; i < d.length; i++) out[i] += d[i] / b.numberOfChannels
+  }
+  return out
+}
+function toBuffer(channels: Float32Array[], sampleRate: number): AudioBuffer {
+  const b = new AudioBuffer({ length: channels[0].length, numberOfChannels: channels.length, sampleRate })
+  channels.forEach((c, i) => b.getChannelData(i).set(c))
+  return b
+}
+
+// A stem as a URL (decoded here) or as audio already processed in the browser.
+type MixSource = string | AudioBuffer
+// One vocal channel and its gain relative to a single lead vocal (1/√N for N
+// main vocals; Voice blend and harmony set their own share).
+interface MixVocal { src: MixSource; gain: number }
+
 async function mixStems(
-  vocalsUrls: string[],
-  musicUrls: string[],
-  opts?: { warmth?: number; reverb?: number; echo?: number; bass?: number; treble?: number },
+  vocals: MixVocal[],
+  music: MixSource[],
+  opts?: { warmth?: number; reverb?: number; echo?: number; bass?: number; treble?: number; levelDb?: number; style?: PolishStyle },
 ): Promise<Blob | null> {
   const decodeCtx = new AudioContext()
 
-  async function fetchDecode(url: string): Promise<AudioBuffer | null> {
+  async function fetchDecode(src: MixSource): Promise<AudioBuffer | null> {
+    if (typeof src !== 'string') return src
     try {
-      const res = await fetch(url)
+      const res = await fetch(src)
       if (!res.ok) return null
       const ab = await res.arrayBuffer()
       return await decodeCtx.decodeAudioData(ab)
@@ -204,8 +318,8 @@ async function mixStems(
   }
 
   const [vocalBufs, musicBufs] = await Promise.all([
-    Promise.all(vocalsUrls.map(fetchDecode)),
-    Promise.all(musicUrls.map(fetchDecode)),
+    Promise.all(vocals.map((v) => fetchDecode(v.src))),
+    Promise.all(music.map(fetchDecode)),
   ])
   await decodeCtx.close()
 
@@ -215,7 +329,7 @@ async function mixStems(
   // looked like success. Better an honest error than a silently wrong file.
   const failedCount = [...vocalBufs, ...musicBufs].filter((b) => b === null).length
   if (failedCount > 0) {
-    console.error(`[mixStems] ${failedCount}/${vocalsUrls.length + musicUrls.length} stem fetches failed — aborting mix (stale URLs?)`)
+    console.error(`[mixStems] ${failedCount}/${vocals.length + music.length} stem fetches failed — aborting mix (stale URLs?)`)
     return null
   }
   const validVocals = vocalBufs.filter((b): b is AudioBuffer => b !== null)
@@ -233,6 +347,9 @@ async function mixStems(
   const numFrames = Math.ceil(duration * SAMPLE_RATE)
 
   const offline = new OfflineAudioContext(2, numFrames, SAMPLE_RATE)
+  const style = opts?.style ?? 'none'
+  // Where everything ends up: the destination, or the Lo-fi / Radio colour chain.
+  const out = styleOutput(offline, style)
 
   // Low-shelf gain (dB) for the vocal path; 0 at default warmth → no filter.
   const warmthDb = opts?.warmth
@@ -258,7 +375,7 @@ async function mixStems(
   // reasoning as the shared reverb convolver). Built lazily on first use.
   let echoBusIn: GainNode | null = null
   function getVocalSink(): AudioNode {
-    if (echoWet <= 0) return offline.destination
+    if (echoWet <= 0) return out
     if (!echoBusIn) {
       const input = offline.createGain()
       input.gain.value = 1
@@ -266,7 +383,7 @@ async function mixStems(
       const dry = offline.createGain()
       dry.gain.value = 1 - echoWet
       input.connect(dry)
-      dry.connect(offline.destination)
+      dry.connect(out)
 
       // Feedback loop: delay → lowpass damp → feedback gain → back into delay.
       // The damp filter sits INSIDE the loop, so each successive repeat gets
@@ -286,7 +403,7 @@ async function mixStems(
       wetGain.gain.value = echoWet
       input.connect(delay)
       delay.connect(wetGain)
-      wetGain.connect(offline.destination)
+      wetGain.connect(out)
 
       echoBusIn = input
     }
@@ -299,7 +416,7 @@ async function mixStems(
   // just cheaper. Built lazily so a reverb=0 render never creates it.
   // Outputs feed the vocal sink (echo bus when echo>0, else destination) so
   // the chain is warmth → reverb → echo → destination.
-  let reverbBus: { dry: GainNode; wetIn: ConvolverNode } | null = null
+  let reverbBus: { dry: GainNode; wetIn: AudioNode } | null = null
   function getReverbBus() {
     if (!reverbBus) {
       const dry = offline.createGain()
@@ -307,14 +424,24 @@ async function mixStems(
       dry.connect(getVocalSink())
 
       const convolver = offline.createConvolver()
-      convolver.buffer = createReverbImpulse(offline, REVERB_IR_SECONDS, REVERB_IR_DECAY)
+      // Concert Hall: longer hall impulse behind a short pre-delay.
+      convolver.buffer = style === 'hall'
+        ? createReverbImpulse(offline, HALL_IR_SECONDS, HALL_IR_DECAY)
+        : createReverbImpulse(offline, REVERB_IR_SECONDS, REVERB_IR_DECAY)
+      let wetIn: AudioNode = convolver
+      if (style === 'hall') {
+        const pre = offline.createDelay(1)
+        pre.delayTime.value = HALL_PREDELAY_S
+        pre.connect(convolver)
+        wetIn = pre
+      }
 
       const wetGain = offline.createGain()
       wetGain.gain.value = reverbWet
       convolver.connect(wetGain)
       wetGain.connect(getVocalSink())
 
-      reverbBus = { dry, wetIn: convolver }
+      reverbBus = { dry, wetIn }
     }
     return reverbBus
   }
@@ -363,7 +490,7 @@ async function mixStems(
     } else {
       // Vocal without reverb still routes through the echo bus (vocal sink);
       // music always terminates at the destination untouched.
-      node.connect(warm ? getVocalSink() : offline.destination)
+      node.connect(warm ? getVocalSink() : out)
     }
     src.start(0)
   }
@@ -376,9 +503,10 @@ async function mixStems(
   // untouched. The −1 dBFS headroom limiter below still catches any new peaks.
   // This is the ONE tuning knob for clone loudness — adjust here.
   const VOCAL_MAKEUP = 1.3
-  // VOCAL_MAKEUP/√N per vocal channel: keeps perceived loudness flat as N grows.
-  const vocalGain = VOCAL_MAKEUP / Math.sqrt(validVocals.length)
-  for (const buf of validVocals) addSource(buf, vocalGain, true) // vocal: warmth-eligible + makeup
+  // Each vocal's own share (1/√N for N main vocals, set by the caller) keeps
+  // perceived loudness flat as N grows; Vocal level moves them all together.
+  const levelGain = Math.pow(10, Math.max(-LEVEL_MAX_DB, Math.min(LEVEL_MAX_DB, opts?.levelDb ?? 0)) / 20)
+  validVocals.forEach((buf, i) => addSource(buf, VOCAL_MAKEUP * levelGain * vocals[i].gain, true)) // vocal: polish-eligible + makeup
   for (const buf of validMusic) addSource(buf, 0.8)              // music: never warmed, no makeup
 
   const rendered = await offline.startRendering()
@@ -618,6 +746,7 @@ export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
+  keyShift = 0, autotuneLabel, convertedSourceUrls,
 }: ResultStepProps) {
   // Player controls (owned here — no fake timer in the parent anymore)
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -699,13 +828,153 @@ export function ResultStep({
     setWarmth(p.warmth); setReverb(p.reverb); setEcho(p.echo); setBass(p.bass); setTreble(p.treble)
   }
 
+  // ── Voice controls + polish style ──────────────────────────────────────────
+  // Same debounce → re-render → saved-file wiring as the polish knobs: the
+  // settled values (fx) drive every render and the auto re-save.
+  const [level, setLevel] = useState(DEFAULT_FX.level)
+  const [blend, setBlend] = useState(DEFAULT_FX.blend)
+  const [character, setCharacter] = useState(DEFAULT_FX.character)
+  const [harmony, setHarmony] = useState<HarmonySetting>(DEFAULT_FX.harmony)
+  const [style, setStyle] = useState<PolishStyle>(DEFAULT_FX.style)
+  const [fx, setFx] = useState<VoiceFx>(DEFAULT_FX)
+  useEffect(() => {
+    const t = setTimeout(() => setFx({ level, blend, character, harmony, style }), 280)
+    return () => clearTimeout(t)
+  }, [level, blend, character, harmony, style])
+  const fxRef = useRef(fx)
+  fxRef.current = fx
+  const fxSig = `${fx.level}|${fx.blend}|${fx.character}|${fx.harmony}|${fx.style}`
+  const fxSettled = fx.level === level && fx.blend === blend && fx.character === character && fx.harmony === harmony && fx.style === style
+
+  // ── Processed audio (key-shifted music, voice character, harmony) ──────────
+  // Made in the background worker (dspClient) and cached, so turning an
+  // unrelated knob never redoes them. One cached result per group (e.g. one
+  // character setting per vocal) keeps memory bounded.
+  const procCacheRef = useRef(new Map<string, { group: string; buf: Promise<AudioBuffer> }>())
+  function cached(group: string, key: string, make: () => Promise<AudioBuffer>): Promise<AudioBuffer> {
+    const cache = procCacheRef.current
+    const hit = cache.get(key)
+    if (hit) return hit.buf
+    cache.forEach((v, k) => { if (v.group === group) cache.delete(k) })
+    const buf = make()
+    cache.set(key, { group, buf })
+    buf.catch(() => cache.delete(key))
+    return buf
+  }
+  const fxErrorShownRef = useRef(false)
+  // A failed effect falls back to the unprocessed audio and says so once.
+  function fxFallback<T>(what: string, fallback: T) {
+    return (err: unknown) => {
+      console.error(`[voice-fx] ${what} failed:`, err)
+      if (!fxErrorShownRef.current) { fxErrorShownRef.current = true; onToast(`Couldn't apply ${what} on this device — playing without it`) }
+      return fallback
+    }
+  }
+
+  // Non-drum music stems: shifted for a key change and used to find the key.
+  const tonalUrls = [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+  const musicUrlsAll = [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+
+  // Sum several stems into one stereo buffer (first one's sample rate).
+  async function sumStems(urls: string[]): Promise<AudioBuffer> {
+    const bufs = await Promise.all(urls.map(decodeUrl))
+    const sr = bufs[0].sampleRate
+    const len = Math.max(...bufs.map((b) => b.length))
+    const out = [new Float32Array(len), new Float32Array(len)]
+    for (const b of bufs) for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(Math.min(c, b.numberOfChannels - 1))
+      for (let i = 0; i < d.length; i++) out[c][i] += d[i]
+    }
+    return toBuffer(out, sr)
+  }
+
+  async function shiftBuffer(b: AudioBuffer, opts: ShiftOptions): Promise<AudioBuffer> {
+    return toBuffer(await dspShift(channelsOf(b), b.sampleRate, opts), b.sampleRate)
+  }
+
+  // Music in the new key: drums stay as they are, everything else is shifted.
+  async function musicSources(): Promise<MixSource[]> {
+    if (!keyShift || tonalUrls.length === 0) return musicUrlsAll
+    const bed = await cached('bed', `bed|${keyShift}`, async () => shiftBuffer(await sumStems(tonalUrls), { semitones: keyShift }))
+      .catch(fxFallback('the key change', null))
+    if (!bed) return musicUrlsAll
+    return [...(stemResult?.drumsUrl ? [stemResult.drumsUrl] : []), bed]
+  }
+
+  // A vocal that wasn't converted (duet partner, Voice blend's original singer)
+  // moved to the new key, formants kept so it still sounds like that singer.
+  function inKey(url: string): Promise<MixSource> {
+    if (!keyShift) return Promise.resolve(url)
+    return cached(`key:${url}`, `key|${url}|${keyShift}`, async () => shiftBuffer(await decodeUrl(url), { semitones: keyShift, formantCompensation: true }))
+      .catch(fxFallback('the key change', url))
+  }
+
+  // The song's key (from the original music), found once — for Add harmony.
+  const [songKey, setSongKey] = useState<KeyEstimate | null | 'pending' | 'none'>(null)
+  const songKeyRef = useRef<Promise<KeyEstimate | null> | null>(null)
+  function getSongKey(): Promise<KeyEstimate | null> {
+    if (!songKeyRef.current) {
+      setSongKey('pending')
+      songKeyRef.current = (async () => {
+        if (tonalUrls.length === 0) return null
+        const b = await sumStems(tonalUrls)
+        const mono = new Float32Array(b.length)
+        for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) mono[i] += d[i] / 2 }
+        const key = await dspKey(mono, b.sampleRate)
+        console.log('[voice-fx] song key', keyName(key), key)
+        return key
+      })().catch((err) => { console.error('[voice-fx] key detection failed:', err); return null })
+      songKeyRef.current.then((k) => setSongKey(k ?? 'none'))
+    }
+    return songKeyRef.current
+  }
+  // Key after the take's key change (harmony follows the voice's key).
+  const shiftedKey = (k: KeyEstimate | null) => (k ? { ...k, tonic: (((k.tonic + keyShift) % 12) + 12) % 12 } : null)
+
+  // All vocal channels of the swapped mix for these settings.
+  async function vocalSources(f: VoiceFx): Promise<MixVocal[]> {
+    const converted = [convertedVocalsUrl, convertedVocalsUrl2].filter((u): u is string => Boolean(u))
+    const g = 1 / Math.sqrt(Math.max(1, converted.length + (duetUntouchedVocalsUrl ? 1 : 0)))
+    const originals = f.blend > 0 ? (convertedSourceUrls ?? []).filter(Boolean) : []
+    const b = originals.length ? Math.min(BLEND_MAX, f.blend) / 100 : 0
+    const parts = await Promise.all([
+      ...converted.map(async (url): Promise<MixVocal[]> => {
+        const voice: MixSource = f.character
+          ? await cached(`char:${url}`, `char|${url}|${f.character}`, async () => shiftBuffer(await decodeUrl(url), { formantSemitones: f.character }))
+            .catch(fxFallback('voice character', url))
+          : url
+        const out: MixVocal[] = [{ src: voice, gain: g * (1 - b) }]
+        if (f.harmony !== 'off') {
+          const voices = f.harmony === '4' ? 4 : 2
+          const h = await cached(`harm:${url}`, `harm|${url}|${voices}|${f.character}`, async () => {
+            const key = shiftedKey(await getSongKey())
+            const v = await decodeUrl(url)
+            const { stem } = await dspHarmony(monoOf(v), v.sampleRate, voices, key, f.character)
+            return toBuffer([stem], v.sampleRate)
+          }).catch(fxFallback('harmony', null))
+          if (h) out.push({ src: h, gain: g })
+        }
+        return out
+      }),
+      ...(duetUntouchedVocalsUrl ? [inKey(duetUntouchedVocalsUrl).then((src) => [{ src, gain: g }])] : []),
+      ...originals.map((o) => inKey(o).then((src) => [{ src, gain: g * b }])),
+    ])
+    return parts.flat()
+  }
+
+  // Render the swapped side: 'full' = vocals + music, 'vocals' = vocals only.
+  async function renderSwapped(kind: 'full' | 'vocals', f: VoiceFx, polish: { warmth: number; reverb: number; echo: number; bass: number; treble: number }): Promise<Blob | null> {
+    const [vocals, music] = await Promise.all([vocalSources(f), kind === 'full' ? musicSources() : Promise.resolve([] as MixSource[])])
+    return mixStems(vocals, music, { ...polish, levelDb: f.level, style: f.style })
+  }
+
   // ── Song-matched polish ─────────────────────────────────────────────────────
   // On a new converted vocal, compare it with the original lead and set warmth /
   // treble / reverb to match the original singer (within tasteful limits). Never
   // overrides knobs the user has touched; the first save waits for it (or for
   // MATCH_TIMEOUT_MS, after which Studio stays). "Reset to Studio" / "Raw" /
   // "Match song" switch presets explicitly.
-  const [polishSource, setPolishSource] = useState<'studio' | 'matched' | 'custom' | 'raw'>('studio')
+  const [polishSource, setPolishSource] = useState<'studio' | 'matched' | 'custom' | 'raw' | 'hall' | 'lofi' | 'radio'>('studio')
   const [matchPending, setMatchPending] = useState(false)
   const [matched, setMatched] = useState<{ preset: PolishPreset; info: MatchedPolish } | null>(null)
   const polishTouchedRef = useRef(false)
@@ -737,9 +1006,9 @@ export function ResultStep({
   }, [convertedVocalsUrl, originalVocalUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto re-persist (the saved track always reflects the CURRENT polish) ────
-  // Signature of the currently-settled polish; the persist effect re-saves only
-  // when this changes from what was last stored (no redundant uploads).
-  const polishSig = `${debouncedWarmth}|${debouncedReverb}|${debouncedEcho}|${debouncedBass}|${debouncedTreble}`
+  // Signature of the currently-settled polish + voice controls; the persist
+  // effect re-saves only when this changes from what was last stored.
+  const polishSig = `${debouncedWarmth}|${debouncedReverb}|${debouncedEcho}|${debouncedBass}|${debouncedTreble}|${fxSig}`
   const polishSigRef = useRef(polishSig)
   polishSigRef.current = polishSig
   const lastSavedSigRef = useRef<string | null>(null) // null = not yet saved
@@ -766,15 +1035,13 @@ export function ResultStep({
       if (!mixPath) {
         saved = false // upload failed — keep the previous saved version
       } else if (firstSave) {
-        // Music-only backing (Perform Live / Sing along) — polish-independent,
-        // so built + uploaded ONCE on the first save. Strictly best-effort.
+        // Music-only backing (Perform Live / Sing along) — polish-independent
+        // (but in the take's key), so built + uploaded ONCE on the first save.
+        // Strictly best-effort.
         let instrumentalPath: string | null | undefined
-        const musicUrls = [
-          stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl,
-        ].filter((u): u is string => Boolean(u))
-        if (musicUrls.length > 0) {
+        if (musicUrlsAll.length > 0) {
           try {
-            const blob = await mixStems([], musicUrls)
+            const blob = await mixStems([], await musicSources())
             if (blob) {
               const url = URL.createObjectURL(blob)
               try { instrumentalPath = await uploadFullMixMp3(url, 'swap-instrumental.mp3') }
@@ -867,13 +1134,8 @@ export function ResultStep({
     lastSavedSigRef.current = null
     savingRef.current = false
 
-    // Collect non-empty music stem URLs (the shared instrumental bed)
-    const musicUrls = [
-      stemResult.instrumentalUrl,
-      stemResult.bassUrl,
-      stemResult.drumsUrl,
-      stemResult.otherUrl,
-    ].filter((u): u is string => Boolean(u))
+    // Non-empty music stem URLs (the shared instrumental bed)
+    const musicUrls = musicUrlsAll
 
     if (musicUrls.length === 0) {
       // No music stems — Full song mode is impossible. Force vocals-only and
@@ -885,17 +1147,11 @@ export function ResultStep({
       return
     }
 
-    // Swapped mix vocal channels — varies by mode:
+    // Swapped mix vocal channels (vocalSources) — varies by mode:
     //  Mode 1: [converted singer, untouched partner]
     //  Mode 2/3: [converted male, converted female]
     //  Standard: [converted vocal]
-    // vocalGain auto-scales via 1/√N in mixStems; no extra work needed here.
-    const swapVocalUrls = [
-      convertedVocalsUrl,
-      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
-      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
-    ]
-
+    // each at 1/√N, plus any Voice blend / harmony layers.
     let cancelled = false
     setFullMixState('mixing')
     // Instrumentation only (browser console): wall-clock of the in-browser
@@ -903,8 +1159,8 @@ export function ResultStep({
     const mixStart = performance.now()
     Promise.all([
       // Original (reference) mix is never warmed — only the swapped vocal is.
-      mixStems([stemResult.leadVocalsUrl || stemResult.vocalsUrl], musicUrls),
-      mixStems(swapVocalUrls, musicUrls, { warmth: warmthRef.current, reverb: reverbRef.current, echo: echoRef.current, bass: bassRef.current, treble: trebleRef.current }),
+      mixStems([{ src: stemResult.leadVocalsUrl || stemResult.vocalsUrl, gain: 1 }], musicUrls),
+      renderSwapped('full', fxRef.current, { warmth: warmthRef.current, reverb: reverbRef.current, echo: echoRef.current, bass: bassRef.current, treble: trebleRef.current }),
     ])
       .then(([origBlob, swapBlob]) => {
         if (cancelled) return
@@ -941,28 +1197,17 @@ export function ResultStep({
     return () => { cancelled = true }
   }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live polish preview: when settled warmth OR reverb changes, re-render ONLY
+  // Live preview: when settled polish OR voice controls change, re-render ONLY
   // the swapped full-song mix (music bed + the Original reference mix stay
   // untouched). No fullMixState flip, so the player never drops to the
-  // "Mixing…" banner — we just swap in the polished URL when it's ready.
+  // "Mixing…" banner — we just swap in the new URL when it's ready.
   useEffect(() => {
     if (warmthInitRef.current) { warmthInitRef.current = false; return }
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
-    const musicUrls = [
-      stemResult.instrumentalUrl,
-      stemResult.bassUrl,
-      stemResult.drumsUrl,
-      stemResult.otherUrl,
-    ].filter((u): u is string => Boolean(u))
-    if (musicUrls.length === 0) return // no full mix to polish
-    const swapVocalUrls = [
-      convertedVocalsUrl,
-      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
-      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
-    ]
+    if (musicUrlsAll.length === 0) return // no full mix to polish
     let cancelled = false
     setWarmthRendering(true)
-    mixStems(swapVocalUrls, musicUrls, { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble })
+    renderSwapped('full', fx, { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble })
       .then((blob) => {
         if (cancelled || !blob) return
         const url = URL.createObjectURL(blob)
@@ -973,7 +1218,7 @@ export function ResultStep({
       .catch(() => {})
       .finally(() => { if (!cancelled) setWarmthRendering(false) })
     return () => { cancelled = true }
-  }, [debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble, fxSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-persist (Option 2): keep the SAVED track in sync with the CURRENT
   // polish. Whenever the swapped mix is ready and polish has SETTLED to a value
@@ -985,39 +1230,33 @@ export function ResultStep({
   useEffect(() => {
     if (!persistMix || persistedRef.current) return
     if (fullMixState !== 'ready' || !mixedSwappedUrl) return
-    if (warmthRendering || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo || debouncedBass !== bass || debouncedTreble !== treble) return // still settling
+    if (warmthRendering || !fxSettled || debouncedWarmth !== warmth || debouncedReverb !== reverb || debouncedEcho !== echo || debouncedBass !== bass || debouncedTreble !== treble) return // still settling
     if (matchPending) return                    // song-matched polish still being worked out
     if (savingRef.current) return               // a save is in flight; its completion re-checks
     if (polishSig === lastSavedSigRef.current) return // this exact polish is already stored
     const t = setTimeout(() => { void savePolish() }, 1000)
     return () => clearTimeout(t)
-  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble, polishSig, matchPending]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistMix, fullMixState, mixedSwappedUrl, warmthRendering, fxSettled, debouncedWarmth, warmth, debouncedReverb, reverb, debouncedEcho, echo, debouncedBass, bass, debouncedTreble, treble, polishSig, matchPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vocals-only playback source: blends duet channels (N>1) AND/OR applies the
-  // same warmth+reverb+echo as the Full-song mix, so soloing the vocal to judge
-  // the effects (or just listening on the Vocals-only tab) matches Full-song and
-  // the saved file — both read the same debounced values. Falls back to
-  // convertedVocalsUrl directly when there's nothing to blend or polish (single
-  // vocal, all controls off), keeping that common case instant instead of
-  // round-tripping through mixStems.
+  // same polish + voice controls as the Full-song mix, so soloing the vocal to
+  // judge the effects (or just listening on the Vocals-only tab) matches
+  // Full-song and the saved file — both read the same debounced values. Falls
+  // back to convertedVocalsUrl directly when there's nothing to blend or
+  // process (single vocal, everything off), keeping that common case instant.
   useEffect(() => {
-    const swapVocalUrls = [
-      convertedVocalsUrl,
-      ...(duetUntouchedVocalsUrl ? [duetUntouchedVocalsUrl] : []),
-      ...(convertedVocalsUrl2 ? [convertedVocalsUrl2] : []),
-    ].filter(Boolean) as string[]
-
-    if (swapVocalUrls.length === 0) {
+    if (!convertedVocalsUrl) {
       setMixedSwappedVocalsUrl(null)
       return
     }
-    if (swapVocalUrls.length === 1 && debouncedWarmth === 0 && debouncedReverb === 0 && debouncedEcho === 0 && debouncedBass === 0 && debouncedTreble === 0) {
+    const single = !convertedVocalsUrl2 && !duetUntouchedVocalsUrl
+    if (single && fxIsDefault(fx) && debouncedWarmth === 0 && debouncedReverb === 0 && debouncedEcho === 0 && debouncedBass === 0 && debouncedTreble === 0) {
       setMixedSwappedVocalsUrl(null)
       return
     }
 
     let cancelled = false
-    mixStems(swapVocalUrls, [], { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble }).then((blob) => {
+    renderSwapped('vocals', fx, { warmth: debouncedWarmth, reverb: debouncedReverb, echo: debouncedEcho, bass: debouncedBass, treble: debouncedTreble }).then((blob) => {
       if (cancelled || !blob) return
       if (mixedSwappedVocalsRef.current) URL.revokeObjectURL(mixedSwappedVocalsRef.current)
       const url = URL.createObjectURL(blob)
@@ -1026,7 +1265,7 @@ export function ResultStep({
     }).catch(() => {})
 
     return () => { cancelled = true }
-  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [convertedVocalsUrl, convertedVocalsUrl2, duetUntouchedVocalsUrl, debouncedWarmth, debouncedReverb, debouncedEcho, debouncedBass, debouncedTreble, fxSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revoke all three blob URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -1305,6 +1544,72 @@ export function ResultStep({
             convolution reverb (Reverb) then feedback delay (Echo), applied on
             BOTH the Full-song and Vocals-only tabs (and baked into the saved
             track). Hidden when there's no full mix to colour. */}
+        {/* Voice — free, client-side changes to the swapped voice (level, blend
+            with the original singer, character, harmony). Same pipeline as
+            Polish: both tabs + baked into the saved track. */}
+        {fullMixState !== 'no-stems' && (
+          <div className="vs-polish">
+            <div className="vs-polish-head">
+              <span className="vs-polish-title">Voice</span>
+              {warmthRendering && <span className="vs-polish-spin" />}
+              <span className="vs-polish-presets">
+                {keyShift !== 0 && <span className="vs-fx-chip" title="Set on the Configure step — the voice was converted in this key and the music (not drums) is shifted to match">Key {keyShift > 0 ? '+' : ''}{keyShift}</span>}
+                {autotuneLabel && <span className="vs-fx-chip" title="Set on the Configure step">Auto-tune · {autotuneLabel}</span>}
+                <button className="vs-polish-preset" onClick={() => { setLevel(0); setBlend(0); setCharacter(0); setHarmony('off') }} title="Back to the plain swapped voice">Reset</button>
+              </span>
+            </div>
+            <div className="vs-knob-row">
+              <PolishKnob
+                id="level"
+                label="Level"
+                hint="Vocal level against the music, −9 to +9 dB — drag up/down, double-click to reset"
+                value={level}
+                onChange={setLevel}
+                min={-LEVEL_MAX_DB} max={LEVEL_MAX_DB}
+                format={(v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : ''}${v} dB`)}
+              />
+              {(convertedSourceUrls?.length ?? 0) > 0 && (
+                <PolishKnob
+                  id="blend"
+                  label="Blend"
+                  hint="Mix in the original singer under your voice, 0–50% — drag up/down, double-click to reset"
+                  value={blend}
+                  onChange={setBlend}
+                  max={BLEND_MAX}
+                  format={(v) => (v === 0 ? 'Off' : `${v}% original`)}
+                />
+              )}
+              <PolishKnob
+                id="character"
+                label="Character"
+                hint="Deeper ↔ brighter voice, same notes — drag up/down, double-click to reset"
+                value={character}
+                onChange={setCharacter}
+                min={-CHARACTER_MAX} max={CHARACTER_MAX}
+                format={(v) => (v === 0 ? 'Natural' : v < 0 ? `Deeper ${-v}` : `Brighter ${v}`)}
+              />
+            </div>
+            <div className="vs-harm-row">
+              <span className="vs-harm-lbl">Add harmony</span>
+              {(['off', '2', '4'] as HarmonySetting[]).map((h) => (
+                <button key={h} className={`vs-polish-preset${harmony === h ? ' vs-polish-preset--on' : ''}`} onClick={() => setHarmony(h)}>
+                  {h === 'off' ? 'Off' : `${h} voices`}
+                </button>
+              ))}
+            </div>
+            <div className="vs-polish-foot">
+              {harmony !== 'off' && (
+                songKey === 'pending' || songKey === null ? <>Finding the song&rsquo;s key…{' '}</>
+                : songKey === 'none' ? <>Harmony: <strong>octaves</strong> (couldn&rsquo;t read the key, so it stays safe).{' '}</>
+                : harmonyMode(shiftedKey(songKey)) === 'scale'
+                ? <>Harmony: <strong>{harmony === '4' ? 'a 3rd and a 5th above, an octave below' : 'a 3rd above'}</strong>, following the {keyName(shiftedKey(songKey)!)} scale so every note is in key.{' '}</>
+                : <>Harmony: <strong>octaves</strong> — {shiftedKey(songKey)!.mode === 'minor' ? `the song is in ${keyName(shiftedKey(songKey)!)}` : 'the key isn’t clear enough for thirds'}, so octaves keep it from sounding off.{' '}</>
+              )}
+              Free · client-side · applies to both tabs &amp; baked into the saved track.
+            </div>
+          </div>
+        )}
+
         {fullMixState !== 'no-stems' && (
           <div className="vs-polish">
             <div className="vs-polish-head">
@@ -1312,11 +1617,14 @@ export function ResultStep({
               {warmthRendering && <span className="vs-polish-spin" />}
               {savedFlash && <span className="vs-polish-saved">Saved ✓</span>}
               <span className="vs-polish-presets">
-                <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('raw'); applyPreset(RAW_PRESET) }} title="Zero all polish — the bone-dry converted vocal">Raw</button>
                 {matched && (
-                  <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('matched'); applyPreset(matched.preset) }} title="Warmth, treble and reverb matched to the original singer's vocal">Match song</button>
+                  <button className={`vs-polish-preset${polishSource === 'matched' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('matched'); setStyle('none'); applyPreset(matched.preset) }} title="Warmth, treble and reverb matched to the original singer's vocal">Match song</button>
                 )}
-                <button className="vs-polish-preset" onClick={() => { polishTouchedRef.current = true; setPolishSource('studio'); applyPreset(STUDIO_PRESET) }} title="The standard Studio polish (warmth + light reverb)">Reset to Studio</button>
+                <button className={`vs-polish-preset${polishSource === 'studio' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('studio'); setStyle('none'); applyPreset(STUDIO_PRESET) }} title="The standard Studio polish (warmth + light reverb)">Studio</button>
+                <button className={`vs-polish-preset${polishSource === 'hall' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('hall'); setStyle('hall'); applyPreset({ ...STUDIO_PRESET, reverb: HALL_REVERB }) }} title="A big concert-hall reverb on the voice">Concert Hall</button>
+                <button className={`vs-polish-preset${polishSource === 'lofi' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('lofi'); setStyle('lofi'); applyPreset(STUDIO_PRESET) }} title="Warm, worn, band-limited sound — colours the whole song">Lo-fi</button>
+                <button className={`vs-polish-preset${polishSource === 'radio' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('radio'); setStyle('radio'); applyPreset(STUDIO_PRESET) }} title="Narrow, punchy old-radio sound — colours the whole song">Radio</button>
+                <button className={`vs-polish-preset${polishSource === 'raw' ? ' vs-polish-preset--on' : ''}`} onClick={() => { polishTouchedRef.current = true; setPolishSource('raw'); setStyle('none'); applyPreset(RAW_PRESET) }} title="Zero all polish — the bone-dry converted vocal">Raw</button>
               </span>
             </div>
             <div className="vs-knob-row">
@@ -1367,7 +1675,13 @@ export function ResultStep({
               {matchPending
                 ? <>Matching the polish to this song…</>
                 : polishSource === 'matched' && matched
-                ? <>Polish <strong>matched to this song</strong> from the original singer&rsquo;s vocal — warmth +{matched.info.warmthDb} dB, treble {matched.info.trebleDb > 0 ? '+' : ''}{matched.info.trebleDb} dB, {Math.round(matched.info.reverbWet * 100)}% reverb. Tap <strong>Reset to Studio</strong> for the standard polish or <strong>Raw</strong> for the dry voice.</>
+                ? <>Polish <strong>matched to this song</strong> from the original singer&rsquo;s vocal — warmth +{matched.info.warmthDb} dB, treble {matched.info.trebleDb > 0 ? '+' : ''}{matched.info.trebleDb} dB, {Math.round(matched.info.reverbWet * 100)}% reverb. Tap <strong>Studio</strong> for the standard polish or <strong>Raw</strong> for the dry voice.</>
+                : style === 'hall'
+                ? <><strong>Concert Hall</strong> — a big hall reverb on the voice.</>
+                : style === 'lofi'
+                ? <><strong>Lo-fi</strong> — the whole song gets a warm, worn, band-limited sound.</>
+                : style === 'radio'
+                ? <><strong>Radio</strong> — the whole song gets a narrow, punchy old-radio sound.</>
                 : <>A default <strong>Studio</strong> polish (warmth + light reverb) is applied so it doesn&rsquo;t sound dry — tap <strong>Raw</strong> for the bone-dry output, or adjust the knobs.</>}
               {' '}Free · client-side · applies to both tabs &amp; baked into the saved track.
             </div>
@@ -1535,6 +1849,14 @@ export function ResultStep({
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
         .vs-polish-preset:hover { border-color: #9D5CFF; color: #C4B5FD; }
+        .vs-polish-preset--on { border-color: #9D5CFF; color: #F0F0FF; background: rgba(157,92,255,.18); }
+        .vs-polish-presets { flex-wrap: wrap; justify-content: flex-end; }
+        .vs-fx-chip {
+          font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 7px; white-space: nowrap;
+          color: #34D399; background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.25);
+        }
+        .vs-harm-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .vs-harm-lbl { font-size: 12px; color: #C4C4E0; margin-right: 4px; }
         .vs-knob-row {
           display: flex; align-items: flex-start; justify-content: center;
           gap: 24px; flex-wrap: wrap;

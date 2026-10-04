@@ -8,6 +8,12 @@ type DuetSinger = 'male' | 'female'
 
 // Exported so VoiceSwapPage can hold this state and pass it to handleProcess later.
 export type DuetMode = 'one' | 'both-split' | 'both-same'
+// Auto-tune for the conversion (snaps notes inside the voice engine).
+export type Autotune = 'Off' | 'Light' | 'Strong'
+export const AUTOTUNE_AMOUNT: Record<Autotune, number> = { Off: 0, Light: 0.5, Strong: 1 }
+// Key change: voice + music move together (drums stay). Clips at ±2 were
+// clearly audible; beyond ±4 the shifted music starts to sound processed.
+export const KEY_SHIFT_MAX = 4
 
 export interface VoiceOption {
   id: string
@@ -34,6 +40,10 @@ interface ConfigStepProps {
   setGender: (g: Gender) => void
   pitchShift: number
   setPitchShift: (v: number) => void
+  keyShift: number
+  setKeyShift: (v: number) => void
+  autotune: Autotune
+  setAutotune: (v: Autotune) => void
   // Duet mode — only rendered when hasDuet is true (both male+female URLs present).
   hasDuet?: boolean
   duetMode?: DuetMode
@@ -134,7 +144,7 @@ function VoiceGrid({
 export function ConfigStep({
   voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
   gender, setGender,
-  pitchShift, setPitchShift,
+  pitchShift, setPitchShift, keyShift, setKeyShift, autotune, setAutotune,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
 }: ConfigStepProps) {
@@ -325,12 +335,48 @@ export function ConfigStep({
               </button>
             </div>
           </div>
+
+          <div className="vs-ctrl-group vs-ctrl-full">
+            <label className="vs-ctrl-lbl">
+              Song Key
+              <span className="vs-ctrl-val">
+                {keyShift === 0 ? 'Original' : `${keyShift > 0 ? '+' : ''}${keyShift} st`}
+              </span>
+            </label>
+            <div className="vs-pitch-row">
+              <button className="vs-pitch-btn" onClick={() => setKeyShift(Math.max(-KEY_SHIFT_MAX, keyShift - 1))}>–</button>
+              <div className="vs-pitch-track">
+                <div
+                  className="vs-pitch-fill"
+                  style={{
+                    left: '50%',
+                    width: `${Math.abs(keyShift) / KEY_SHIFT_MAX * 50}%`,
+                    transform: keyShift < 0 ? 'translateX(-100%)' : 'none',
+                    background: 'linear-gradient(135deg,#9D5CFF,#F9459E,#0CC7E8)',
+                  }}
+                />
+                <div className="vs-pitch-thumb" style={{ left: `calc(${(keyShift + KEY_SHIFT_MAX) / (2 * KEY_SHIFT_MAX) * 100}% - 8px)` }} />
+              </div>
+              <button className="vs-pitch-btn" onClick={() => setKeyShift(Math.min(KEY_SHIFT_MAX, keyShift + 1))}>+</button>
+            </div>
+            <div className="vs-ctrl-hint">Moves the whole song — your voice and the music together (drums stay as they are). Pitch Shift above moves only the voice.</div>
+          </div>
+
+          <div className="vs-ctrl-group vs-ctrl-full">
+            <label className="vs-ctrl-lbl">Auto-tune</label>
+            <SegControl<Autotune> options={['Off', 'Light', 'Strong']} value={autotune} onChange={setAutotune} />
+            <div className="vs-ctrl-hint">
+              {autotune === 'Off' ? 'Natural pitch, as sung.' : autotune === 'Light' ? 'Pulls notes halfway onto pitch — tighter, still natural.' : 'Snaps every note onto pitch — the hard, robotic auto-tune sound.'}
+              {' '}Part of the conversion — no extra cost.
+            </div>
+          </div>
         </div>
         </>
         )}
       </div>
 
       <style suppressHydrationWarning>{`
+        .vs-ctrl-hint { font-size: 11px; color: #8E8EB4; margin-top: 6px; line-height: 1.45; }
         .vs-section-lbl {
           font-size: 11px;
           font-weight: 700;
