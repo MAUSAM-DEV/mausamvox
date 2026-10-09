@@ -104,14 +104,17 @@ async function refreshStemUrls(result: StemResult): Promise<StemResult> {
 
 // ── Lead vocal quality assessment ─────────────────────────────────────────────
 // After KARA_2 finishes, we compare the lead stem against the full vocal stem to
-// detect dropout artifacts: sustained silence gaps (≥ 2 s) in the lead where the
-// full vocal is still active. Backing harmonies being correctly removed don't
-// produce 2-second silent blocks — only a bad KARA_2 split does. Returns true if
-// the lead stem looks healthy; false if handleProcess should fall back to vocalsUrl.
+// detect dropout artifacts: sustained silence gaps (≥ 2 s) where the full vocal
+// is active but BOTH the lead and the backing are silent — the singing went
+// missing. A gap in the lead alone is the split working (an intro hum or a
+// chorus line moved to the backing): on 2026-10-09 counting those rejected a
+// good lead, the swap converted the whole vocal track and Auto Key misread it
+// (+8 semitones, thin voice). Returns true if the lead stem looks healthy;
+// false if handleProcess should fall back to vocalsUrl.
 const _ASSESS_MAX_S   = 90     // analyse at most the first 90 s (bounds memory)
 const _ASSESS_FRAME_S = 0.1    // 100 ms RMS windows
 const _VOCAL_FLOOR    = 10 ** (-45 / 20) // full-vocal must exceed this to count as active
-const _LEAD_SILENCE   = 10 ** (-50 / 20) // lead below this = silent frame
+const _LEAD_SILENCE   = 10 ** (-50 / 20) // lead (and backing) below this = silent frame
 const _MIN_GAP_S      = 2.0    // ignore gaps shorter than this (short harmonic dips)
 
 // Group/backing-vocals check (src/lib/group-vocals.ts): decodes the lead and
@@ -154,7 +157,7 @@ async function checkGroupVocals(leadUrl: string, backingUrl: string): Promise<St
   }
 }
 
-async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise<boolean> {
+async function assessLeadVocalQuality(leadUrl: string, fullUrl: string, backingUrl: string): Promise<boolean> {
   try {
     const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = new AudioCtx()
@@ -167,7 +170,7 @@ async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise
       } catch { return null }
     }
 
-    const [leadBuf, fullBuf] = await Promise.all([decode(leadUrl), decode(fullUrl)])
+    const [leadBuf, fullBuf, backBuf] = await Promise.all([decode(leadUrl), decode(fullUrl), backingUrl ? decode(backingUrl) : null])
     try { await ctx.close() } catch { /* ignore */ }
     if (!leadBuf || !fullBuf) return true // can't assess — assume healthy
 
@@ -176,19 +179,22 @@ async function assessLeadVocalQuality(leadUrl: string, fullUrl: string): Promise
     const limit     = Math.min(leadBuf.length, fullBuf.length, Math.round(_ASSESS_MAX_S * sr))
     const leadCh    = leadBuf.getChannelData(0)
     const fullCh    = fullBuf.getChannelData(0)
+    const backCh    = backBuf && backBuf.length >= limit ? backBuf.getChannelData(0) : null
     const minGapFrames = Math.ceil(_MIN_GAP_S / _ASSESS_FRAME_S)
 
     let gapFrames = 0
     for (let off = 0; off + frameSize <= limit; off += frameSize) {
-      let sumL = 0, sumF = 0
+      let sumL = 0, sumF = 0, sumB = 0
       for (let i = off; i < off + frameSize; i++) {
         sumL += leadCh[i] * leadCh[i]
         sumF += fullCh[i] * fullCh[i]
+        if (backCh) sumB += backCh[i] * backCh[i]
       }
       const rmsL = Math.sqrt(sumL / frameSize)
       const rmsF = Math.sqrt(sumF / frameSize)
+      const rmsB = Math.sqrt(sumB / frameSize)
 
-      if (rmsF > _VOCAL_FLOOR && rmsL < _LEAD_SILENCE) {
+      if (rmsF > _VOCAL_FLOOR && rmsL < _LEAD_SILENCE && rmsB < _LEAD_SILENCE) {
         if (++gapFrames >= minGapFrames) return false // dropout confirmed
       } else {
         gapFrames = 0
@@ -703,7 +709,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
           // Assess lead quality before committing: if KARA_2 dropped vocal
           // sections, discard the lead so handleProcess falls back to vocalsUrl.
-          const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl)
+          const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl, backingVocalsUrl)
           // A new upload may have superseded us while the assessment was running.
           if (karaokeJobRef.current !== jobId) return
           const effectiveLead = leadHealthy ? leadVocalsUrl : ''
@@ -1003,11 +1009,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       return typeof signedUrl === 'string' ? signedUrl : null
     } catch { return null }
   }
-  // Auto Song Key for this song + voice (0 = Original). Duet stems: always 0
-  // (their pitch reads unreliably — same rule as the octave match).
+  // Auto Song Key for this song + voice (0 = Original). Worked out from the
+  // LEAD vocal only: duet stems and the whole vocal track (no lead/backing
+  // split) read unreliably — the whole track gave −4 on 2026-10-09 — so they
+  // always get the Original key.
   const autoKeyRef = useRef<Record<string, Promise<number>>>({})
   function computeAutoKey(sourceUrl: string, voiceId: string, isDuetStem: boolean): Promise<number> {
-    if (isDuetStem) return Promise.resolve(0)
+    if (isDuetStem || !stemResult?.leadVocalsUrl || sourceUrl !== stemResult.leadVocalsUrl) return Promise.resolve(0)
     autoKeyRef.current[`${sourceUrl}|${voiceId}`] ??= (async () => {
       const sample = await voiceSampleUrl(voiceId)
       const [song, voice, octave] = await Promise.all([pitchStatsOf(sourceUrl), sample ? pitchStatsOf(sample) : null, autoKeyShift(sourceUrl, voiceId, false)])
@@ -1036,6 +1044,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   async function autoKeyShift(sourceUrl: string, voiceId: string, isDuetStem: boolean): Promise<number> {
     if (isDuetStem) {
       console.log('[voice-swap] auto key-match skipped — duet/gender-split stem (unreliable F0)', { voiceId })
+      return 0
+    }
+    // The whole vocal track (lead + backing together) reads an octave low:
+    // on 2026-10-09 it gave +12 and the voice was sung far too high.
+    if (!stemResult?.leadVocalsUrl || sourceUrl !== stemResult.leadVocalsUrl) {
+      console.log('[voice-swap] auto key-match skipped — not the lead vocal (unreliable F0)', { voiceId })
       return 0
     }
     const [src, tgt] = await Promise.all([getSourceF0(sourceUrl), getTargetF0(voiceId)])
@@ -1626,6 +1640,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             const hasDuetStems = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
             const isDualMode = hasDuetStems && (duetMode === 'both-split' || duetMode === 'both-same')
             const isDuetGated = isDuet && !hasDuetStems && !genderSplitting
+            // Configure: wait for the lead/backing split — a swap started before
+            // it lands converts the whole vocal track (backing too) and Auto Key
+            // can't be worked out from the lead.
+            const leadPending = step === 2 && karaokeStatus === 'running'
+            const waitTitle = genderSplitting ? 'Waiting for vocal split to finish…' : leadPending ? 'Finding the lead vocal… (about a minute)' : undefined
             return (
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
@@ -1636,8 +1655,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <div className="vs-action-btns">
                 <button
                   className="vs-btn-ghost"
-                  disabled={genderSplitting}
-                  title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
+                  disabled={genderSplitting || leadPending}
+                  title={waitTitle}
                   onClick={() => {
                     if (step === 1 && !stemResult) {
                       showToast('Upload a track first')
@@ -1663,11 +1682,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 {step === 2 && (
                   <button
                     className="vs-btn-solid"
-                    disabled={genderSplitting}
-                    title={genderSplitting ? 'Waiting for vocal split to finish…' : undefined}
+                    disabled={genderSplitting || leadPending}
+                    title={waitTitle}
                     onClick={handleFullClick}
                   >
-                    {savablePreview()
+                    {leadPending
+                      ? '⏳ Finding the lead vocal…'
+                      : savablePreview()
                       ? `💾 Save previewed take · ${previewSaveCost ?? FULL_SWAP_CREDITS} cr`
                       : guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
                   </button>

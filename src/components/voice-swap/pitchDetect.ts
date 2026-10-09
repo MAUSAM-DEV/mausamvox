@@ -164,10 +164,13 @@ export function autoOctaveShiftSemitones(sourceF0: number | null, targetF0: numb
 // whole song and of the voice's sample (pitch-track.ts; two different pitch
 // trackers agreed within ~1.5 semitones on medians, but not on the top notes).
 // octaveShift = the auto octave already applied to the voice alone.
+// Careful by design (2026-10-09: a −4 from a misread octave sent the voice
+// +8 and it sounded thin): an octave shift in play, or a key further than
+// AUTO_KEY_MAX away, means a reading is off → Original key (0), never the cap.
 export const AUTO_KEY_MAX = 4
 export const AUTO_KEY_MIN_VOICED_S = 20 // less clear singing than this → Original key
 export function autoKeySemitones(songMedianMidi: number, voiceMedianMidi: number, octaveShift: number): number {
-  if (!Number.isFinite(songMedianMidi) || !Number.isFinite(voiceMedianMidi)) return 0
-  const raw = voiceMedianMidi - songMedianMidi - octaveShift
-  return Math.max(-AUTO_KEY_MAX, Math.min(AUTO_KEY_MAX, Math.round(raw)))
+  if (!Number.isFinite(songMedianMidi) || !Number.isFinite(voiceMedianMidi) || octaveShift !== 0) return 0
+  const key = Math.round(voiceMedianMidi - songMedianMidi)
+  return Math.abs(key) > AUTO_KEY_MAX ? 0 : key
 }

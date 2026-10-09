@@ -750,20 +750,15 @@ export function ResultStep({
     if (m === 'full' && !fullReady) return
     setMode(m)
   }
-  function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
-    if (!player || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    player.seek(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration)
-  }
-
-  // Progress bar: click or drag (mouse or finger) to seek; while dragging the
-  // bar follows the finger and the song jumps there on release.
+  // Waveform: click or drag (mouse or finger) to seek; while dragging the
+  // shading follows the finger and the song jumps there on release. (The
+  // separate slider bar under it was removed, 2026-10-09.)
   const [scrub, setScrub] = useState<number | null>(null)
   const fracAt = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
   }
-  const progressBarProps = {
+  const seekProps = {
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => { if (!duration) return; e.currentTarget.setPointerCapture(e.pointerId); setScrub(fracAt(e)) },
     onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => { if (scrub !== null) setScrub(fracAt(e)) },
     onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { if (scrub === null) return; player?.seek(fracAt(e) * duration); setScrub(null) },
@@ -787,7 +782,7 @@ export function ResultStep({
     try {
       const buf = await renderForDownload()
       if (!buf) { onToast('Nothing to download yet'); return }
-      const blob = kind === 'wav' ? encodeWav(buf) : encodeMp3(buf)
+      const blob = kind === 'wav' ? encodeWav(buf) : encodeMp3(buf, SAVED_MP3_KBPS)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -910,20 +905,15 @@ export function ResultStep({
                 </div>
               ) : (
                 <>
-                  <div className="vs-wave-container">
-                    <PlayerWaveCanvas playing={playing} />
-                    <div className="vs-wave-played" style={{ width: `${shown * 100}%` }} />
-                    <div className="vs-seek-overlay" onClick={handleSeek} />
-                    <div className="vs-playhead" style={{ left: `${shown * 100}%` }} />
-                  </div>
                   <div
-                    className="vs-progress"
+                    className="vs-wave-container"
                     role="slider" tabIndex={0} aria-label="Song position"
                     aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(shownTime)} aria-valuetext={fmt(shownTime)}
-                    {...progressBarProps}
+                    {...seekProps}
                   >
-                    <div className="vs-progress-track"><div className="vs-progress-fill" style={{ width: `${shown * 100}%` }} /></div>
-                    <div className="vs-progress-handle" style={{ left: `${shown * 100}%` }} />
+                    <PlayerWaveCanvas playing={playing} />
+                    <div className="vs-wave-played" style={{ width: `${shown * 100}%` }} />
+                    <div className="vs-playhead" style={{ left: `${shown * 100}%` }} />
                   </div>
                   <div className="vs-player-controls">
                     <span className="vs-time">{fmt(shownTime)}</span>
@@ -1126,7 +1116,7 @@ export function ResultStep({
             className="vs-dl-btn vs-dl-btn--outline"
             onClick={() => { void handleDownload('mp3') }}
             disabled={fullMixing || !canPlay || preparing !== null}
-            title="Download as 192 kbps MP3"
+            title="Download as 320 kbps MP3"
           >
             {preparing === 'mp3' ? '⏳ Encoding…' : `↓ MP3`}
           </button>
@@ -1207,21 +1197,13 @@ export function ResultStep({
         }
         .vs-mix-note--err { color: #F87171; background: rgba(248,113,113,.06); border-bottom-color: rgba(248,113,113,.15); }
 
-        .vs-wave-container { position: relative; cursor: pointer; }
-        .vs-seek-overlay { position: absolute; inset: 0; z-index: 2; }
+        .vs-wave-container { position: relative; cursor: pointer; touch-action: none; }
+        .vs-wave-container:focus-visible { outline: 2px solid #9D5CFF; outline-offset: 2px; border-radius: 4px; }
         .vs-playhead {
           position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
           background: rgba(255,255,255,.9); pointer-events: none; z-index: 3;
         }
         .vs-wave-played { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(157,92,255,.14); pointer-events: none; z-index: 1; }
-        .vs-progress { position: relative; height: 22px; margin: 4px 14px 0; cursor: pointer; touch-action: none; }
-        .vs-progress:focus-visible { outline: 2px solid #9D5CFF; outline-offset: 2px; border-radius: 4px; }
-        .vs-progress-track { position: absolute; left: 0; right: 0; top: 8px; height: 6px; border-radius: 3px; background: #2E2E56; overflow: hidden; }
-        .vs-progress-fill { height: 100%; background: linear-gradient(90deg,#9D5CFF,#F9459E); }
-        .vs-progress-handle {
-          position: absolute; top: 4px; width: 14px; height: 14px; border-radius: 50%; margin-left: -7px;
-          background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); pointer-events: none;
-        }
         .vs-player-controls {
           display: flex; align-items: center; justify-content: space-between;
           padding: 4px 14px 10px;
