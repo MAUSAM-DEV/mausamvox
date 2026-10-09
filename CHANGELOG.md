@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-09
 
+- **Voice model inspection (no change):** Mausam (Singing) = 50 epochs (~450 steps, loss still falling), first 3:00 of a 62 kbps AAC recording (37 s of singing unused, nothing above 16 kHz), official RVC v2 48k base (MIT). Retrain plan awaiting approval.
 - **ElevenLabs stock-voice test (no app change):** STS v2 keeps timing but not the melody (median 150 cents off vs ours 10; held notes wobble 63 c vs 18); 4 clips in Saved Tracks; 500 ElevenLabs credits.
 - **No wait gives up silently** — lib/poll.ts across stem split, Stem Studio, duet split, lyrics; save retries + re-save failure reported; Choir/Instruments recover finished results after a dropped connection; lyric writer tolerates a failed check. `tsc --noEmit` clean; clean `npm run build` passed. `472d79f`
 - **Identity kept** — no voice compression, glue on music only, mastering capped at 1 dB average limiting. `tsc --noEmit` clean; clean `npm run build` passed. `fcd0bac`

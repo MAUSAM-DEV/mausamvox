@@ -6,6 +6,31 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-09 (night, 3) — how "Mausam (Singing)" was trained (inspection only) — retrain plan AWAITING APPROVAL
+
+- **Training job** `mvegw63gf9rmw0d109ttnk12w8` (2026-10-03, `replicate/train-rvc-model` 0397d5e2 = zsxkib/voice-cloning-training, MIT, wraps RVC WebUI):
+  - v2, 48k, rmvpe_gpu, **50 epochs**, batch 7, fp16, lr 1e-4, seed 1234;
+  - base `assets/pretrained_v2/f0G48k.pth` / `f0D48k.pth` (official RVC, MIT, ~50 h VCTK);
+  - 155 s on an L40S ≈ $0.15.
+- **Under-trained:**
+  - 61 slices of 3 s → about 9 steps per epoch → only ~450 steps;
+  - mel loss 34.7 → 24.3 → 21.8 and still falling at the end;
+  - only the final epoch is saved.
+- **Data:**
+  - "Mausam Vox voice test.m4a" = 3:48, 48 kHz **AAC at 62 kbps**: nothing above 16 kHz, weak from 10–16 kHz (why the clone lacks air);
+  - only the **first 3:00** was used — the last 48 s held 37 s of singing incl. the lowest (E2) and highest (F4) notes;
+  - cleanup (HPF 80 Hz + afftdn) is mild: −4.6 dB below 80 Hz, −1 dB above 10 kHz, nothing else;
+  - 18 clips of 10 s, 53–89% singing, no clipping.
+- **Bases:**
+  - the trainer can't take another base;
+  - TITAN is Apache-2.0 but fine-tuned on Expresso (licence to check);
+  - KLM / Ov2Super / Snowie / RIN_E3: no licence found → not for commercial use.
+- **Proposed retrain** (same recording, base unchanged):
+  1. more epochs;
+  2. the full 3:48 with lighter cleanup;
+  3. pick the epoch by measurement (150 / 300 / 500 runs).
+  - ≈ $2.60 training + conversions.
+
 ## ✅ 2026-10-09 (late night, 2) — identity fixes + "never give up silently" audit (`0bcc0e3`, `fcd0bac`, `472d79f`) — ⚠️ founder live test pending
 
 - **Lead split (`0bcc0e3`):**
