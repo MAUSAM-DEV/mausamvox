@@ -1,15 +1,15 @@
-// Studio voice for Voice Swap — the founder's pick "Q i" (2026-10-09): Blend f's
-// smoothing WITHOUT its top-end cut, plus the "air" the voice engine loses.
+// Studio voice for Voice Swap (2026-10-09): a de-esser plus the "air" the
+// voice engine loses. NO compression: measured on the founder's voice, the
+// 2:1 voice compressor of "Q i" moved it toward the original singer (speaker
+// similarity lead +0.149 → +0.112, whole song) — identity comes first.
 //   1. De-esser: the 5 kHz+ band is turned down only while it's loud next to
 //      the whole voice (harsh "s"), up to −9 dB.
-//   2. Gentle compression: 2:1 with a soft 6 dB knee above the voice's own
-//      loud level, 8 ms attack / 120 ms release.
-//   3. Air: the converted voice is ~9 dB short above 6 kHz and ~20 dB short
+//   2. Air: the converted voice is ~9 dB short above 6 kHz and ~20 dB short
 //      above 14 kHz next to the original singer (measured). Two shelves
 //      (+1.5 dB at 5 kHz, +6 dB at 10 kHz) plus soft harmonics made from the
 //      2.5–7 kHz band and kept above 9 kHz, mixed in until the voice's share
 //      above 10 kHz matches the ORIGINAL lead's (song-tuned target).
-//   4. Back to the input's loudness (sung parts), so Level means the same.
+//   3. Back to the input's loudness (sung parts), so Level means the same.
 // Pure maths on Float32Arrays (runs in the DSP worker). Arrays are reused so a
 // 5-minute song stays at a few full-length buffers.
 
@@ -88,22 +88,6 @@ function deEss(s: Float32Array, sr: number, thr = 0.36, ratio = 3, maxCutDb = 9)
   return hi
 }
 
-function compress(s: Float32Array, sr: number, ratio = 2, knee = 6, attMs = 8, relMs = 120): Float32Array {
-  const e = envelope(s, 10, sr)
-  for (let i = 0; i < e.length; i++) e[i] = 20 * Math.log10(e[i])
-  const p40 = percentile(e, 40), thr = percentile(e, 70, (v) => v > p40)
-  const a = coef(attMs, sr), r = coef(relMs, sr), k = 1 - 1 / ratio
-  let c = 1
-  for (let i = 0; i < s.length; i++) {
-    const over = e[i] - thr
-    const gr = over <= -knee / 2 ? 0 : over >= knee / 2 ? over * k : (k * (over + knee / 2) ** 2) / (2 * knee)
-    const g = 10 ** (-gr / 20)
-    c = g < c ? a * c + (1 - a) * g : r * c + (1 - r) * g
-    e[i] = s[i] * c
-  }
-  return e
-}
-
 // Energy above `hz` vs 300–3000 Hz on the sung parts (loudest 40% of 50 ms
 // windows), in dB. The original lead's value is the air target.
 export function airShare(s: Float32Array, sr: number, hz = 10000): number {
@@ -153,7 +137,7 @@ function activeRms(s: Float32Array, sr: number): number {
 
 // The whole chain. `airTargetDb` = airShare() of the song's original lead.
 export function polishVoice(mono: Float32Array, sr: number, airTargetDb = DEFAULT_AIR_TARGET_DB): Float32Array {
-  const y = addAir(compress(deEss(mono, sr), sr), sr, airTargetDb)
+  const y = addAir(deEss(mono, sr), sr, airTargetDb)
   const k = activeRms(mono, sr) / Math.max(1e-9, activeRms(y, sr))
   for (let i = 0; i < y.length; i++) y[i] *= k
   return y

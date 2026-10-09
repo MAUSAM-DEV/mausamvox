@@ -13,8 +13,8 @@
 //   voices ×g(1−blend) ┐
 //   originals ×g·blend ├→ vocal bus (×1.3 makeup × Level) → Warmth → Bass → Treble
 //   harmony/partner ×g ┘     → reverb (dry 1−w | Studio room or Concert Hall) → echo
-//   music+backing ×0.8 (+ a touch of the voice's room) ─────────────────┐
-//   → [clean | Lo-fi | Radio] → ×0.62 → [glue compressor] = PRE-MASTER
+//   music+backing ×0.8 → [glue compressor] (+ a touch of the voice's room) ─┐
+//   → [clean | Lo-fi | Radio] → ×0.62 = PRE-MASTER
 //   → master gain → limiter (−1 dBFS) → out   (g = 1/√N for N main vocals)
 
 import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S } from '@/lib/audio-dsp/master'
@@ -32,7 +32,7 @@ export interface MixParams {
   style: PolishStyle
   vocalsOnly: boolean
   bedRoom: number   // share of the voice's Studio room on the music (0–1) — "shared room"
-  glue: boolean     // gentle whole-mix compression (~1–2 dB) that glues voice and music
+  glue: boolean     // gentle compression of the MUSIC (never the voice — it costs the singer's identity)
 }
 
 export interface MixInputs {
@@ -69,8 +69,8 @@ export const BLEND_MAX = 50
 const VOCAL_MAKEUP = 1.3
 const MUSIC_GAIN = 0.8
 const BUTTERWORTH_Q_DB = -3.01 // Web Audio low/high-pass Q is in dB; −3.01 dB = Q 0.707
-// Level into the glue compressor: the ×0.7 headroom × 0.89 trim of the old
-// final stage, so the glue (tuned on those mixes) acts the same.
+// Level before mastering: the ×0.7 headroom × 0.89 trim of the old final
+// stage. The music's glue sees the music at that same level (as when tuned).
 const PRE_MASTER_GAIN = 0.7 * 0.89
 // Fallback limiter when AudioWorklet isn't available (old browsers only): the
 // previous Web Audio compressor settings.
@@ -164,21 +164,26 @@ export class MixGraph {
     echoIn.connect(this.echoDry); this.echoDry.connect(styleIn)
     echoIn.connect(delay); delay.connect(damp); damp.connect(fb); fb.connect(delay)
     delay.connect(this.echoWet); this.echoWet.connect(styleIn)
-    this.bedIn.connect(styleIn)
+    // Glue on the MUSIC only (2026-10-09): on the whole mix it squeezed the
+    // voice too and moved it toward the original singer (speaker similarity
+    // lead +0.149 → +0.085). Same settings, fed at the level it was tuned on.
+    const bed = gain()
+    const glue = ctx.createDynamicsCompressor()
+    glue.threshold.value = -24; glue.knee.value = 10; glue.ratio.value = 1.8; glue.attack.value = 0.03; glue.release.value = 0.25
+    const glueInLevel = gain(PRE_MASTER_GAIN), glueOutLevel = gain(1 / PRE_MASTER_GAIN)
+    this.glueOn = gain(0); this.glueOff = gain(1)
+    this.bedIn.connect(glueInLevel); glueInLevel.connect(glue); glue.connect(glueOutLevel); glueOutLevel.connect(this.glueOn); this.glueOn.connect(bed)
+    this.bedIn.connect(this.glueOff); this.glueOff.connect(bed)
+    bed.connect(styleIn)
     // Shared room: the music through the voice's Studio room (its own copy).
     const bedRoom = ctx.createConvolver(); bedRoom.buffer = impulse(ctx, REVERB_IR_SECONDS, REVERB_IR_DECAY, 1)
     this.bedRoomWet = gain(0)
-    this.bedIn.connect(bedRoom); bedRoom.connect(this.bedRoomWet); this.bedRoomWet.connect(styleIn)
+    bed.connect(bedRoom); bedRoom.connect(this.bedRoomWet); this.bedRoomWet.connect(styleIn)
 
-    // Pre-master: glue compressor (switchable), then — live only — the master
+    // Pre-master, then — live only — the master
     // gain and the look-ahead limiter.
-    const premaster = gain()
-    const master = gain(PRE_MASTER_GAIN)
-    const glue = ctx.createDynamicsCompressor()
-    glue.threshold.value = -24; glue.knee.value = 10; glue.ratio.value = 1.8; glue.attack.value = 0.03; glue.release.value = 0.25
-    this.glueOn = gain(0); this.glueOff = gain(1)
-    master.connect(glue); glue.connect(this.glueOn); this.glueOn.connect(premaster)
-    master.connect(this.glueOff); this.glueOff.connect(premaster)
+    const premaster = gain(PRE_MASTER_GAIN)
+    const master = premaster
     if (!master_) premaster.connect(out)
     else {
       this.masterGain = gain(master_.gain)

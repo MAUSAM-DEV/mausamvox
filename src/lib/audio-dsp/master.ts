@@ -18,7 +18,8 @@
 export const MASTER_CEILING_DB = -1
 export const MASTER_LOOKAHEAD_S = 0.005
 export const MASTER_RELEASE_S = 0.08
-// Target = the uploaded song's loudness, kept to a sensible range.
+// Target = the uploaded song's loudness, kept to a sensible range (and never
+// bought with heavy limiting — see MASTER_MAX_AVG_CUT_DB).
 export const MASTER_TARGET_MIN = -16
 export const MASTER_TARGET_MAX = -7
 export const MASTER_TARGET_FALLBACK = -9
@@ -104,7 +105,27 @@ export function limit(channels: Float32Array[], sr: number, gain: number, out?: 
   return res
 }
 
-// Linear gain that brings `premaster` (through the limiter) to `targetLufs`.
+// Most the limiter may cut, on average over the loud parts, to reach the
+// target. Without it a dense mix chasing a loud original was squashed: on
+// Pehla Pyaar (−7.8 LUFS) +20 dB of gain with a 13 dB average cut — blunt,
+// and less like the founder (2026-10-09). At the cap such songs land ~1 dB
+// quieter than the original instead (−9.2 LUFS there), clean.
+export const MASTER_MAX_AVG_CUT_DB = 1
+
+// Average limiter cut (dB, positive) over the loud parts: `out` = limit(pre, g).
+function avgCut(pre: Float32Array[], out: Float32Array[], g: number): number {
+  let sum = 0, n = 0
+  for (let i = 0; i < pre[0].length; i += 64) {
+    let a = 0, b = 0
+    for (let c = 0; c < pre.length; c++) { a += Math.abs(pre[c][i] * g); b += Math.abs(out[c][i]) }
+    if (a < 0.05) continue
+    sum += 20 * Math.log10(Math.max(b, 1e-9) / a); n++
+  }
+  return n ? -sum / n : 0
+}
+
+// Linear gain that brings `premaster` (through the limiter) to `targetLufs` —
+// or, if that would cut more than MASTER_MAX_AVG_CUT_DB, the most gain that doesn't.
 export function masterGain(premaster: Float32Array[], sr: number, targetLufs: number): number {
   const n = premaster[0]?.length ?? 0
   const start = lufs(premaster, sr)
@@ -120,7 +141,18 @@ export function masterGain(premaster: Float32Array[], sr: number, targetLufs: nu
     prev = [gDb, got]
     gDb = Math.min(MAX_GAIN_DB, gDb + (targetLufs - got) / slope)
   }
-  return 10 ** (gDb / 20)
+  const cutAt = (db: number) => avgCut(premaster, limit(premaster, sr, 10 ** (db / 20), buf), 10 ** (db / 20))
+  if (cutAt(gDb) <= MASTER_MAX_AVG_CUT_DB) return 10 ** (gDb / 20)
+  // Too much limiting: back off. Below the gain where the peak just touches
+  // the ceiling nothing is cut, so the answer lies between the two.
+  let pk = 0
+  for (const ch of premaster) for (let i = 0; i < ch.length; i++) pk = Math.max(pk, Math.abs(ch[i]))
+  let lo = Math.min(gDb, MASTER_CEILING_DB - 20 * Math.log10(Math.max(pk, 1e-9))), hi = gDb
+  for (let it = 0; it < 7; it++) {
+    const mid = (lo + hi) / 2
+    if (cutAt(mid) > MASTER_MAX_AVG_CUT_DB) hi = mid; else lo = mid
+  }
+  return 10 ** (lo / 20)
 }
 
 export const clampTarget = (l: number) => (Number.isFinite(l) ? Math.max(MASTER_TARGET_MIN, Math.min(MASTER_TARGET_MAX, l)) : MASTER_TARGET_FALLBACK)
