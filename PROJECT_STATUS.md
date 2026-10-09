@@ -39,9 +39,9 @@ From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's 
   2. Top up MVSEP credits: 20 left ≈ 4–5 songs.
   3. Apply `supabase/migrations/20261009000000_audio_uploads_flac.sql`. Optional: until then FLAC is stored under the audio/mpeg label.
 - **Open checks:**
-  - MVSEP raw outputs peak up to +2.1 dBFS. 16-bit FLAC may clip ~700 peaks per song unless MVSEP lowers the level — check on the first real job (needs the token).
+  - ~~FLAC clipping~~ — checked: MVSEP lowers both stems 2.12 dB, no clipping.
   - The upload now waits for MVSEP (~4–6 min vs ~3).
-- **Part 2 research (clips, no app change) — A + D done, B/C/E wait for the MVSEP token:**
+- **Part 2 research (clips, no app change) — ALL DONE, founder to listen (Saved Tracks "R …", compare with Q i / Q ref):**
   - Check: a fresh render with the app's own code matches Q i within 0.1 dB in every band (the live app = the founder's pick).
   - **A — borrow the sparkle** (original lead, key −3 with formants kept, above 10 kHz, added to the smoothed voice):
     - 98% of the 10 kHz+ band then comes from the original singer;
@@ -51,7 +51,23 @@ From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's 
   - **D — 40 kHz vs 48 kHz clone** (same `dataset_3min.zip` restored to voice-samples, 50 epochs; 48k retrained too for fairness):
     - both are equally short of air (−39 dB; −54 dB above 14 kHz) → the dullness is the engine/training data, not the sample rate;
     - identity differences are within training-to-training noise (two 48k trainings: like-me − like-singer +0.045 vs −0.025; 40k +0.06).
-  - Clips in Saved Tracks: "R A1/A2/D1/D2".
+  - **B — MVSEP Vocals Super Resolution** (Apollo Enhancers opt 2) on the converted voice:
+    - real top end added: above 14 kHz −54 → −42 dB, above 10 kHz +5.6 dB (original singer: −35 / −26); the studio voice tops up the rest;
+    - MVSEP raises its level +2.9 dB (undone for the clip);
+    - CAM++ nudges toward the original singer: like-me − like-singer +0.037 → +0.005 (small, within training noise — listen).
+  - **C — Apollo / Universal SR on the finished mix:**
+    - C1 Apollo MP3 Enhancer: slightly darker (−1.5 dB in the top bands), peaks above 0 dBFS; it repairs MP3 damage our mix doesn't have;
+    - C2 MVSep Universal SR: changed almost nothing (−37 dB difference).
+    - → C adds nothing for us.
+  - **E — best combo = B + A2** (Vocals SR + sparkle above 10 kHz + treble lift):
+    - closest to the original on the meter (avg band deviation 1.9 dB; 10–18 kHz within 1 dB);
+    - D (no gain) and C (no gain) left out.
+  - Clips in Saved Tracks: R A1, A2, B, C1, C2, D1, D2, E.
+  - **MVSEP 16-bit FLAC clipping check (full Pehla Pyaar, the live hq-split settings):**
+    - MVSEP lowers vocals AND instrumental by the same 2.12 dB, so only 1 sample reaches full scale;
+    - the balance between them is kept; 25 MB per file (under 50 MB) → the open risk is closed.
+  - MVSEP: 9 credits used for research; 613 left after the founder's top-up.
+  - Research helpers now live in `seedvc-local/work/q2/tools/` (the session scratchpad was wiped).
   - **C — Apollo:** CC BY-SA 4.0 (GitHub + HF card): commercial use allowed with attribution; changes to the model must stay CC BY-SA. MVSEP runs it as "Apollo Enhancers" (render 51, opt 0 MP3 Enhancer); opt 2 = "Vocals Super Resolution" (B).
   - Costs: 2 trainings 290 s on L40S ≈ $0.28; 2 conversions ~140 s.
   - ⚠️ **Replicate balance is under $5** (it throttled a request "while you have less than $5.0 in credit") — top up.

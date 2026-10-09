@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-09
 
+- **Quality research B, C, E (no app change):** Vocals Super Resolution adds real top end (above 14 kHz +12 dB) but nudges identity slightly toward the singer; Apollo / Universal SR on the finished mix add nothing; best combo E = Vocals SR + sparkle (closest on the meter). MVSEP 16-bit FLAC verified: both stems −2.12 dB, no clipping. Clips R B/C1/C2/E in Saved Tracks; 9 MVSEP credits.
 - **Quality research A + D (no app change):** borrow-the-sparkle clips (A1, A2) and 40 kHz vs 48 kHz clone (D1, D2) in Saved Tracks; the app's own render reproduces Q i (±0.1 dB). 40k gives no brighter voice (the engine/training data limit the top end). B (MVSEP Vocals Super Resolution) and C (Apollo) wait for the new MVSEP token. 2 trainings ≈ $0.28 + 2 conversions.
 - **MVSEP studio-quality split for Voice Swap** (BS-RoFormer 124 bands, FLAC, next to Demucs; vocals + music both from MVSEP; Demucs fallback; FLAC migration added, not applied). Music matched the original 40.7 dB vs 18.7 dB (Demucs). `tsc --noEmit` clean; clean `npm run build` passed. `5800859`
 - **Studio voice + mastering = Q i default** (de-ess, compression, song-tuned air; BS.1770 loudness to the upload's level, look-ahead limiter −1 dBFS, same limiter live as an AudioWorklet; shared room, glue, reverb 38, Level −2). Verified vs prototype (−68 dB), pyloudnorm (±0.1 dB), worklet vs JS (−135 dBFS). `tsc --noEmit` clean; clean `npm run build` passed. `dcd9d22`
