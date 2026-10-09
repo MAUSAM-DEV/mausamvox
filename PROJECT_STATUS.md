@@ -6,6 +6,31 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧪 2026-10-10 — retrain test: 500 epochs on the full recording wins — founder to listen; live model NOT switched
+
+- **Trained** (full 3:48, HPF 80 Hz only, 23 clips, same base/settings): 150 / 300 / 500 epochs.
+  - Compute 407 / 779 / 1279 s on an L40S = $2.40; plus 7 T4 conversions ≈ $0.10 and a Señorita lead split.
+  - Models in `voice-models/8371…/research-e{150,300,500}.zip`.
+- **Identity** (CAM++ lead = like-you − like-original-singer):
+
+  | Model | Pehla Pyaar (whole song, −3) | Señorita (male sections, Auto +1) |
+  |---|---|---|
+  | Current | +0.163 | +0.065 |
+  | 150 epochs | +0.201 | +0.015 |
+  | 300 epochs | +0.229 | +0.093 |
+  | **500 epochs** | **+0.235** | **+0.138** |
+
+  - Pitch accuracy and kept singing unchanged (82–91% / 95–99%) → no over-training artifacts measured.
+  - Caveat: in-sample reference, and training noise ±0.07 — but consistent across both songs.
+- **Señorita:** no solo-male English upload exists; Shawn's parts were picked by a 2-way voice-similarity split (low group 0:40–1:50, 2:10–3:20; judged 1:00–1:30).
+- **18 "Model test" clips** in Saved Tracks (M0 current, M1 150, M2 300, M3 500; vocals only + full mix; plus both originals).
+- **Live app training** (`voice-lab/train`): Studio 50 epochs, Express 18; whole recording; denoise on by default; training is FREE (no credits).
+- **Plan to change the default** (not built):
+  - Studio epochs by a step target (~5,500 steps, 150–500 epochs) → ≈ $1.2–1.4 per training vs ~$0.15 now, about 20 min;
+  - pricing decision needed (credit ≈ $0.0008–0.0011);
+  - offer "retrain" to existing voices;
+  - switch the founder's model to research-e500 after approval.
+
 ## 🔍 2026-10-09 (night, 3) — how "Mausam (Singing)" was trained (inspection only) — retrain plan AWAITING APPROVAL
 
 - **Training job** `mvegw63gf9rmw0d109ttnk12w8` (2026-10-03, `replicate/train-rvc-model` 0397d5e2 = zsxkib/voice-cloning-training, MIT, wraps RVC WebUI):

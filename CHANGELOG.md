@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-10
+
+- **Retrain test (no app change):** 500 epochs on the full 3:48 recording beats the current model on Pehla Pyaar (+0.235 vs +0.163) and Señorita (+0.138 vs +0.065), pitch unchanged; 18 "Model test" clips; ≈ $2.55. Live model not switched.
+
 ## 2026-10-09
 
 - **Voice model inspection (no change):** Mausam (Singing) = 50 epochs (~450 steps, loss still falling), first 3:00 of a 62 kbps AAC recording (37 s of singing unused, nothing above 16 kHz), official RVC v2 48k base (MIT). Retrain plan awaiting approval.
