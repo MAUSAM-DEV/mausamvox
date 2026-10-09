@@ -6,6 +6,25 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-09 — "voice sounds thinner since f48cba0": investigated, no code change — founder's ears needed
+
+- Founder's post-f48cba0 session (Oct 4 18:18–19:07 UTC, Pehla Pyaar re-upload, 8 conversions) saved no track, and Replicate had deleted the takes, so it was recreated.
+- Diagnosis 6's take, plus a re-run of it and a take from the re-upload (≈ $0.03), were rendered through the app's real graph with each change on/off (local test page, posted to a local receiver).
+- **Body (150–500 Hz vs 500–4000 Hz) vs Diagnosis 6** on its passage (3:51–4:11) — every variant within ±0.5 dB:
+  - app now +0.2 dB;
+  - doubles removal OFF +0.2;
+  - limiter OFF +0.1;
+  - Match song +0.2;
+  - LIVE playback recording +0.2 (live vs file difference −68 dB: identical);
+  - re-upload take +0.5.
+- Voice chain alone: app −3.90 vs Python D6 recipe −3.85 dB.
+- Doubles removal: backing body −1.5 dB, mix body ≤ −0.14 dB in any 20-s stretch of the song.
+- Converted takes: −4.49 / −4.52 / −4.59 dB.
+- Auto key = −3 for both uploads (same as D6); re-upload lead 99.8% identical.
+- Loudness: app −15.0 dB vs D6 −15.3 dB.
+- 9 "Body test" clips in Saved Tracks: 1 = D6, 2–7 = each change off one at a time + live recording + re-upload take, 8–9 = fix candidates "doubles lowered 6 / 10 dB" (second voice −27.2 / −30.9 dB vs −32.8 removed, −20.5 kept).
+- Waiting on the founder: which clips sound thin.
+
 ## ✅ SHIPPED 2026-10-05 — instant knobs, Play/Pause, Auto key, no second voice (`f48cba0`) — ⚠️ founder live tests pending
 
 Founder: Diagnosis 6 (Key −3) sounds most like him, 5 also great; 6 still had two voices; Play/Pause still wrong; knobs slow.

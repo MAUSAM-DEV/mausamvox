@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-09
+
+- **"Thinner voice" investigation (no code change):** every f48cba0 change measured on/off against Diagnosis 6 with the same take — body within ±0.5 dB for all (doubles removal, live chain, Studio vs Match song, limiter); live playback identical to the saved file (−68 dB difference); re-upload take and Auto key (−3) match D6. 9 "Body test" clips + 2 fix candidates for the founder's ears. 2 conversions (~$0.03).
+
 ## 2026-10-05
 
 - **Instant knobs + reliable Play/Pause** (live Web Audio mix graph; saved/downloaded file = same graph offline), **Auto Song Key** default (median sung note → voice's; Pehla Pyaar −3 = Diagnosis 6), **backing without the second voice** (same-note doubles of the original lead removed), Studio default polish. Diagnosis: MVSEP karaoke tested (2 jobs) + 1 conversion (~$0.02). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `f48cba0`
