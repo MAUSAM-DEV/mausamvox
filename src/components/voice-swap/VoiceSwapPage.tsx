@@ -1,5 +1,6 @@
 'use client'
 
+import { pollUntil, fetchRetry } from '@/lib/poll'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ADMIN_EMAILS } from '@/lib/admin'
@@ -613,7 +614,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // vocalStemPath links the saved swap back to its Demucs vocal stem — the
       // lyrics key (track_lyrics.source_key) used by Performance Mode on
       // /swaps/[id]. Absent for legacy cached results / manual-stems uploads.
-      const res = await fetch('/api/voice-swaps/persist', {
+      // Retries a dropped connection / transient server reply (the route is
+      // keyed on the prediction id, so a repeat can't make a second row).
+      const res = await fetchRetry('/api/voice-swaps/persist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ predictionId, songName, voiceUsed, mixedPath, instrumentalPath, vocalStemPath: stemResult?.vocalsPath }),
@@ -821,7 +824,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // Token guard: only the most recent upload's job may apply its result.
     const jobId = ++genderSplitJobRef.current
     const POLL_INTERVAL_MS = 2000
-    const MAX_ATTEMPTS = 150 // ~5 min — the GET does 2 MVSEP hops + 2 Supabase copies, so it's heavier than karaoke's status check
+    const MAX_WAIT_MS = 8 * 60 * 1000 // the GET does 2 MVSEP hops + 2 Supabase copies
 
     // isDuet=true pre-upload skips karaoke-split in handleStemDone. If this
     // gender split fails and the user therefore has no vocal isolation at all
@@ -874,59 +877,48 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // MVSEP's transient "still downloading the input" responses before failing.
       const startedAt = Date.now()
 
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        if (genderSplitJobRef.current !== jobId) return // superseded by a newer upload / reset
-
-        const pollRes = await fetch(`/api/gender-split?hash=${hash}&elapsedMs=${Date.now() - startedAt}`)
-        if (!pollRes.ok) {
-          showToast(`Duet split failed: poll error (${pollRes.status})`, 5000)
-          triggerKaraokeFallback()
-          return
-        }
-        const pollData = await pollRes.json()
-
-        if (pollData.status === 'succeeded') {
-          const maleVocalsUrl = (pollData.maleVocalsUrl as string) ?? ''
-          const femaleVocalsUrl = (pollData.femaleVocalsUrl as string) ?? ''
-          // Durable paths (may be '' if server-side persistence soft-failed).
-          const maleVocalsPath = (pollData.maleVocalsPath as string) ?? ''
-          const femaleVocalsPath = (pollData.femaleVocalsPath as string) ?? ''
-          // Route guarantees at least one stem on success; bail if neither or superseded.
-          if ((!maleVocalsUrl && !femaleVocalsUrl) || genderSplitJobRef.current !== jobId) return
-
-          const patch = { maleVocalsUrl, femaleVocalsUrl, maleVocalsPath, femaleVocalsPath }
-          // Merge the new fields into the live result, only if it's still
-          // the same upload — preserving everything else in StemResult.
-          setStemResult((prev) =>
-            prev && prev.storagePath === result.storagePath
-              ? { ...prev, ...patch }
-              : prev
-          )
-          // Keep the cached session in sync so a later restore retains the split.
-          try {
-            const merged: StemResult = { ...result, ...patch }
-            localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
-          } catch { /* ignore */ }
-          console.log('[gender-split] male/female ready for', result.fileName)
-          return
-        }
-        if (pollData.status === 'failed') {
-          const why = typeof pollData.error === 'string' ? `: ${pollData.error}` : ''
-          showToast(`Duet split failed${why}`, 5000)
-          triggerKaraokeFallback()
-          return
-        }
-        // otherwise keep polling
-      }
-      // timed out
-      if (genderSplitJobRef.current === jobId) {
-        showToast('Duet split timed out — try again later', 5000)
+      // Dropped checks are retried (lib/poll); only MVSEP saying "failed" or
+      // the time limit ends the wait — and the user is told either way.
+      type GenderPoll = { status?: string; error?: string; maleVocalsUrl?: string; femaleVocalsUrl?: string; maleVocalsPath?: string; femaleVocalsPath?: string }
+      const pollData = await pollUntil<GenderPoll, GenderPoll>({
+        url: () => `/api/gender-split?hash=${hash}&elapsedMs=${Date.now() - startedAt}`,
+        intervalMs: POLL_INTERVAL_MS,
+        maxWaitMs: MAX_WAIT_MS,
+        what: 'the duet split',
+        cancelled: () => genderSplitJobRef.current !== jobId,
+        read: (d, ok) => d.status === 'succeeded' ? { done: d }
+          : d.status === 'failed' || !ok ? { failed: `Duet split failed${typeof d.error === 'string' ? `: ${d.error}` : ''}` }
+          : 'wait',
+      })
+      if (!pollData || genderSplitJobRef.current !== jobId) return // superseded by a newer upload / reset
+      const maleVocalsUrl = pollData.maleVocalsUrl ?? ''
+      const femaleVocalsUrl = pollData.femaleVocalsUrl ?? ''
+      // Durable paths (may be '' if server-side persistence soft-failed).
+      const maleVocalsPath = pollData.maleVocalsPath ?? ''
+      const femaleVocalsPath = pollData.femaleVocalsPath ?? ''
+      if (!maleVocalsUrl && !femaleVocalsUrl) {
+        showToast('Duet split failed: no singers came back', 5000)
         triggerKaraokeFallback()
+        return
       }
+      const patch = { maleVocalsUrl, femaleVocalsUrl, maleVocalsPath, femaleVocalsPath }
+      // Merge the new fields into the live result, only if it's still
+      // the same upload — preserving everything else in StemResult.
+      setStemResult((prev) =>
+        prev && prev.storagePath === result.storagePath
+          ? { ...prev, ...patch }
+          : prev
+      )
+      // Keep the cached session in sync so a later restore retains the split.
+      try {
+        const merged: StemResult = { ...result, ...patch }
+        localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
+      } catch { /* ignore */ }
+      console.log('[gender-split] male/female ready for', result.fileName)
     } catch (err) {
+      if (genderSplitJobRef.current !== jobId) return
       const msg = err instanceof Error ? err.message : 'network error'
-      showToast(`Duet split failed: ${msg}`, 5000)
+      showToast(msg.startsWith('Duet split') ? msg : `Duet split failed: ${msg}`, 5000)
       triggerKaraokeFallback()
     }
   }

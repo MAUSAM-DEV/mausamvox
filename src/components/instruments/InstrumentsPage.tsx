@@ -1,5 +1,6 @@
 'use client'
 
+import { findSavedSince } from '@/lib/saved-recovery'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -200,6 +201,10 @@ export function InstrumentsPage() {
       )
 
       setPhase('generating')
+      // A dropped connection / server time-out may hide a build that finished
+      // (and was charged): check Saved Tracks before calling it a failure.
+      const startedIso = new Date(Date.now() - 5000).toISOString()
+      let recovered: { id: string; song_name: string } | null = null
       const res = await fetch('/api/instruments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,9 +213,15 @@ export function InstrumentsPage() {
           instrumentId,
           title: title.trim() || undefined,
         }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? `Conversion failed (${res.status})`)
+      }).catch(() => null)
+      if (!res || res.status === 504) {
+        showToast('Connection dropped — checking whether it finished…')
+        const saved = await findSavedSince('instrument', startedIso)
+        if (!saved) throw new Error("We lost the connection while making your melody. If it finished, it will appear in Saved Tracks in a minute — please check there before trying again.")
+        recovered = saved
+      }
+      const data = recovered ? { swapId: recovered.id, url: `/api/voice-swaps/${recovered.id}/result.mp3`, noteCount: 0 } : await res!.json().catch(() => ({}))
+      if (!recovered && !res!.ok) throw new Error(data.error ?? `Conversion failed (${res?.status})`)
 
       setResult({
         swapId: data.swapId,

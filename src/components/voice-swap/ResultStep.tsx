@@ -832,6 +832,11 @@ export function ResultStep({
       // A failed FIRST save: retry twice, then say so.
       if (saveRetriesRef.current < 2) { saveRetriesRef.current++; setTimeout(() => { void savePolish() }, 3000) }
       else { onToast("Couldn't save your track — check your connection. Change any knob to try again, or download it now."); onSaveFailed?.() }
+    } else {
+      // A failed RE-save (new polish): retry twice, then say the earlier
+      // version is what's saved — never leave the user believing it updated.
+      if (saveRetriesRef.current < 2) { saveRetriesRef.current++; setTimeout(() => { void savePolish() }, 3000) }
+      else { saveRetriesRef.current = 0; onToast("Couldn't update your saved track with these changes — the earlier version is still saved. Change any knob to try again.") }
     }
   }
   // Keep the SAVED track in sync with the settled settings (first run inserts

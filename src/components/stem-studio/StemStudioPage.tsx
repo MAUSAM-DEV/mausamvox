@@ -1,5 +1,6 @@
 'use client'
 
+import { pollUntil, fetchRetry } from '@/lib/poll'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ADMIN_EMAILS } from '@/lib/admin'
@@ -141,7 +142,7 @@ export function StemStudioPage() {
       setPhase('splitting')
 
       // 3 — start Demucs (returns immediately with a prediction ID)
-      const startRes = await fetch('/api/stem-split', {
+      const startRes = await fetchRetry('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storagePath: uploaded.path }),
@@ -155,28 +156,17 @@ export function StemStudioPage() {
       const predictionId = startData.predictionId as string | undefined
       if (!predictionId) throw new Error('Stem split failed: no prediction ID returned')
 
-      // 4 — poll until Demucs finishes (same cadence/ceiling as the swap flow)
-      const POLL_INTERVAL_MS = 3000
-      const MAX_ATTEMPTS = 150 // ~7.5 minutes
-      let result: Stems | null = null
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        const pollRes = await fetch(`/api/stem-split?id=${predictionId}`)
-        if (!pollRes.ok) {
-          let msg = `Stem split poll failed (${pollRes.status})`
-          try { const e = await pollRes.json(); msg = e.error ?? msg } catch { /* ignore */ }
-          throw new Error(msg)
-        }
-        const poll = await pollRes.json()
-        if (poll.status === 'succeeded') {
-          result = { vocals: poll.vocals, bass: poll.bass, drums: poll.drums, other: poll.other, vocalsPath: poll.vocalsPath }
-          break
-        }
-        if (poll.status === 'failed' || poll.status === 'canceled') {
-          throw new Error(poll.error ?? 'Stem split failed')
-        }
-        // starting / processing — keep polling
-      }
+      // 4 — wait for Demucs; dropped checks are retried (lib/poll)
+      const result = await pollUntil<Stems, Record<string, string>>({
+        url: () => `/api/stem-split?id=${predictionId}`,
+        intervalMs: 3000,
+        maxWaitMs: 12 * 60 * 1000,
+        what: 'the stem split',
+        read: (poll, ok) => poll.status === 'succeeded'
+          ? { done: { vocals: poll.vocals, bass: poll.bass, drums: poll.drums, other: poll.other, vocalsPath: poll.vocalsPath } }
+          : poll.status === 'failed' || poll.status === 'canceled' || !ok ? { failed: poll.error ?? 'Stem split failed' }
+          : 'wait',
+      })
       if (!result) throw new Error('Stem split timed out — please try again')
 
       setStems(result)

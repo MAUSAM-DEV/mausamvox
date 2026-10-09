@@ -1,5 +1,6 @@
 'use client'
 
+import { pollUntil, fetchRetry } from '@/lib/poll'
 import { useState, useRef, useEffect } from 'react'
 import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
@@ -308,7 +309,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
     const t0 = Date.now()
     try {
       setHqWaiting(true)
-      const start = await fetch('/api/hq-split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storagePath }) })
+      const start = await fetchRetry('/api/hq-split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storagePath }) })
       const { hash, error } = await start.json().catch(() => ({}))
       if (!start.ok || !hash) { console.warn('[hq-split] not started:', error ?? start.status); return null }
       let errors = 0
@@ -367,7 +368,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
       // Step 3 — start Demucs (returns immediately with a prediction ID)
       const demucs = (async () => {
-      const startRes = await fetch('/api/stem-split', {
+      const startRes = await fetchRetry('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storagePath: uploaded.path }),
@@ -381,39 +382,25 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const predictionId = startData.predictionId as string | undefined
       if (!predictionId) throw new Error('Stem split failed: no prediction ID returned')
 
-      // Step 4 — poll until Demucs finishes (htdemucs can take several minutes
-      // for long files; polling avoids the old 180-second Vercel hard wall).
-      const POLL_INTERVAL_MS = 3000
-      const MAX_ATTEMPTS = 150 // ~7.5 minutes
-      let stems: { vocals: string; bass: string; drums: string; other: string } | null = null
+      // Step 4 — wait for Demucs (htdemucs can take several minutes for long
+      // files, plus a cold start). Dropped checks are retried (lib/poll).
+      type DemucsPoll = { status?: string; error?: string; vocals: string; bass: string; drums: string; other: string; vocalsPath?: string; bassPath?: string; drumsPath?: string; otherPath?: string }
+      const done = await pollUntil<DemucsPoll, DemucsPoll>({
+        url: () => `/api/stem-split?id=${predictionId}`,
+        intervalMs: 3000,
+        maxWaitMs: 12 * 60 * 1000,
+        what: 'the stem split',
+        read: (d, ok) => d.status === 'succeeded' ? { done: d }
+          : d.status === 'failed' || d.status === 'canceled' || !ok ? { failed: d.error ?? 'Stem split failed' }
+          : 'wait',
+      })
+      const stems = done ? { vocals: done.vocals, bass: done.bass, drums: done.drums, other: done.other } : null
       // Durable paths for the stems (set by /api/stem-split when it copies the
       // Demucs output into Supabase). Empty if persistence soft-failed server-side.
-      let vocalsPath = ''
-      let bassPath = ''
-      let drumsPath = ''
-      let otherPath = ''
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        const pollRes = await fetch(`/api/stem-split?id=${predictionId}`)
-        if (!pollRes.ok) {
-          let msg = `Stem split poll failed (${pollRes.status})`
-          try { const e = await pollRes.json(); msg = e.error ?? msg } catch { /* ignore */ }
-          throw new Error(msg)
-        }
-        const pollData = await pollRes.json()
-        if (pollData.status === 'succeeded') {
-          stems = { vocals: pollData.vocals, bass: pollData.bass, drums: pollData.drums, other: pollData.other }
-          vocalsPath = pollData.vocalsPath ?? ''
-          bassPath = pollData.bassPath ?? ''
-          drumsPath = pollData.drumsPath ?? ''
-          otherPath = pollData.otherPath ?? ''
-          break
-        }
-        if (pollData.status === 'failed' || pollData.status === 'canceled') {
-          throw new Error(pollData.error ?? 'Stem split failed')
-        }
-        // starting / processing — keep polling
-      }
+      const vocalsPath = done?.vocalsPath ?? ''
+      const bassPath = done?.bassPath ?? ''
+      const drumsPath = done?.drumsPath ?? ''
+      const otherPath = done?.otherPath ?? ''
       if (!stems) throw new Error('Stem split timed out — please try again')
       return { stems, vocalsPath, bassPath, drumsPath, otherPath }
       })()

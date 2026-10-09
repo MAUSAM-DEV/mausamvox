@@ -1,5 +1,6 @@
 'use client'
 
+import { pollUntil } from '@/lib/poll'
 import { useState, useEffect, useRef, useMemo, memo, Fragment, type RefObject } from 'react'
 
 // Shared synced-lyrics pane — the whole lyrics feature in one component:
@@ -319,24 +320,25 @@ export function LyricsPane({ sourceKey, time, onSeek, compact, audioRef, playing
       const predictionId = start.predictionId as string | undefined
       if (!predictionId) throw new Error('No prediction ID returned')
 
-      // Poll — typically ~10-30s; generous ceiling covers a rare cold boot.
-      for (let attempt = 0; attempt < 100; attempt++) {
-        await new Promise((r) => setTimeout(r, 3000))
-        if (lyricsAbortRef.current) return
-        const pollRes = await fetch(
-          `/api/lyrics?id=${encodeURIComponent(predictionId)}&stemPath=${encodeURIComponent(sourceKey)}&language=${langHint}${force ? '&force=1' : ''}`,
-        )
-        const poll = await pollRes.json()
-        if (!pollRes.ok) throw new Error(poll.error ?? `Poll failed (${pollRes.status})`)
-        if (poll.status === 'succeeded' && Array.isArray(poll.lyrics)) {
-          setLyrics(poll.lyrics)
-          setLyricsLang(langHint)
-          setLyricsState('ready')
-          return
-        }
-        if (poll.status === 'failed' || poll.status === 'canceled') {
-          throw new Error(poll.error ?? 'Transcription failed')
-        }
+      // Wait — typically ~10-30s; generous ceiling covers a rare cold boot.
+      // Dropped checks are retried (lib/poll).
+      type LyricsPoll = { status?: string; error?: string; lyrics?: LyricLine[] }
+      const got = await pollUntil<LyricLine[], LyricsPoll>({
+        url: () => `/api/lyrics?id=${encodeURIComponent(predictionId)}&stemPath=${encodeURIComponent(sourceKey)}&language=${langHint}${force ? '&force=1' : ''}`,
+        intervalMs: 3000,
+        maxWaitMs: 5 * 60 * 1000,
+        what: 'the transcription',
+        cancelled: () => lyricsAbortRef.current,
+        read: (poll, ok) => poll.status === 'succeeded' && Array.isArray(poll.lyrics) ? { done: poll.lyrics }
+          : poll.status === 'failed' || poll.status === 'canceled' || !ok ? { failed: poll.error ?? 'Transcription failed' }
+          : 'wait',
+      })
+      if (lyricsAbortRef.current) return
+      if (got) {
+        setLyrics(got)
+        setLyricsLang(langHint)
+        setLyricsState('ready')
+        return
       }
       throw new Error('Transcription timed out — please try again')
     } catch (err) {

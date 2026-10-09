@@ -138,13 +138,16 @@ export async function POST(req: NextRequest) {
     })
 
     const deadline = Date.now() + POLL_CEILING_MS
+    let getErrors = 0
     while (prediction.status === 'starting' || prediction.status === 'processing') {
       if (Date.now() > deadline) {
         if (chargedUserId) await refundCredits(chargedUserId)
         return NextResponse.json({ error: 'Lyrics generation timed out — credits refunded, try again' }, { status: 504 })
       }
       await new Promise((r) => setTimeout(r, POLL_MS))
-      prediction = await replicate.predictions.get(prediction.id)
+      // One failed status check isn't a failed job — retry (lib/poll rule).
+      try { prediction = await replicate.predictions.get(prediction.id); getErrors = 0 }
+      catch (err) { if (++getErrors >= 5) throw err; console.warn('[lyrics-gen] status check failed — retrying:', err instanceof Error ? err.message : err) }
     }
 
     if (prediction.status !== 'succeeded') {
