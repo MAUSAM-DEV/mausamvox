@@ -30,6 +30,10 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
   - `MVX-EL-b_Mausam_voice_sample_cleanest_90s.wav` (voice test 1:08–2:38);
   - `MVX-EL-c1_OUR_swap_current_default_chorus_vocals.wav`, `MVX-EL-c2_OUR_swap_raw_engine_no_polish_chorus_vocals.wav`.
   - Next: identity score + listen when the founder drops the result.
+- **ElevenLabs stock-voice test (free plan, 500 of 10,000 credits, no founder voice uploaded):** "Liam" + `eleven_multilingual_sts_v2` on the 30 s chorus (key −3 lead).
+  - Timing kept, but the melody is not: median 150 cents off; 19% of frames within ±50 c (ours: 10 c, 92%); 14% of sung frames lose pitch (ours 2%).
+  - Held notes wobble 63 c (original 14, ours 18); the longest note (6.5–7.4 s in the clip) is 3.3 semitones flat.
+  - 4 "EL stock voice test" clips in Saved Tracks (EL vs ours, full mix + vocals only). Verdict pending the founder's ears; numbers say ElevenLabs STS isn't a singing engine.
 - **ElevenLabs engine plan** (not built): see the session report — `POST /v1/speech-to-speech/{voice_id}` (eleven_multilingual_sts_v2), 5 min max per request, $0.12/min; IVC `POST /v1/voices/add`; no pitch control, so the key is shifted before sending; singing is not documented.
 
 ## 🔍 2026-10-09 (late night) — "doesn't sound like me" investigated — fix plan AWAITING APPROVAL (no code changed)
