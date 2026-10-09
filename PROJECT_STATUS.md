@@ -66,7 +66,7 @@ From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's 
   - **MVSEP 16-bit FLAC clipping check (full Pehla Pyaar, the live hq-split settings):**
     - MVSEP lowers vocals AND instrumental by the same 2.12 dB, so only 1 sample reaches full scale;
     - the balance between them is kept; 25 MB per file (under 50 MB) → the open risk is closed.
-  - MVSEP: 9 credits used for research; 613 left after the founder's top-up.
+  - MVSEP: about 7–8 credits for research (estimate: ~1 per 40 s clip × 3 + ~4–5 for the full song; the founder's top-up landed mid-run, so no exact count); 613 left.
   - Research helpers now live in `seedvc-local/work/q2/tools/` (the session scratchpad was wiped).
   - **C — Apollo:** CC BY-SA 4.0 (GitHub + HF card): commercial use allowed with attribution; changes to the model must stay CC BY-SA. MVSEP runs it as "Apollo Enhancers" (render 51, opt 0 MP3 Enhancer); opt 2 = "Vocals Super Resolution" (B).
   - Costs: 2 trainings 290 s on L40S ≈ $0.28; 2 conversions ~140 s.
