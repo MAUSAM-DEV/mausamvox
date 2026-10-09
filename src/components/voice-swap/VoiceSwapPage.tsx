@@ -273,6 +273,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // can show a disabled "Splitting duet…" state and block double-starts.
   const [genderSplitting, setGenderSplitting] = useState(false)
   const [karaokeStatus, setKaraokeStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
+  // Why the lead/backing split failed (shown on Configure), and whether the
+  // user chose to swap the full vocal track anyway.
+  const [karaokeError, setKaraokeError] = useState<string | null>(null)
+  const [allowFullVocal, setAllowFullVocal] = useState(false)
   // User-declared duet flag: checked pre-upload to route to MVSEP gender-split
   // instead of KARA_2. Lifted here (not in UploadStep) because routing lives here.
   const [isDuet, setIsDuet] = useState(false)
@@ -327,6 +331,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       console.log('[stem-cache] restoring result for', refreshed.fileName)
       setStemResult(refreshed)
       showToast(`Restored "${refreshed.fileName}" from your last session — use New Swap to upload a different song.`, 6000)
+      // A restored song without its lead/backing split (it failed or never
+      // finished last time) gets it now — so the swap uses the lead.
+      if (refreshed.storagePath && !refreshed.leadVocalsUrl && !(refreshed.maleVocalsUrl && refreshed.femaleVocalsUrl)) void runKaraokeSplit(refreshed)
     }
     void restore()
     return () => { cancelled = true }
@@ -670,98 +677,129 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Fires automatically after a server-side stem split to split the isolated
   // vocal into lead vs backing in the background. Lives here (page level) — not
   // in UploadStep — so it survives the user advancing to step 2/3 and UploadStep
-  // unmounting. Never blocks the user: on any failure/timeout we leave
-  // leadVocalsUrl/backingVocalsUrl empty and the swap falls back to the full
-  // vocal (StemResult fallbacks added in step 2).
-  async function runKaraokeSplit(result: StemResult) {
+  // unmounting. Never gives up quietly (2026-10-09: ONE failed poll ended the
+  // wait, the split finished 2 min later unseen, and the swap converted the
+  // whole vocal track at the Original key — "doesn't sound like me"):
+  //   • poll errors are retried (MAX_POLL_ERRORS in a row), up to 8 minutes;
+  //   • a failed split is started again once;
+  //   • if it still fails, karaokeStatus = 'failed' + a reason, and Configure
+  //     blocks Preview/Full until the user retries or chooses the full vocal.
+  async function runKaraokeSplit(result: StemResult, attempt = 1) {
     // Token guard: only the most recent upload's job may apply its result.
     const jobId = ++karaokeJobRef.current
-    const POLL_INTERVAL_MS = 2000
-    const MAX_ATTEMPTS = 120 // ~4 minutes
-
     setKaraokeStatus('running')
+    setKaraokeError(null)
+    setAllowFullVocal(false)
+    const outcome = await karaokeOnce(result, jobId)
+    if (outcome === 'superseded' || karaokeJobRef.current !== jobId) return
+    if (outcome === 'done') { setKaraokeStatus('done'); return }
+    if (outcome.retry && attempt < 2) {
+      console.warn(`[karaoke-split] attempt ${attempt} failed (${outcome.reason}) — starting it again`)
+      return runKaraokeSplit(result, attempt + 1)
+    }
+    console.error('[karaoke-split] gave up:', outcome.reason)
+    setKaraokeError(outcome.reason)
+    setKaraokeStatus('failed')
+  }
+
+  // One lead/backing split: start it, wait for it, apply the result.
+  async function karaokeOnce(result: StemResult, jobId: number): Promise<'done' | 'superseded' | { reason: string; retry: boolean }> {
+    const POLL_INTERVAL_MS = 2500
+    const MAX_WAIT_MS = 8 * 60 * 1000 // the karaoke engine can cold-start for minutes
+    const fetchRetry = async (url: string, init?: RequestInit): Promise<Response> => {
+      for (let i = 0; ; i++) {
+        try { return await fetch(url, init) } catch (err) {
+          if (i >= 2) throw err
+          await new Promise((r) => setTimeout(r, 2000 * (i + 1)))
+        }
+      }
+    }
+    let predictionId: string | undefined
     try {
-      const startRes = await fetch('/api/karaoke-split', {
+      const startRes = await fetchRetry('/api/karaoke-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // vocalsPath lets the route re-sign a fresh URL server-side, so a stale
         // cached vocalsUrl (Demucs output expires ~1h) can't break the split.
         body: JSON.stringify({ vocalsUrl: result.vocalsUrl, vocalsPath: result.vocalsPath }),
       })
-      if (!startRes.ok) { if (karaokeJobRef.current === jobId) setKaraokeStatus('failed'); return }
-      const predictionId = (await startRes.json()).predictionId as string | undefined
-      if (!predictionId) { if (karaokeJobRef.current === jobId) setKaraokeStatus('failed'); return }
-
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-        if (karaokeJobRef.current !== jobId) return // superseded — new job owns the status
-
-        const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`)
-        if (!pollRes.ok) { setKaraokeStatus('failed'); return }
-        const pollData = await pollRes.json()
-
-        if (pollData.status === 'succeeded') {
-          const leadVocalsUrl = pollData.leadVocalsUrl as string
-          const backingVocalsUrl = (pollData.backingVocalsUrl as string) ?? ''
-          // Durable paths (may be '' if server-side persistence soft-failed).
-          const leadVocalsPath = (pollData.leadVocalsPath as string) ?? ''
-          const backingVocalsPath = (pollData.backingVocalsPath as string) ?? ''
-          if (!leadVocalsUrl || karaokeJobRef.current !== jobId) return
-
-          // Assess lead quality before committing: if KARA_2 dropped vocal
-          // sections, discard the lead so handleProcess falls back to vocalsUrl.
-          const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl, backingVocalsUrl)
-          // A new upload may have superseded us while the assessment was running.
-          if (karaokeJobRef.current !== jobId) return
-          const effectiveLead = leadHealthy ? leadVocalsUrl : ''
-          const effectiveLeadPath = leadHealthy ? leadVocalsPath : ''
-
-          const patch = {
-            leadVocalsUrl: effectiveLead,
-            leadVocalsPath: effectiveLeadPath,
-            backingVocalsUrl,
-            backingVocalsPath,
-          }
-          setStemResult((prev) =>
-            prev && prev.storagePath === result.storagePath
-              ? { ...prev, ...patch }
-              : prev
-          )
-          setKaraokeStatus('done')
-          try {
-            const merged: StemResult = { ...result, ...patch }
-            localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
-          } catch { /* ignore */ }
-          console.log(`[karaoke-split] ${leadHealthy ? 'lead/backing ready' : 'dropout detected — full vocals fallback'} for ${result.fileName}`)
-          // Group-vocals warning — after the stems are shown, so it never delays
-          // or blocks the swap. Only stored (and shown) when the warning applies.
-          const groupVocals = await checkGroupVocals(leadVocalsUrl, backingVocalsUrl)
-          if (groupVocals && karaokeJobRef.current === jobId) {
-            setStemResult((prev) =>
-              prev && prev.storagePath === result.storagePath ? { ...prev, groupVocals } : prev
-            )
-            try {
-              const raw = localStorage.getItem(STEM_CACHE_KEY)
-              const cached = raw ? JSON.parse(raw) : null
-              if (cached?.result?.storagePath === result.storagePath) {
-                localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, groupVocals } }))
-              }
-            } catch { /* ignore */ }
-          }
-          return
-        }
-        if (pollData.status === 'failed' || pollData.status === 'canceled') {
-          setKaraokeStatus('failed')
-          return
-        }
-        // otherwise keep polling
-      }
-      // timed out — leave fields empty (graceful fallback)
-      if (karaokeJobRef.current === jobId) setKaraokeStatus('failed')
+      predictionId = startRes.ok ? ((await startRes.json()).predictionId as string | undefined) : undefined
+      if (!predictionId) return { reason: `the split didn't start (${startRes.status})`, retry: true }
     } catch {
-      // network/other error — leave fields empty (graceful fallback)
-      if (karaokeJobRef.current === jobId) setKaraokeStatus('failed')
+      return { reason: "the split couldn't be started — connection problem", retry: true }
     }
+
+    const started = Date.now()
+    let pollErrors = 0
+    while (Date.now() - started < MAX_WAIT_MS) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      if (karaokeJobRef.current !== jobId) return 'superseded'
+      let pollData: Record<string, unknown>
+      try {
+        const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`)
+        pollData = await pollRes.json()
+        if (!pollRes.ok) throw new Error(String(pollData.error ?? `HTTP ${pollRes.status}`))
+      } catch (err) {
+        pollErrors++
+        console.warn(`[karaoke-split] poll ${pollErrors}/${MAX_POLL_ERRORS} failed — retrying:`, err instanceof Error ? err.message : err)
+        if (pollErrors >= MAX_POLL_ERRORS) return { reason: 'lost contact with the splitter', retry: true }
+        continue
+      }
+      pollErrors = 0
+
+      if (pollData.status === 'succeeded') {
+        const leadVocalsUrl = (pollData.leadVocalsUrl as string) ?? ''
+        const backingVocalsUrl = (pollData.backingVocalsUrl as string) ?? ''
+        // Durable paths (may be '' if server-side persistence soft-failed).
+        const leadVocalsPath = (pollData.leadVocalsPath as string) ?? ''
+        const backingVocalsPath = (pollData.backingVocalsPath as string) ?? ''
+        if (karaokeJobRef.current !== jobId) return 'superseded'
+        if (!leadVocalsUrl) return { reason: 'the split returned no lead vocal', retry: true }
+
+        // Lead quality: a lead that drops whole sung passages (2 s+ where
+        // neither the lead nor the backing has the singing) isn't used — the
+        // user decides what to do (same split again would give the same result).
+        const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl, backingVocalsUrl)
+        if (karaokeJobRef.current !== jobId) return 'superseded'
+        if (!leadHealthy) {
+          console.log(`[karaoke-split] dropout detected for ${result.fileName}`)
+          return { reason: 'the separated lead vocal is missing parts of the singing', retry: false }
+        }
+
+        const patch = { leadVocalsUrl, leadVocalsPath, backingVocalsUrl, backingVocalsPath }
+        setStemResult((prev) =>
+          prev && prev.storagePath === result.storagePath
+            ? { ...prev, ...patch }
+            : prev
+        )
+        try {
+          const merged: StemResult = { ...result, ...patch }
+          localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
+        } catch { /* ignore */ }
+        console.log(`[karaoke-split] lead/backing ready for ${result.fileName}`)
+        // Group-vocals warning — after the stems are shown, so it never delays
+        // or blocks the swap. Only stored (and shown) when the warning applies.
+        void checkGroupVocals(leadVocalsUrl, backingVocalsUrl).then((groupVocals) => {
+          if (!groupVocals || karaokeJobRef.current !== jobId) return
+          setStemResult((prev) =>
+            prev && prev.storagePath === result.storagePath ? { ...prev, groupVocals } : prev
+          )
+          try {
+            const raw = localStorage.getItem(STEM_CACHE_KEY)
+            const cached = raw ? JSON.parse(raw) : null
+            if (cached?.result?.storagePath === result.storagePath) {
+              localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, groupVocals } }))
+            }
+          } catch { /* ignore */ }
+        })
+        return 'done'
+      }
+      if (pollData.status === 'failed' || pollData.status === 'canceled') {
+        return { reason: `the split ${String(pollData.status)}${pollData.error ? `: ${String(pollData.error).slice(0, 120)}` : ''}`, retry: true }
+      }
+      // starting / processing — keep waiting
+    }
+    return { reason: 'the split took longer than 8 minutes', retry: true }
   }
 
   // Premium counterpart to runKaraokeSplit: splits the FULL vocal stem into
@@ -1507,6 +1545,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     karaokeJobRef.current++
     genderSplitJobRef.current++
     setKaraokeStatus('idle')
+    setKaraokeError(null)
+    setAllowFullVocal(false)
     setStep(1)
     setStemResult(null)
     setConvertedVocalsUrl(null)
@@ -1645,8 +1685,23 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             // it lands converts the whole vocal track (backing too) and Auto Key
             // can't be worked out from the lead.
             const leadPending = step === 2 && karaokeStatus === 'running'
-            const waitTitle = genderSplitting ? 'Waiting for vocal split to finish…' : leadPending ? 'Finding the lead vocal… (about a minute)' : undefined
+            // The split failed: never swap the whole vocal track without asking.
+            const leadFailed = step === 2 && karaokeStatus === 'failed' && !stemResult?.leadVocalsUrl && !hasDuetStems && !allowFullVocal
+            const waitTitle = genderSplitting ? 'Waiting for vocal split to finish…' : leadPending ? 'Finding the lead vocal… (about a minute)' : leadFailed ? 'The lead vocal couldn’t be separated — choose below' : undefined
             return (
+            <>
+            {leadFailed && stemResult && (
+              <div className="vs-lead-fail" role="alert">
+                <div className="vs-lead-fail-txt">
+                  <strong>We couldn&rsquo;t separate the lead vocal</strong> ({karaokeError ?? 'unknown reason'}).
+                  Swapping without it also converts the backing singers, and Song Key can&rsquo;t be set for your voice (it stays at Original) — it won&rsquo;t sound as much like you.
+                </div>
+                <div className="vs-lead-fail-btns">
+                  <button className="vs-btn-solid" onClick={() => { void runKaraokeSplit(stemResult) }}>↻ Try again</button>
+                  <button className="vs-btn-ghost" onClick={() => setAllowFullVocal(true)}>Use the full vocal anyway</button>
+                </div>
+              </div>
+            )}
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
                 {isDualMode
@@ -1656,7 +1711,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <div className="vs-action-btns">
                 <button
                   className="vs-btn-ghost"
-                  disabled={genderSplitting || leadPending}
+                  disabled={genderSplitting || leadPending || leadFailed}
                   title={waitTitle}
                   onClick={() => {
                     if (step === 1 && !stemResult) {
@@ -1683,7 +1738,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 {step === 2 && (
                   <button
                     className="vs-btn-solid"
-                    disabled={genderSplitting || leadPending}
+                    disabled={genderSplitting || leadPending || leadFailed}
                     title={waitTitle}
                     onClick={handleFullClick}
                   >
@@ -1696,6 +1751,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 )}
               </div>
             </div>
+            </>
           )
           })()}
         </div>
@@ -1768,6 +1824,16 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           background: #09091A;
           gap: 12px;
         }
+        .vs-lead-fail {
+          flex-shrink: 0;
+          border-top: 1px solid rgba(245,158,11,.35);
+          background: rgba(245,158,11,.08);
+          padding: 10px 20px;
+          display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        }
+        .vs-lead-fail-txt { font-size: 12px; color: #FCD34D; line-height: 1.5; flex: 1 1 320px; }
+        .vs-lead-fail-txt strong { color: #FDE68A; }
+        .vs-lead-fail-btns { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-credit-hint {
           font-size: 12px;
           color: #8E8EB4;
