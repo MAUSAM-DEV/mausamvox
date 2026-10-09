@@ -41,7 +41,20 @@ From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's 
 - **Open checks:**
   - MVSEP raw outputs peak up to +2.1 dBFS. 16-bit FLAC may clip ~700 peaks per song unless MVSEP lowers the level — check on the first real job (needs the token).
   - The upload now waits for MVSEP (~4–6 min vs ~3).
-- **Part 2 research (clips, no app change):** borrow-the-sparkle, MVSEP Vocals Super Resolution, Apollo, 40 vs 48 kHz clone — in progress.
+- **Part 2 research (clips, no app change) — A + D done, B/C/E wait for the MVSEP token:**
+  - Check: a fresh render with the app's own code matches Q i within 0.1 dB in every band (the live app = the founder's pick).
+  - **A — borrow the sparkle** (original lead, key −3 with formants kept, above 10 kHz, added to the smoothed voice):
+    - 98% of the 10 kHz+ band then comes from the original singer;
+    - top end matches the original, but 6–10 kHz is −5 dB (A2 adds a lift: −4 dB);
+    - speaker model CAM++ (hears ≤ 8 kHz only) unchanged — like-singer 0.585 vs Q i 0.579.
+    - Note: arXiv 2604.05526 does NOT copy the original singer — it fills the high band with an auxiliary 48 kHz SVC model.
+  - **D — 40 kHz vs 48 kHz clone** (same `dataset_3min.zip` restored to voice-samples, 50 epochs; 48k retrained too for fairness):
+    - both are equally short of air (−39 dB; −54 dB above 14 kHz) → the dullness is the engine/training data, not the sample rate;
+    - identity differences are within training-to-training noise (two 48k trainings: like-me − like-singer +0.045 vs −0.025; 40k +0.06).
+  - Clips in Saved Tracks: "R A1/A2/D1/D2".
+  - **C — Apollo:** CC BY-SA 4.0 (GitHub + HF card): commercial use allowed with attribution; changes to the model must stay CC BY-SA. MVSEP runs it as "Apollo Enhancers" (render 51, opt 0 MP3 Enhancer); opt 2 = "Vocals Super Resolution" (B).
+  - Costs: 2 trainings 290 s on L40S ≈ $0.28; 2 conversions ~140 s.
+  - ⚠️ **Replicate balance is under $5** (it throttled a request "while you have less than $5.0 in credit") — top up.
 
 ## ✅ 2026-10-09 (evening) — first-swap failure, save visibility, player line (`22691ae`); blend clips — founder to pick
 
