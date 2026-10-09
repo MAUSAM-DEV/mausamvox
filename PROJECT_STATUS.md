@@ -6,6 +6,31 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-09 (evening) — first-swap failure, save visibility, player line (`22691ae`); blend clips — founder to pick
+
+From the live test (Pehla Pyaar, Mausam (Singing), defaults); Vercel logs pulled within the hour + Replicate:
+
+- **Save "missing":**
+  - The save worked: row `21c95eb6…` at 07:55:54, mix + music-only stored.
+  - The founder opened Saved Tracks at 07:55:31, mid-save (~1 min: mix encode/upload 07:54:58, instrumental 07:55:28, persist 07:55:36→54). The list loads once.
+  - Fix: Result-screen status ("Saving to your library…" → "Saved ✓ · Open Saved Tracks" / failed); beforeunload while saving; Saved Tracks shows "still saving…" (localStorage `mvx-pending-save`, 3-min expiry), re-checks every 4 s until a newer row lands, and refreshes on focus.
+- **First swap "failed":**
+  - Prediction `scrcv081…` queued 89 s (engine cold — it had gone cold ~3 min after the upload warm-up), then SUCCEEDED at 07:40:44.
+  - The page had stopped polling at 07:39:03 after one bad poll (all server responses were 200), so one dropped or unreadable poll was fatal.
+  - Fixes:
+    - polling tolerates 12 consecutive poll errors (~1 min);
+    - "Warming up the voice engine…" note after 15 s in `starting`;
+    - one automatic retry when the engine really fails — a preview retry is free (`retryOf`: the server checks the failed prediction (ours, < 15 min) and calls `refund_preview` for the retry);
+    - `/api/rvc-warm` pinged on arrival at Configure and every 60 s there (max 10).
+- **Player:** removed the divider line under the progress bar (before/after screenshots sent).
+- **Blend ("voice feels separated"):**
+  - Measured: our mix puts the voice **+3.1 dB louder vs the music than the original song** (+2.4 vs −0.8 dB while singing; makeup ×1.3 vs music ×0.8). The take is already 3.4 dB less bright (2–5 kHz) than the original lead, so no presence cut.
+  - 10 "Blend test" clips, rendered with the app graph, loudness-matched:
+    - Pehla Pyaar a–f at 1:25: b smoother voice, c shared room (music +6% of the voice's room, voice reverb 19%), d glue compression (−24 dB, 1.8:1, 30/250 ms), e voice −2 dB, f all.
+    - Song 2 (Harmony Test, Auto −3) a/f; song 3 (Oct 2 upload, Auto +2) a/f — 2 karaoke splits + 2 conversions ≈ $0.06.
+  - f vs a: mix loudness range −30–46 %, body +0.8 to +1.8 dB.
+  - Note: the "live song" and an Oct 3 upload were the same song (0.998 match), so the Harmony Test was used instead.
+
 ## ✅ 2026-10-09 (later) — progress bar fixed (`d16fefe`); smoothing options as clips — founder to pick
 
 - **Thin voice: closed.** The founder heard no difference in the 9 Body test clips; it was likely a preset (e.g. Radio) left on in that session. No fix.

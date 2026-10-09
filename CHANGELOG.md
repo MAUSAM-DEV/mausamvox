@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-09
 
+- **No false first-swap failure** (tolerant polling, warming-up note, one free automatic retry, Configure warm-ups), **saves visible while running** (Result-screen status, leave warning, Saved Tracks "still saving" + auto-refresh), player divider line removed. Root causes from Vercel logs + Replicate: engine cold 89 s then succeeded but one bad poll ended the page's wait; save completed 23 s after Saved Tracks was opened. Plus 10 "Blend test" clips. `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `22691ae`
 - **Progress bar follows playback** (real bar + drag-to-seek, timer-driven clock) — the old 1.5 px line moved ~1.4 px/s and looked stuck. Plus 8 "Smooth test" clips (de-esser, compression, soft top/saturation, combo, match original tone, f+e, f-safe) for the founder to choose. Thin-voice issue closed (preset left on). `tsc --noEmit` clean; clean `npm ci && npm run build` passed. `d16fefe`
 - **"Thinner voice" investigation (no code change):** every f48cba0 change measured on/off against Diagnosis 6 with the same take — body within ±0.5 dB for all (doubles removal, live chain, Studio vs Match song, limiter); live playback identical to the saved file (−68 dB difference); re-upload take and Auto key (−3) match D6. 9 "Body test" clips + 2 fix candidates for the founder's ears. 2 conversions (~$0.03).
 
