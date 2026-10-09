@@ -2,7 +2,9 @@
 //  • live — LivePlayer plays it in an AudioContext; knob changes move the
 //    graph's parameters while the song plays (no re-render, no file swap);
 //  • offline — renderMix builds the SAME graph in an OfflineAudioContext with
-//    the same settings to make the file that is saved / downloaded.
+//    the same settings and returns the PRE-MASTER mix; the saved / downloaded
+//    file is that mix mastered by audio-dsp/master.ts (gain + look-ahead
+//    limiter) — live, the same gain and the same limiter run as an AudioWorklet.
 // Same nodes + same settings + seeded reverb noise → the saved file sounds
 // like what was heard. Every node is always present; a control at its neutral
 // value is transparent (a 0 dB shelf is unity, a 0% wet send adds nothing).
@@ -11,8 +13,11 @@
 //   voices ×g(1−blend) ┐
 //   originals ×g·blend ├→ vocal bus (×1.3 makeup × Level) → Warmth → Bass → Treble
 //   harmony/partner ×g ┘     → reverb (dry 1−w | Studio room or Concert Hall) → echo
-//   music+backing ×0.8 ───────────────────────────────────────────┐
-//   → [clean | Lo-fi | Radio] → ×0.7 headroom → limiter → −1 dB → out   (g = 1/√N for N main vocals)
+//   music+backing ×0.8 (+ a touch of the voice's room) ─────────────────┐
+//   → [clean | Lo-fi | Radio] → ×0.62 → [glue compressor] = PRE-MASTER
+//   → master gain → limiter (−1 dBFS) → out   (g = 1/√N for N main vocals)
+
+import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S } from '@/lib/audio-dsp/master'
 
 export type PolishStyle = 'none' | 'hall' | 'lofi' | 'radio'
 
@@ -26,6 +31,8 @@ export interface MixParams {
   blend: number     // Voice blend, % original singer (0–BLEND_MAX)
   style: PolishStyle
   vocalsOnly: boolean
+  bedRoom: number   // share of the voice's Studio room on the music (0–1) — "shared room"
+  glue: boolean     // gentle whole-mix compression (~1–2 dB) that glues voice and music
 }
 
 export interface MixInputs {
@@ -36,7 +43,9 @@ export interface MixInputs {
   bed: AudioBuffer | null        // music + backing vocals, in the take's key
 }
 
-export const NEUTRAL_PARAMS: MixParams = { warmth: 0, bass: 0, treble: 0, reverb: 0, echo: 0, levelDb: 0, blend: 0, style: 'none', vocalsOnly: false }
+export const NEUTRAL_PARAMS: MixParams = { warmth: 0, bass: 0, treble: 0, reverb: 0, echo: 0, levelDb: 0, blend: 0, style: 'none', vocalsOnly: false, bedRoom: 0, glue: false }
+// Blend f (founder's pick, 2026-10-09): the music gets 6% of the voice's room.
+export const BED_ROOM = 0.06
 
 export const WARMTH_FREQ_HZ = 200
 export const WARMTH_MAX_DB = 10
@@ -60,18 +69,12 @@ export const BLEND_MAX = 50
 const VOCAL_MAKEUP = 1.3
 const MUSIC_GAIN = 0.8
 const BUTTERWORTH_Q_DB = -3.01 // Web Audio low/high-pass Q is in dB; −3.01 dB = Q 0.707
-// Final safety limiter (both live and saved): replaces the old "scale the
-// whole file down if it peaks over −1 dBFS", which can't be known while
-// playing live and would make the saved file quieter than what was heard.
-// The Web Audio compressor adds its own make-up gain (~+1.7 dB here) and lets
-// the first instant of a sharp peak through, so it limits lower and a final
-// −1 dB trim keeps the file clear of full scale (first try at −1 dB touched 0 dBFS).
-const LIMIT_THRESHOLD_DB = -3
-const LIMIT_TRIM = 0.89
-// Headroom before the limiter: typical mixes peaked ~1.2× full scale (old
-// mixer logs), so ×0.7 keeps them under the threshold (untouched) and only
-// extreme settings (e.g. Level +9 dB) reach the limiter.
-const MASTER_HEADROOM = 0.7
+// Level into the glue compressor: the ×0.7 headroom × 0.89 trim of the old
+// final stage, so the glue (tuned on those mixes) acts the same.
+const PRE_MASTER_GAIN = 0.7 * 0.89
+// Fallback limiter when AudioWorklet isn't available (old browsers only): the
+// previous Web Audio compressor settings.
+const FALLBACK_LIMIT_DB = -3
 const SMOOTH_S = 0.02 // knob moves glide over ~20 ms (no clicks)
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
@@ -115,10 +118,17 @@ export class MixGraph {
   private clean: GainNode
   private lofi: GainNode
   private radio: GainNode
+  private bedRoomWet: GainNode
+  private glueOn: GainNode
+  private glueOff: GainNode
+  private masterGain: GainNode | null = null
   private hasOriginals = false
   private params: MixParams
 
-  constructor(ctx: BaseAudioContext, params: MixParams, out: AudioNode = ctx.destination) {
+  // `master`: live playback adds the master gain + limiter after the
+  // pre-master mix (worklet = the 'mvx-limiter' processor is loaded in ctx);
+  // offline renders stop at the pre-master mix.
+  constructor(ctx: BaseAudioContext, params: MixParams, out: AudioNode = ctx.destination, master_: { worklet: boolean; gain: number } | null = null) {
     this.ctx = ctx
     this.live = !(ctx instanceof OfflineAudioContext)
     this.params = params
@@ -155,13 +165,38 @@ export class MixGraph {
     echoIn.connect(delay); delay.connect(damp); damp.connect(fb); fb.connect(delay)
     delay.connect(this.echoWet); this.echoWet.connect(styleIn)
     this.bedIn.connect(styleIn)
+    // Shared room: the music through the voice's Studio room (its own copy).
+    const bedRoom = ctx.createConvolver(); bedRoom.buffer = impulse(ctx, REVERB_IR_SECONDS, REVERB_IR_DECAY, 1)
+    this.bedRoomWet = gain(0)
+    this.bedIn.connect(bedRoom); bedRoom.connect(this.bedRoomWet); this.bedRoomWet.connect(styleIn)
 
+    // Pre-master: glue compressor (switchable), then — live only — the master
+    // gain and the look-ahead limiter.
+    const premaster = gain()
+    const master = gain(PRE_MASTER_GAIN)
+    const glue = ctx.createDynamicsCompressor()
+    glue.threshold.value = -24; glue.knee.value = 10; glue.ratio.value = 1.8; glue.attack.value = 0.03; glue.release.value = 0.25
+    this.glueOn = gain(0); this.glueOff = gain(1)
+    master.connect(glue); glue.connect(this.glueOn); this.glueOn.connect(premaster)
+    master.connect(this.glueOff); this.glueOff.connect(premaster)
+    if (!master_) premaster.connect(out)
+    else {
+      this.masterGain = gain(master_.gain)
+      premaster.connect(this.masterGain)
+      let limiter: AudioNode
+      if (master_.worklet) {
+        limiter = new AudioWorkletNode(ctx, 'mvx-limiter', {
+          numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
+          processorOptions: { ceilingDb: MASTER_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S },
+        })
+      } else {
+        const c = ctx.createDynamicsCompressor()
+        c.threshold.value = FALLBACK_LIMIT_DB; c.knee.value = 0; c.ratio.value = 20; c.attack.value = 0.002; c.release.value = 0.1
+        limiter = c
+      }
+      this.masterGain.connect(limiter); limiter.connect(out)
+    }
     // Whole-mix colour: clean, Lo-fi or Radio (one path open at a time).
-    const limiter = ctx.createDynamicsCompressor()
-    limiter.threshold.value = LIMIT_THRESHOLD_DB; limiter.knee.value = 0; limiter.ratio.value = 20
-    limiter.attack.value = 0.002; limiter.release.value = 0.1
-    const trim = gain(LIMIT_TRIM); limiter.connect(trim); trim.connect(out)
-    const master = gain(MASTER_HEADROOM); master.connect(limiter)
     this.clean = gain(1); styleIn.connect(this.clean); this.clean.connect(master)
     const band = (lo: number, hi: number, input: AudioNode) => {
       const hp = filter('highpass', lo), lp = filter('lowpass', hi)
@@ -215,9 +250,19 @@ export class MixGraph {
     to(this.echoDry.gain, 1 - ew)
     to(this.echoWet.gain, ew)
     to(this.bedIn.gain, p.vocalsOnly ? 0 : MUSIC_GAIN)
+    to(this.bedRoomWet.gain, clamp(p.bedRoom, 0, 1))
+    to(this.glueOn.gain, p.glue ? 1 : 0)
+    to(this.glueOff.gain, p.glue ? 0 : 1)
     to(this.clean.gain, p.style === 'lofi' || p.style === 'radio' ? 0 : 1)
     to(this.lofi.gain, p.style === 'lofi' ? 1 : 0)
     to(this.radio.gain, p.style === 'radio' ? 1 : 0)
+  }
+
+  // Master gain (live): glides so a new loudness setting never jumps.
+  setMasterGain(g: number) {
+    if (!this.masterGain) return
+    if (this.live) this.masterGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.3)
+    else this.masterGain.gain.value = g
   }
 
   // Start every input buffer at `when`, from `offset` seconds into the song.
@@ -253,13 +298,32 @@ export function mixDuration(inputs: MixInputs): number {
     .filter((b): b is AudioBuffer => b !== null).map((b) => b.duration))
 }
 
-// The saved / downloaded file: the same graph, rendered offline.
+// The saved / downloaded file BEFORE mastering: the same graph, rendered
+// offline up to the pre-master point (ResultStep masters it — master.ts).
 export async function renderMix(inputs: MixInputs, params: MixParams, sampleRate = 44100): Promise<AudioBuffer> {
   const length = Math.max(1, Math.ceil(mixDuration(inputs) * sampleRate))
   const ctx = new OfflineAudioContext(2, length, sampleRate)
   const graph = new MixGraph(ctx, params)
   graph.start(inputs, 0, 0)
   return ctx.startRendering()
+}
+
+// The look-ahead limiter worklet (master.ts), loaded once per context.
+// false = AudioWorklet unavailable → MixGraph falls back to a compressor.
+const limiterLoads = new WeakMap<BaseAudioContext, Promise<boolean>>()
+export function loadLimiter(ctx: BaseAudioContext): Promise<boolean> {
+  let p = limiterLoads.get(ctx)
+  if (!p) {
+    p = (async () => {
+      if (!ctx.audioWorklet) return false
+      const url = URL.createObjectURL(new Blob([LIMITER_WORKLET], { type: 'application/javascript' }))
+      try { await ctx.audioWorklet.addModule(url); return true }
+      catch (err) { console.warn('[mix] limiter worklet unavailable — using the fallback limiter:', err); return false }
+      finally { URL.revokeObjectURL(url) }
+    })()
+    limiterLoads.set(ctx, p)
+  }
+  return p
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +346,8 @@ export class LivePlayer {
   swapped: MixInputs | null = null
   original: { full: AudioBuffer | null; vocals: AudioBuffer | null } = { full: null, vocals: null }
   params: MixParams = NEUTRAL_PARAMS
+  masterGain = 1        // mastering gain for the swapped side (ResultStep sets it)
+  private worklet = false
   onChange: () => void = () => {}
 
   duration(): number {
@@ -307,6 +373,8 @@ export class LivePlayer {
     if (this.playing || !this.canPlay()) return
     if (!this.ctx) this.ctx = new AudioContext()
     if (this.ctx.state === 'suspended') await this.ctx.resume()
+    this.worklet = await loadLimiter(this.ctx)
+    if (this.playing) return
     if (this.offset >= this.duration() - 0.05) this.offset = 0
     this.startSources(this.offset)
     this.playing = true
@@ -332,6 +400,11 @@ export class LivePlayer {
   setParams(p: MixParams) {
     this.params = p
     this.graph?.set(p)
+  }
+
+  setMasterGain(g: number) {
+    this.masterGain = g
+    this.graph?.setMasterGain(g)
   }
 
   // New audio for the swapped side (Character / Harmony / Blend ready):
@@ -376,7 +449,7 @@ export class LivePlayer {
     const when = ctx.currentTime + 0.03
     const token = ++this.token
     if (this.view.side === 'swapped' && this.swapped) {
-      if (!this.graph) this.graph = new MixGraph(ctx, { ...this.params, vocalsOnly: this.view.vocalsOnly })
+      if (!this.graph) this.graph = new MixGraph(ctx, { ...this.params, vocalsOnly: this.view.vocalsOnly }, ctx.destination, { worklet: this.worklet, gain: this.masterGain })
       this.sources = this.graph.start(this.swapped, when, offset)
     } else {
       const buf = this.view.vocalsOnly ? this.original.vocals : this.original.full

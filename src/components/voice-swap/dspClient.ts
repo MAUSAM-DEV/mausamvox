@@ -11,9 +11,14 @@ type KeyReq = { op: 'key'; mono: Float32Array; sampleRate: number }
 type DoublesReq = { op: 'doubles'; channels: Float32Array[]; sampleRate: number; lead: Float32Array }
 type PitchStatsReq = { op: 'pitchStats'; mono: Float32Array; sampleRate: number }
 type HarmonyReq = { op: 'harmony'; mono: Float32Array; sampleRate: number; voices: HarmonyVoices; key: KeyEstimate | null; formantSemitones: number }
-export type DspRequest = (ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq) & { id: number }
+type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTargetDb: number }
+type AirShareReq = { op: 'airShare'; mono: Float32Array; sampleRate: number }
+type LufsReq = { op: 'lufs'; channels: Float32Array[]; sampleRate: number }
+type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number }
+type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq
+export type DspRequest = AnyReq & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number } }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -66,12 +71,29 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
     const { detectKey } = await import('@/lib/audio-dsp/key-detect')
     return { id: req.id, ok: true, key: detectKey(req.mono, req.sampleRate) }
   }
+  if (req.op === 'polish') {
+    const { polishVoice } = await import('@/lib/audio-dsp/voice-polish')
+    return { id: req.id, ok: true, channels: [polishVoice(req.mono, req.sampleRate, req.airTargetDb)] }
+  }
+  if (req.op === 'airShare') {
+    const { airShare } = await import('@/lib/audio-dsp/voice-polish')
+    return { id: req.id, ok: true, value: airShare(req.mono, req.sampleRate) }
+  }
+  if (req.op === 'lufs') {
+    const { lufs } = await import('@/lib/audio-dsp/master')
+    return { id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) }
+  }
+  if (req.op === 'master') {
+    const { masterGain, limit } = await import('@/lib/audio-dsp/master')
+    const gain = req.gain ?? masterGain(req.channels, req.sampleRate, req.targetLufs)
+    return { id: req.id, ok: true, value: gain, channels: limit(req.channels, req.sampleRate, gain) }
+  }
   const { renderHarmony } = await import('@/lib/audio-dsp/harmony')
   const { stem, mode } = await renderHarmony(req.mono, req.sampleRate, req.voices, req.key, req.formantSemitones)
   return { id: req.id, ok: true, channels: [stem], mode }
 }
 
-function call(req: ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq, transfer: Transferable[]): Promise<DspResponse> {
+function call(req: AnyReq, transfer: Transferable[]): Promise<DspResponse> {
   const full = { ...req, id: nextId++ } as DspRequest
   const w = getWorker()
   if (!w) return runInline(full)
@@ -113,4 +135,32 @@ export async function dspHarmony(
   const r = await call({ op: 'harmony', mono, sampleRate, voices, key, formantSemitones }, [mono.buffer])
   if (!r.ok || !r.channels?.[0] || !r.mode) throw new Error('Harmony failed')
   return { stem: r.channels[0], mode: r.mode }
+}
+
+// Studio voice (voice-polish.ts): de-ess + gentle compression + air tuned to
+// `airTargetDb` (the original lead's airShare).
+export async function dspPolishVoice(mono: Float32Array, sampleRate: number, airTargetDb: number): Promise<Float32Array> {
+  const r = await call({ op: 'polish', mono, sampleRate, airTargetDb }, [mono.buffer])
+  if (!r.ok || !r.channels?.[0]) throw new Error('Voice polish failed')
+  return r.channels[0]
+}
+
+export async function dspAirShare(mono: Float32Array, sampleRate: number): Promise<number> {
+  const r = await call({ op: 'airShare', mono, sampleRate }, [mono.buffer])
+  if (!r.ok || typeof r.value !== 'number') throw new Error('Air analysis failed')
+  return r.value
+}
+
+export async function dspLufs(channels: Float32Array[], sampleRate: number): Promise<number> {
+  const r = await call({ op: 'lufs', channels, sampleRate }, channels.map((c) => c.buffer))
+  if (!r.ok || typeof r.value !== 'number') throw new Error('Loudness analysis failed')
+  return r.value
+}
+
+// Mastering (master.ts): finds the gain for `targetLufs` (or uses `gain`) and
+// returns it with the limited audio.
+export async function dspMaster(channels: Float32Array[], sampleRate: number, targetLufs: number, gain?: number): Promise<{ gain: number; channels: Float32Array[] }> {
+  const r = await call({ op: 'master', channels, sampleRate, targetLufs, gain }, channels.map((c) => c.buffer))
+  if (!r.ok || typeof r.value !== 'number' || !r.channels?.length) throw new Error('Mastering failed')
+  return { gain: r.value, channels: r.channels }
 }
