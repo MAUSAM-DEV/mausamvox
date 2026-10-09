@@ -6,6 +6,32 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-09 (late night, 2) — identity fixes + "never give up silently" audit (`0bcc0e3`, `fcd0bac`, `472d79f`) — ⚠️ founder live test pending
+
+- **Lead split (`0bcc0e3`):**
+  - retries poll errors (12 in a row), waits up to 8 min, and restarts a failed split once;
+  - if it still fails, Configure blocks Preview/Full with the reason, "Try again" or "Use the full vocal anyway";
+  - a restored song without a lead re-runs the split.
+- **Identity (`fcd0bac`):**
+  - studio voice = de-esser + air (no compression);
+  - glue on the music only;
+  - mastering stops at ≤ 1 dB average limiting (Pehla Pyaar: +6.8 dB / −9.1 LUFS instead of +20 dB / 13 dB cut).
+  - The app's vocal output now scores like the raw take (+0.016 vs +0.013; old studio voice −0.038, same window).
+- **Audit (`472d79f`):**
+  - `lib/poll.ts` (pollUntil / fetchRetry) used by the stem split (Voice Swap + Stem Studio), duet split and lyrics — each ended on ONE failed check;
+  - swap save retried; a failed re-save is now reported;
+  - Choir / Instruments check Saved Tracks after a dropped connection before saying "failed";
+  - the server-side lyric writer tolerates a failed status check.
+  - Already OK: conversion, hq-split, Song Studio, voice training.
+  - Known gap: a Choir/Instruments function killed at 60 s can't refund (pre-existing).
+- **Polish tests paused** (founder: the ID clips sounded the same).
+- **ElevenLabs Voice Changer test** — files in ~/Downloads, founder converting on the website:
+  - `MVX-EL-a1_PehlaPyaar_lead_key-3_FULL.wav`, `MVX-EL-a2_…_chorus_3m50-4m20.wav` (today's MVSEP lead, −3, formants kept);
+  - `MVX-EL-b_Mausam_voice_sample_cleanest_90s.wav` (voice test 1:08–2:38);
+  - `MVX-EL-c1_OUR_swap_current_default_chorus_vocals.wav`, `MVX-EL-c2_OUR_swap_raw_engine_no_polish_chorus_vocals.wav`.
+  - Next: identity score + listen when the founder drops the result.
+- **ElevenLabs engine plan** (not built): see the session report — `POST /v1/speech-to-speech/{voice_id}` (eleven_multilingual_sts_v2), 5 min max per request, $0.12/min; IVC `POST /v1/voices/add`; no pitch control, so the key is shifted before sending; singing is not documented.
+
 ## 🔍 2026-10-09 (late night) — "doesn't sound like me" investigated — fix plan AWAITING APPROVAL (no code changed)
 
 Live test 16:10 UTC (Pehla Pyaar, Mausam (Singing), defaults): ~20–30% like the founder, generic; chorus blunt.
