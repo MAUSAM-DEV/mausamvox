@@ -27,7 +27,22 @@ const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 const GENDER_SPLIT_COST = 250
 // Final pitch sent to RVC = auto key-match + manual Pitch Shift, clamped to a
 // sane semitone range (manual is ±12, auto up to ±24) and rounded to an integer.
+// Shared with Saved Tracks (SwapsIndexPage): a save still running there shows
+// as "still saving".
+const PENDING_SAVE_KEY = 'mvx-pending-save'
 const clampPitch = (v: number) => Math.max(-24, Math.min(24, Math.round(v)))
+
+// A conversion the ENGINE reported as failed (not a dropped poll) — the only
+// case the page retries automatically.
+class EngineJobFailed extends Error {}
+
+// Polling: a dropped/garbled poll is retried; only this many in a row (~1 min)
+// count as lost contact. The first live swap of 2026-10-09 "failed" on ONE
+// bad poll while the engine was still booting — then succeeded on Replicate.
+const MAX_POLL_ERRORS = 12
+// When a job has been waiting this long, say the engine is warming up.
+const WARMING_NOTE_AFTER_MS = 15000
+const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up to 2 minutes. Keep this page open.'
 // Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
 const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -223,6 +238,23 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // (true only for full swaps, never previews, so previews don't waste an upload).
   const persistContextRef = useRef<{ predictionId: string; songName: string; voiceUsed: string } | null>(null)
   const [armMixUpload, setArmMixUpload] = useState(false)
+  // First save of a full swap: shown on the Result screen; while 'saving',
+  // leaving the page asks first and Saved Tracks shows it as "still saving".
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'failed' | null>(null)
+  function markSaving(songName: string) {
+    setSaveStatus('saving')
+    try { localStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ song: songName, at: Date.now() })) } catch { /* ignore */ }
+  }
+  function markSaveDone(ok: boolean) {
+    setSaveStatus(ok ? 'saved' : 'failed')
+    try { localStorage.removeItem(PENDING_SAVE_KEY) } catch { /* ignore */ }
+  }
+  useEffect(() => {
+    if (saveStatus !== 'saving') return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [saveStatus])
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps of
   // the same pair don't re-fetch + re-decode the same audio.
@@ -491,6 +523,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const [processing, setProcessing] = useState(false)
   const [processingType, setProcessingType] = useState<'preview' | 'full'>('full')
   const [ovSteps, setOvSteps] = useState<StepStatus[]>(['pending', 'pending', 'pending', 'pending'])
+  const [overlayNote, setOverlayNote] = useState<string | null>(null)
 
   // Toast
   const [toast, setToast] = useState({ visible: false, message: '' })
@@ -574,13 +607,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
         // Re-saves are best-effort (the previous version stays intact) — stay quiet.
-        if (!silent) showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
+        if (!silent) { showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000); markSaveDone(false) }
         return false
       }
       const persisted = await res.json()
       console.log('[voice-swap] persisted swap', persisted.swapId, persisted.resaved ? '(re-saved — polish updated)' : persisted.persisted ? '→ storage path saved' : '(result_url only, no durable copy)')
       if (persisted.swapId) setPersistedSwapId(persisted.swapId)
-      if (!silent) showToast('Saved to your Saved Tracks ✓', 4000)
+      if (!silent) { showToast('Saved to your Saved Tracks ✓', 4000); markSaveDone(true) }
       // Refresh the Recent Swaps panel after the FIRST save (a re-save doesn't
       // change the row's identity or position — skip the needless query).
       if (!silent) {
@@ -596,7 +629,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       return true
     } catch (err) {
       console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
-      if (!silent) showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000)
+      if (!silent) { showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000); markSaveDone(false) }
       return false
     }
   }
@@ -1031,6 +1064,19 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   function takeKey(key = keyShift): string {
     return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, key, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
   }
+  // Keep the voice engine warm while the user is on Configure: it went cold
+  // ~3 min after the upload's warm-up on 2026-10-09 and the next swap waited
+  // 89 s to start. One ping on arrival, then every 60 s (max 10; the route is
+  // rate-limited and a warm-up only boots an instance, ~$0.001 each).
+  useEffect(() => {
+    if (step !== 2) return
+    const ping = () => { fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {}) }
+    ping()
+    let n = 1
+    const id = setInterval(() => { if (n++ < 10) ping() }, 60_000)
+    return () => clearInterval(id)
+  }, [step])
+
   // Work out the Auto key as soon as a song + voice are chosen (shown on Configure).
   useEffect(() => {
     if (step !== 2 || !stemResult || !selectedVoiceId || !keyAuto) return
@@ -1093,6 +1139,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       voiceUsed: voices.find((v) => v.id === selectedVoiceId)?.name ?? 'Unknown Voice',
     }
     setArmMixUpload(true)
+    markSaving(persistContextRef.current.songName)
     setStep(3)
     showToast(p.charged > 0 ? `Saving your swap — ${cost} cr (your ${p.charged} cr preview counts toward it)` : 'Saving your swap — no re-conversion needed')
     return true
@@ -1145,6 +1192,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
     setProcessingType(type)
     setProcessing(true)
+    setOverlayNote(null)
     // Instrumentation only (browser console): wall-clock of the client-side
     // conversion phase (F0 detection + the voice-convert round-trip) up to the
     // converted vocal being ready. Split stages (Demucs/karaoke/MVSEP) are
@@ -1166,19 +1214,28 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const pollJob = async (predictionId: string): Promise<string> => {
         const POLL_INTERVAL_MS = 5000
         const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
+        const started = Date.now()
+        let pollErrors = 0
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-          const res = await fetch(`/api/voice-convert?id=${predictionId}`)
-          const data = await res.json()
-          if (!res.ok) {
-            console.error('[voice-swap] poll HTTP error:', res.status, data)
-            throw new Error(data.error ?? 'Voice conversion failed')
+          let data: { status?: string; error?: string; convertedVocalsUrl?: string }
+          try {
+            const res = await fetch(`/api/voice-convert?id=${predictionId}`)
+            data = await res.json()
+            if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+          } catch (err) {
+            pollErrors++
+            console.warn(`[voice-swap] poll ${pollErrors}/${MAX_POLL_ERRORS} failed — retrying:`, err instanceof Error ? err.message : err)
+            if (pollErrors >= MAX_POLL_ERRORS) throw new Error('Lost contact with the voice engine — check your connection and try again')
+            continue
           }
+          pollErrors = 0
           if (data.status === 'succeeded') return data.convertedVocalsUrl as string
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
-            throw new Error(data.error ?? 'Voice conversion failed')
+            throw new EngineJobFailed(data.error ?? 'Voice conversion failed')
           }
+          setOverlayNote(data.status === 'starting' && Date.now() - started > WARMING_NOTE_AFTER_MS ? WARMING_NOTE : null)
         }
         throw new Error('Voice conversion timed out')
       }
@@ -1288,6 +1345,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceUsed: `${voice.name} + ${voice2.name}`,
         }
         setArmMixUpload(true)
+        markSaving(persistContextRef.current.songName)
         return
       }
 
@@ -1333,34 +1391,50 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const effectivePitch = clampPitch(autoShift + pitchShift + takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
-      const startRes = await fetch('/api/voice-convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vocalsUrl: vocalsToConvert,
-          vocalsPath: vocalsToConvertPath || undefined,
-          voiceModelUrl: voice.modelUrl,
-          voiceId: voice.id,
-          pitchShift: effectivePitch,
-          autotune: AUTOTUNE_AMOUNT[autotune],
-          // Previews are gated + charged server-side (first 2 per track free,
-          // 3rd+ costs 50). trackKey is the upload storagePath; empty for
-          // manual-extracted stems, which are always free.
-          isPreview: type === 'preview',
-          trackKey: stemResult.storagePath || '',
-        }),
-      })
-
-      const startData = await startRes.json()
-      console.log('[voice-swap] POST /api/voice-convert →', startRes.status, startData)
-      if (!startRes.ok) throw new Error(startData.error ?? 'Voice conversion failed to start')
-
-      // Server may have charged a paid (3rd+) preview — reflect the new balance.
-      if (typeof startData.creditsRemaining === 'number') {
-        setCreditsRemaining(startData.creditsRemaining)
+      const startConversion = async (retryOf?: string) => {
+        const startRes = await fetch('/api/voice-convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vocalsUrl: vocalsToConvert,
+            vocalsPath: vocalsToConvertPath || undefined,
+            voiceModelUrl: voice.modelUrl,
+            voiceId: voice.id,
+            pitchShift: effectivePitch,
+            autotune: AUTOTUNE_AMOUNT[autotune],
+            // Previews are gated + charged server-side (first 2 per track free,
+            // 3rd+ costs 50). trackKey is the upload storagePath; empty for
+            // manual-extracted stems, which are always free.
+            isPreview: type === 'preview',
+            trackKey: stemResult.storagePath || '',
+            retryOf,
+          }),
+        })
+        const data = await startRes.json()
+        console.log('[voice-swap] POST /api/voice-convert →', startRes.status, data)
+        if (!startRes.ok) throw new Error(data.error ?? 'Voice conversion failed to start')
+        // Server may have charged a paid (3rd+) preview — reflect the new balance.
+        if (typeof data.creditsRemaining === 'number') setCreditsRemaining(data.creditsRemaining)
+        return data
       }
 
-      const kept = await keepLocal(await pollJob(startData.predictionId as string))
+      let startData = await startConversion()
+      // What THIS take's preview cost (an automatic retry below is free).
+      const previewCost = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
+      let remoteUrl: string
+      try {
+        remoteUrl = await pollJob(startData.predictionId as string)
+      } catch (err) {
+        if (!(err instanceof EngineJobFailed)) throw err
+        // The engine itself failed: retry once, quietly and for free.
+        console.warn('[voice-swap] engine failed — retrying once:', err.message)
+        setOverlayNote('The voice engine hiccuped — trying once more…')
+        startData = await startConversion(startData.predictionId as string)
+        remoteUrl = await pollJob(startData.predictionId as string)
+      }
+      setOverlayNote(null)
+
+      const kept = await keepLocal(remoteUrl)
       replaceLocalVocals([kept])
       const convertedUrl = kept.url
 
@@ -1375,7 +1449,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setProcessing(false)
       setStep(3)
       if (type === 'preview') {
-        const charged = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
+        const charged = previewCost
         lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false, local: kept.local }
         setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
       } else {
@@ -1397,6 +1471,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceUsed: voice?.name ?? 'Unknown Voice',
         }
         setArmMixUpload(true)
+        markSaving(persistContextRef.current.songName)
       }
       // Previews are no longer charged here — the server-side gate in
       // /api/voice-convert handles the "first 2 free, then 50" pricing at job
@@ -1404,6 +1479,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     } catch (err) {
       console.error('[voice-swap] handleProcess threw:', err)
       setProcessing(false)
+      setOverlayNote(null)
       // 8-second toast for errors — long enough to read even if the user's
       // eyes were on the fading overlay when the message appeared.
       showToast(err instanceof Error ? err.message : 'Voice conversion failed', 8000)
@@ -1426,6 +1502,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setSelectedVoiceId2(null)
     setIsDuet(false)
     setPersistedSwapId(null) // new track → Share must wait for its own save
+    setSaveStatus(null)
     lastPreviewRef.current = null // new track → no previewed take to save
     lastSavedKeyRef.current = null
     setPreviewSaveCost(null)
@@ -1532,6 +1609,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 ].filter(Boolean).join(' + ') || null}
                 persistedSwapId={persistedSwapId}
                 previewSaveCost={savablePreview() ? previewSaveCost : null}
+                saveStatus={saveStatus}
+                onSaveFailed={() => markSaveDone(false)}
                 onSavePreview={() => {
                   if (!savePreviewAsFull()) showToast('This preview can no longer be saved — press ⚡ Process Full Track on Configure for a fresh full swap.', 7000)
                 }}
@@ -1606,6 +1685,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         visible={processing}
         type={processingType}
         steps={ovSteps}
+        note={overlayNote}
       />
       <VToast visible={toast.visible} message={toast.message} />
 

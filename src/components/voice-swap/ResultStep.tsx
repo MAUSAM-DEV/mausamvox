@@ -59,6 +59,9 @@ interface ResultStepProps {
   // The exact vocal stem(s) that were converted, in convertedVocalsUrl(2)
   // order — Voice blend mixes these (the original singer) under the new voice.
   convertedSourceUrls?: string[]
+  // First save of a full swap (it runs in the background for ~a minute).
+  saveStatus?: 'saving' | 'saved' | 'failed' | null
+  onSaveFailed?: () => void
 }
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
@@ -387,7 +390,7 @@ export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
-  keyShift = 0, autotuneLabel, convertedSourceUrls,
+  keyShift = 0, autotuneLabel, convertedSourceUrls, saveStatus, onSaveFailed,
 }: ResultStepProps) {
   const [ab, setAb] = useState<AbSide>('Swapped')
   const [mode, setMode] = useState<PlayMode>('full')
@@ -721,7 +724,7 @@ export function ResultStep({
     } else if (firstSave) {
       // A failed FIRST save: retry twice, then say so.
       if (saveRetriesRef.current < 2) { saveRetriesRef.current++; setTimeout(() => { void savePolish() }, 3000) }
-      else onToast("Couldn't save your track — check your connection. Change any knob to try again, or download it now.")
+      else { onToast("Couldn't save your track — check your connection. Change any knob to try again, or download it now."); onSaveFailed?.() }
     }
   }
   // Keep the SAVED track in sync with the settled settings (first run inserts
@@ -1094,6 +1097,16 @@ export function ResultStep({
           </div>
         )}
 
+        {/* First save: it takes about a minute — say so, so nobody looks in
+            Saved Tracks too early (2026-10-09 live test). */}
+        {saveStatus && (
+          <div className={`vs-save-status vs-save-status--${saveStatus}`} role="status">
+            {saveStatus === 'saving' && <><span className="vs-polish-spin" /> Saving to your library… about a minute. You can keep listening; please keep this page open.</>}
+            {saveStatus === 'saved' && <>✓ Saved to your library · <a href="/swaps">Open Saved Tracks</a></>}
+            {saveStatus === 'failed' && <>Couldn&rsquo;t save this track — download it now, or change any knob to try again.</>}
+          </div>
+        )}
+
         {/* Download / Share */}
         <div className="vs-dl-row">
           <button
@@ -1211,7 +1224,7 @@ export function ResultStep({
         }
         .vs-player-controls {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 8px 14px; border-top: 1px solid #2E2E56;
+          padding: 4px 14px 10px;
         }
         .vs-time { font-size: 11px; color: #8E8EB4; font-variant-numeric: tabular-nums; }
         .vs-play-btn {
@@ -1291,6 +1304,14 @@ export function ResultStep({
           padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
           background: linear-gradient(135deg,#9D5CFF,#F9459E); color: #fff; font-size: 13px; font-weight: 700;
         }
+        .vs-save-status {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          padding: 10px 14px; margin-bottom: 14px; border-radius: 10px; font-size: 12px; line-height: 1.5;
+        }
+        .vs-save-status--saving { color: #C4B5FD; background: rgba(157,92,255,.08); border: 1px solid rgba(157,92,255,.3); }
+        .vs-save-status--saved { color: #34D399; background: rgba(16,185,129,.07); border: 1px solid rgba(16,185,129,.25); }
+        .vs-save-status--saved a { color: #F0F0FF; font-weight: 600; }
+        .vs-save-status--failed { color: #F87171; background: rgba(248,113,113,.06); border: 1px solid rgba(248,113,113,.25); }
         .vs-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-dl-btn {
           padding: 10px 20px; border-radius: 8px;

@@ -54,6 +54,20 @@ function safeStringify(v: unknown): string {
 // Clamp a number into [lo, hi].
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
+// True when `id` is one of our RVC predictions that failed (or was canceled)
+// in the last 15 minutes — the only case where a retry preview is free.
+const RETRY_WINDOW_MS = 15 * 60 * 1000
+async function isRecentFailure(id: string): Promise<boolean> {
+  try {
+    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const p = await replicate.predictions.get(id)
+    const created = Date.parse(p.created_at)
+    return (p.status === 'failed' || p.status === 'canceled') && p.version === rvcVersion() && Date.now() - created < RETRY_WINDOW_MS
+  } catch {
+    return false
+  }
+}
+
 // Starts a voice-conversion job. Returns immediately with a prediction id —
 // RVC runs can take longer than a serverless function is allowed to stay
 // open, so the client polls GET below instead of us blocking here.
@@ -68,6 +82,10 @@ export async function POST(req: NextRequest) {
       autotune?: number
       isPreview?: boolean
       trackKey?: string
+      // The app's one automatic retry after a conversion FAILED on the engine:
+      // the id of that failed prediction. A preview retry is then free (the
+      // failed attempt already used the preview), so nobody pays twice.
+      retryOf?: string
     }
     try {
       body = await req.json()
@@ -75,7 +93,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -216,6 +234,15 @@ export async function POST(req: NextRequest) {
         }
         // Surface the new balance so the client can update its display.
         creditsRemaining = row.credits_remaining
+        // Automatic retry of a conversion that failed on the engine within the
+        // last 15 min: undo this preview's count and charge right away.
+        if (retryOf && await isRecentFailure(retryOf)) {
+          await refundPreview(user.id, trackKey, row.charged)
+          console.log(`[voice-convert] free retry of failed prediction ${retryOf}`)
+          if (row.charged > 0) creditsRemaining = (creditsRemaining ?? 0) + row.charged
+          previewRefund = null
+          previewCharged = 0
+        }
       }
     }
 

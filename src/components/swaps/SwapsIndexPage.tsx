@@ -5,6 +5,10 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { LogoFull } from '@/components/ui/Logo'
 
+// Written by VoiceSwapPage while a save runs (same key); ignored after 3 min.
+const PENDING_SAVE_KEY = 'mvx-pending-save'
+const PENDING_SAVE_MAX_MS = 3 * 60 * 1000
+
 // All saved tracks (playable voice_swaps rows), newest first — the dashboard's
 // Recent Swaps shows only the latest 4; this page is the full list. Rows open
 // the existing read-only /swaps/[swapId] page (play/download/delete live there).
@@ -27,11 +31,22 @@ export function SwapsIndexPage() {
   const [loading, setLoading] = useState(true)
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
 
+  // A swap still saving in Voice Swap (set there; ~a minute): shown as
+  // "still saving" and the list re-checks until it lands. Opening this page
+  // mid-save showed an old list on 2026-10-09.
+  const [pending, setPending] = useState<{ song: string; at: number } | null>(null)
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
+    let stopped = false
+    const readPending = () => {
+      try {
+        const p = JSON.parse(localStorage.getItem(PENDING_SAVE_KEY) ?? 'null') as { song: string; at: number } | null
+        return p && Date.now() - p.at < PENDING_SAVE_MAX_MS ? p : null
+      } catch { return null }
+    }
+    const load = () => supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id
-      if (!uid) return // middleware guarantees a session; belt-and-braces
+      if (!uid || stopped) return // middleware guarantees a session; belt-and-braces
       supabase
         .from('voice_swaps')
         .select('id, song_name, voice_used, created_at')
@@ -39,11 +54,21 @@ export function SwapsIndexPage() {
         .not('result_path', 'is', null)
         .order('created_at', { ascending: false })
         .then(({ data: rows, error }) => {
+          if (stopped) return
           if (error) console.error('saved-tracks fetch failed', error)
           else setSwaps(rows ?? [])
           setLoading(false)
+          const p = readPending()
+          // The pending save has landed once a row newer than it exists.
+          setPending(p && !(rows ?? []).some((r) => Date.parse(r.created_at) >= p.at) ? p : null)
         })
     })
+    void load()
+    const id = setInterval(() => { if (readPending()) void load() }, 4000)
+    const onFocus = () => { void load() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => { stopped = true; clearInterval(id); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus) }
   }, [])
 
   return (
@@ -67,6 +92,9 @@ export function SwapsIndexPage() {
           </p>
 
           {loading && <div className="swl-note">Loading…</div>}
+          {pending && (
+            <div className="swl-note swl-pending">⏳ Still saving &ldquo;{pending.song}&rdquo; — it will appear here in a moment.</div>
+          )}
 
           {!loading && swaps.length === 0 && (
             <div className="swl-empty">
@@ -159,6 +187,10 @@ export function SwapsIndexPage() {
         .swl-note {
           text-align: center; padding: 60px 0;
           font-size: 13px; color: #8E8EB4;
+        }
+        .swl-pending {
+          padding: 12px 14px; margin-bottom: 12px; border-radius: 10px; text-align: left;
+          color: #C4B5FD; background: rgba(157,92,255,.08); border: 1px solid rgba(157,92,255,.3);
         }
         .swl-empty {
           background: #09091A; border: 1px solid #2E2E56;

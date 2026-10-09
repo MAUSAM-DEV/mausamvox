@@ -13,9 +13,11 @@ interface ProcessingOverlayProps {
   visible: boolean
   type: 'preview' | 'full'
   steps: StepStatus[]
+  // Extra status line, e.g. "Warming up the voice engine…"
+  note?: string | null
 }
 
-export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayProps) {
+export function ProcessingOverlay({ visible, type, steps, note }: ProcessingOverlayProps) {
   return (
     <div
       style={{
@@ -67,6 +69,12 @@ export function ProcessingOverlay({ visible, type, steps }: ProcessingOverlayPro
           ? 'First 2 previews of a track are free · 50 credits after'
           : 'Studio Engine · Studio Clone'}
       </div>
+
+      {note && (
+        <div style={{ fontSize: '13px', color: '#C4B5FD', marginBottom: '18px', maxWidth: '320px', textAlign: 'center', lineHeight: 1.5 }}>
+          {note}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '300px' }}>
         {STEP_LABELS.map((label, i) => {
