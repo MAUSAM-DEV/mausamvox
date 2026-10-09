@@ -6,6 +6,30 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-09 (late night) — "doesn't sound like me" investigated — fix plan AWAITING APPROVAL (no code changed)
+
+Live test 16:10 UTC (Pehla Pyaar, Mausam (Singing), defaults): ~20–30% like the founder, generic; chorus blunt.
+Measured with CAM++ against the founder's singing recording; "lead" = like-you − like-original-singer.
+
+- **Cause 1 — the lead split was lost:**
+  - The karaoke split succeeded on Replicate at 16:18:08, but the page stopped polling it at 16:16:28 (one failed poll ends it — no retry; nothing on the server side).
+  - So the swap converted the WHOLE MVSEP vocal track at the **Original key** (Auto falls back to 0 without a lead). Whole song: key 0 = +0.06 vs key −3 = +0.15.
+  - A second karaoke prediction (`jjct8r9t…`) was created in the same second and stays "starting" (also seen this morning) — to investigate.
+- **Cause 2 — the glue compressor:** D6 chain +0.149 → with glue +0.085 (whole song).
+- **Cause 3 — smoothing's voice compression:** D6 +0.149 → +0.112. Air ≈ 0; reverb 38 ≈ −0.01.
+- **Cause 4 — mastering crushed the song:** reaching −7.8 LUFS took +20 dB with the limiter cutting 13 dB on average (17 dB max). At −9 it's +6.6 dB with 0.8 dB of limiting.
+- **Not causes:**
+  - MVSEP vs Demucs lead (+0.148 vs +0.16 raw);
+  - whole track vs lead at the same key (within noise);
+  - model/settings: Mausam (Singing) `12e16c4b…`, index 0.3, hop 128, engine `255794a3` — same as D6.
+- **Fix candidate (clips ID 16/17):**
+  - voice = de-esser + air, no compression (whole song +0.142 on the MVSEP lead, +0.153 on D6);
+  - glue on the music only;
+  - mastering capped at ≤ 1 dB average limiting (→ −9.2 LUFS here).
+  - Chorus identity: +0.042 (MVSEP lead) / +0.075 (D6 take) vs +0.017 for today's default.
+- **Chorus vs original** (for the next step): our voice is −4.7 dB at 2–5 kHz (presence) vs the original singer; the voice sits 2.9 dB louder against the music than in the original. The reverb measurement needs a proper method.
+- 25 "ID …" clips in Saved Tracks (chorus 3:50, full mix + vocals only). 2 conversions.
+
 ## ✅ 2026-10-09 (night) — Q i is the default: Auto Key fix, studio voice + mastering, MVSEP music (`739755c`, `dcd9d22`, `5800859`) — ⚠️ founder live test pending
 
 From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's pick **Q i** (key −3, everything combined):
