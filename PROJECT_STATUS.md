@@ -6,6 +6,27 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-09 (later) — progress bar fixed (`d16fefe`); smoothing options as clips — founder to pick
+
+- **Thin voice: closed.** The founder heard no difference in the 9 Body test clips; it was likely a preset (e.g. Radio) left on in that session. No fix.
+- **Progress bar (`d16fefe`):**
+  - Cause: the "bar" was a faint 1.5 px line on a decorative waveform, moving ~1.4 px/s on a 4.5-min song, so it looked stuck while the timer ran.
+  - Fix: a real progress bar (gradient fill + handle, click/drag to seek with mouse or finger, arrow keys ±5 s), played-part tint, no 0.1 s lag; the clock is a 100 ms timer (animation frames pause in hidden tabs).
+  - Verified locally: it moves 0.73 % per 2 s (= 2 s / 272.6 s) through knob, preset and Original/Swapped changes; it stops when paused; drag-seek to 52.9 % = 2:24.
+- **Smoothing options** — 8 "Smooth test" clips in Saved Tracks: Pehla Pyaar 2:47–3:17, the passage with the most s/sh, D6 take, Key −3, rendered through the app's real mix graph.
+  - Processing is JS (prototype in `seedvc-local/work/pp/smooth`, ported to the worker once chosen).
+  - Voice-alone changes vs current (s/sh peaks · top fizz · body · loudness range · distance to the original's tone):
+    - b de-ess −0.1 / −2.6 / 0 / 1.0 / 5.6
+    - c compress 0 / +0.4 / +0.1 / 0.6 / 5.3
+    - d soft-top + saturation −0.8 / −1.9 / 0 / 1.0 / 5.8
+    - e combo −1.1 / −3.5 / +0.1 / 0.7 / 5.8
+    - f match original +13.3 / +4.8 / −1.0 / 0.7 / 3.7
+    - f+e +7.3 / +0.6 / −1.0 / 0.7 / 4.0
+    - f-safe (match ≤ +2 dB above 4 kHz) + e +2.5 / −3.5 / −0.3 / 0.6 / 4.5
+    - current: loudness range 1.0, distance 5.4; the original singer's loudness range is 0.8.
+  - The original singer's recording is much brighter (+4.6 dB at 4 kHz, +6 dB above 8 kHz), so a full match makes "s" sounds harsher.
+  - Next: build the founder's pick into the default polish as an adjustable amount (dry/processed crossfade, live).
+
 ## 🔍 2026-10-09 — "voice sounds thinner since f48cba0": investigated, no code change — founder's ears needed
 
 - Founder's post-f48cba0 session (Oct 4 18:18–19:07 UTC, Pehla Pyaar re-upload, 8 conversions) saved no track, and Replicate had deleted the takes, so it was recreated.
