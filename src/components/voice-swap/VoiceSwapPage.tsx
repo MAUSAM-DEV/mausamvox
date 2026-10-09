@@ -64,6 +64,7 @@ const STEM_PATH_FIELDS: { path: keyof StemResult; url: keyof StemResult }[] = [
   { path: 'bassPath',          url: 'bassUrl' },
   { path: 'drumsPath',         url: 'drumsUrl' },
   { path: 'otherPath',         url: 'otherUrl' },
+  { path: 'instrumentalPath',  url: 'instrumentalUrl' },
 ]
 
 // Re-sign every stem in a restored StemResult from its durable storage path.

@@ -128,6 +128,12 @@ export interface StemResult {
   bassPath?: string
   drumsPath?: string
   otherPath?: string
+  // Studio-quality split (/api/hq-split, MVSEP BS-RoFormer): when true,
+  // vocalsUrl and instrumentalUrl come from MVSEP and the swap's music is
+  // instrumentalUrl alone — bass/drums/other (Demucs) are only for the stem
+  // cards (they sit ~25 ms later than MVSEP's files and would smear the mix).
+  hqSplit?: boolean
+  instrumentalPath?: string
   fileName: string
 }
 
@@ -291,6 +297,40 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
   const [errorMsg, setErrorMsg] = useState('')
   // 0..100 while an oversize WAV is being compressed to MP3; null otherwise.
   const [compressPct, setCompressPct] = useState<number | null>(null)
+  // True while the studio-quality split is still running (it's the slower one).
+  const [hqWaiting, setHqWaiting] = useState(false)
+
+  // Studio-quality vocals/music split (/api/hq-split). Never throws: null =
+  // not available (no token / MVSEP down / too slow) → the Demucs stems are used.
+  async function runHqSplit(storagePath: string): Promise<{ vocalsUrl: string; vocalsPath?: string; instrumentalUrl: string; instrumentalPath?: string } | null> {
+    const HQ_POLL_MS = 5000
+    const HQ_MAX_MS = 12 * 60 * 1000
+    const t0 = Date.now()
+    try {
+      setHqWaiting(true)
+      const start = await fetch('/api/hq-split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storagePath }) })
+      const { hash, error } = await start.json().catch(() => ({}))
+      if (!start.ok || !hash) { console.warn('[hq-split] not started:', error ?? start.status); return null }
+      let errors = 0
+      while (Date.now() - t0 < HQ_MAX_MS) {
+        await new Promise((r) => setTimeout(r, HQ_POLL_MS))
+        const res = await fetch(`/api/hq-split?hash=${encodeURIComponent(hash)}&t=${Date.now() - t0}`).catch(() => null)
+        const data = res?.ok ? await res.json().catch(() => null) : null
+        if (!data) { if (++errors > 10) return null; continue }
+        errors = 0
+        if (data.status === 'succeeded' && data.vocalsUrl && data.instrumentalUrl) {
+          console.log(`[timing] stage=hq-split ms=${Date.now() - t0}`)
+          return { vocalsUrl: data.vocalsUrl, vocalsPath: data.vocalsPath, instrumentalUrl: data.instrumentalUrl, instrumentalPath: data.instrumentalPath }
+        }
+        if (data.status === 'failed') { console.warn('[hq-split] failed:', data.error); return null }
+      }
+      console.warn('[hq-split] gave up after', Math.round((Date.now() - t0) / 1000), 's')
+      return null
+    } catch (err) {
+      console.warn('[hq-split] error:', err)
+      return null
+    }
+  }
   const [uploadMode, setUploadMode] = useState<UploadMode>('full')
   const [items, setItems] = useState<DetectedItem[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -311,6 +351,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
     setCurrentFile(file)
     setErrorMsg('')
+    setHqWaiting(false)
     setPhase('uploading')
 
     try {
@@ -321,7 +362,11 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
       setPhase('splitting')
 
+      // Studio-quality split runs alongside Demucs; null = not available.
+      const hq = runHqSplit(uploaded.path)
+
       // Step 3 — start Demucs (returns immediately with a prediction ID)
+      const demucs = (async () => {
       const startRes = await fetch('/api/stem-split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -370,28 +415,38 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
         // starting / processing — keep polling
       }
       if (!stems) throw new Error('Stem split timed out — please try again')
+      return { stems, vocalsPath, bassPath, drumsPath, otherPath }
+      })()
+
+      // Wait for both. Demucs alone failing is fine when the studio split worked.
+      const [d, h] = await Promise.allSettled([demucs, hq.then((r) => { setHqWaiting(false); return r })])
+      const dm = d.status === 'fulfilled' ? d.value : null
+      const hs = h.status === 'fulfilled' ? h.value : null
+      if (!dm && !hs) throw (d.status === 'rejected' ? d.reason : new Error('Stem split failed'))
 
       const stemResult: StemResult = {
         storagePath:     uploaded.path,
-        vocalsUrl:       stems.vocals,
-        vocalsPath,
+        vocalsUrl:       hs ? hs.vocalsUrl : dm!.stems.vocals,
+        vocalsPath:      hs ? hs.vocalsPath : dm!.vocalsPath,
         leadVocalsUrl:   '',
         backingVocalsUrl:'',
         maleVocalsUrl:   '',
         femaleVocalsUrl: '',
-        instrumentalUrl: '',
-        bassUrl:         stems.bass,
-        drumsUrl:        stems.drums,
-        otherUrl:        stems.other,
-        bassPath,
-        drumsPath,
-        otherPath,
+        instrumentalUrl: hs?.instrumentalUrl ?? '',
+        instrumentalPath: hs?.instrumentalPath,
+        hqSplit:         !!hs,
+        bassUrl:         dm?.stems.bass ?? '',
+        drumsUrl:        dm?.stems.drums ?? '',
+        otherUrl:        dm?.stems.other ?? '',
+        bassPath:        dm?.bassPath,
+        drumsPath:       dm?.drumsPath,
+        otherPath:       dm?.otherPath,
         fileName:        file.name,
       }
 
       onDone(stemResult)
       setPhase('done')
-      onToast('Stems separated — vocals and instrumental ready!')
+      onToast(hs ? 'Stems separated in studio quality — vocals and music ready!' : 'Stems separated — vocals and instrumental ready! (Studio-quality separation was unavailable, so the standard one is used.)')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'
       setErrorMsg(msg)
@@ -494,8 +549,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       const zip = new JSZip()
 
       const entries = [
-        { url: stemResult.vocalsUrl,       file: 'vocals.mp3' },
-        { url: stemResult.instrumentalUrl, file: 'instrumental.mp3' },
+        { url: stemResult.vocalsUrl,       file: stemResult.hqSplit ? 'vocals.flac' : 'vocals.mp3' },
+        { url: stemResult.instrumentalUrl, file: stemResult.hqSplit ? 'instrumental.flac' : 'instrumental.mp3' },
         { url: stemResult.bassUrl,         file: 'bass.mp3' },
         { url: stemResult.drumsUrl,        file: 'drums.mp3' },
         { url: stemResult.otherUrl,        file: 'other.mp3' },
@@ -782,8 +837,8 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
           <div className="vs-progress-zone">
             <div className="vs-prog-spinner vs-prog-spinner--purple" />
             <div className="vs-prog-file">{displayFile.name}</div>
-            <div className="vs-prog-label">Separating vocals… this takes 1–2 minutes</div>
-            <div className="vs-prog-sub">Powered by Studio Engine · running on GPU</div>
+            <div className="vs-prog-label">{hqWaiting ? 'Separating vocals and music in studio quality… this takes about 4–6 minutes' : 'Separating vocals… this takes 1–2 minutes'}</div>
+            <div className="vs-prog-sub">Powered by Studio Engine · running on GPU · you can keep this page open in the background</div>
           </div>
         )}
 
@@ -808,7 +863,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
             <div className="vs-stems">
               {/* Vocals — always present */}
               {displayResult.vocalsUrl && (
-                <StemCard url={displayResult.vocalsUrl} icon="🎤" name="Vocals" hint="Full isolated vocal stem" file="vocals.mp3" activeUrl={activeStemUrl} onSelect={selectStem} />
+                <StemCard url={displayResult.vocalsUrl} icon="🎤" name="Vocals" hint={displayResult.hqSplit ? 'Full isolated vocal stem · studio quality' : 'Full isolated vocal stem'} file={displayResult.hqSplit ? 'vocals.flac' : 'vocals.mp3'} activeUrl={activeStemUrl} onSelect={selectStem} />
               )}
 
               {/* Vocal sub-stems: gender-split (male/female) or karaoke (lead/backing) */}
@@ -862,7 +917,7 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
 
               {/* Remaining stems */}
               {([
-                { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: 'Full backing track',    file: 'instrumental.mp3' },
+                { url: displayResult.instrumentalUrl, icon: '🎼', name: 'Instrumental', hint: displayResult.hqSplit ? 'Full backing track · studio quality' : 'Full backing track', file: displayResult.hqSplit ? 'instrumental.flac' : 'instrumental.mp3' },
                 { url: displayResult.bassUrl,          icon: '🎸', name: 'Bass',         hint: 'Low-end bass line',    file: 'bass.mp3'         },
                 { url: displayResult.drumsUrl,         icon: '🥁', name: 'Drums',        hint: 'Percussion only',      file: 'drums.mp3'        },
                 { url: displayResult.otherUrl,         icon: '🎹', name: 'Other',        hint: 'Melody / instruments', file: 'other.mp3'        },

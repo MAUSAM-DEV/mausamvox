@@ -517,8 +517,12 @@ export function ResultStep({
     }
   }
 
-  const tonalUrls = [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
-  const musicUrlsAll = [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+  // Studio-quality split: ONE instrumental (drums included) is the music —
+  // the Demucs stems sit ~25 ms later and would smear it. A key change then
+  // moves the whole instrumental (the founder's pick, Q i).
+  const hqMusic = !!(stemResult?.hqSplit && stemResult.instrumentalUrl)
+  const tonalUrls = hqMusic ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+  const musicUrlsAll = hqMusic ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
   // The song's original backing vocals / chorus (lead/backing split). The swap
   // converts only the lead, so they're mixed back under it. Not for duets:
   // their stems come from the FULL vocal, so the backing is already inside.
@@ -557,7 +561,7 @@ export function ResultStep({
     } else {
       const tonal = await shiftBuffer(sum(await Promise.all(tonalUrls.map(decodeUrl))), { semitones: keyShift })
       parts.push(tonal)
-      if (stemResult?.drumsUrl) parts.push(await decodeUrl(stemResult.drumsUrl))
+      if (stemResult?.drumsUrl && !hqMusic) parts.push(await decodeUrl(stemResult.drumsUrl))
     }
     if (backingUrl && !opts.musicOnly) {
       const raw = await decodeUrl(backingUrl)
@@ -1048,7 +1052,7 @@ export function ResultStep({
               <span className="vs-polish-title">Voice</span>
               {updating && <span className="vs-updating"><span className="vs-polish-spin" /> {updating} <span className="vs-updating-sub">(still playing the previous sound)</span></span>}
               <span className="vs-polish-presets">
-                {keyShift !== 0 && <span className="vs-fx-chip" title="Set on the Configure step — the voice was converted in this key and the music (not drums) is shifted to match">Key {keyShift > 0 ? '+' : ''}{keyShift}</span>}
+                {keyShift !== 0 && <span className="vs-fx-chip" title={hqMusic ? 'Set on the Configure step — the voice was converted in this key and the music is shifted to match' : 'Set on the Configure step — the voice was converted in this key and the music (not drums) is shifted to match'}>Key {keyShift > 0 ? '+' : ''}{keyShift}</span>}
                 {autotuneLabel && <span className="vs-fx-chip" title="Set on the Configure step">Auto-tune · {autotuneLabel}</span>}
                 <button className="vs-polish-preset" onClick={() => { setLevel(DEFAULT_FX.level); setBlend(0); setCharacter(0); setHarmony('off') }} title="Back to the default voice settings">Reset</button>
               </span>
