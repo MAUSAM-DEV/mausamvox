@@ -6,6 +6,43 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-09 (night) — Q i is the default: Auto Key fix, studio voice + mastering, MVSEP music (`739755c`, `dcd9d22`, `5800859`) — ⚠️ founder live test pending
+
+From the live test (thin voice, Auto −4, "sounds ~60 kbps") and the founder's pick **Q i** (key −3, everything combined):
+
+- **Auto −4 / thin voice (`739755c`):**
+  - Cause: the lead "dropout" check rejected a good lead. The intro hum (15–19 s) was in the backing, which is correct, but the check called it a dropout.
+  - So the WHOLE vocal track was converted. The old pitch detector read it an octave low → octave +12, Auto Key −4 → the voice was sent **+8** (measured 7 semitones above the singer).
+  - Reproduced exactly with the app's own code. Fixes:
+    - a gap now counts only if the lead AND the backing are silent;
+    - Auto Key comes from the lead only, and gives the Original key if the octave isn't 0 or the key is beyond ±4;
+    - the octave match is skipped on the whole track;
+    - Preview/Full wait for the lead split.
+  - Also: MP3 download 192 → 320 kbps; slider bar removed, click/drag on the waveform seeks (before/after screenshots sent).
+- **Quality chain audit:** formats were full quality everywhere (Demucs MP3 320, karaoke/RVC WAV, browser 44.1k, save MP3 320) except the 192 kbps download. The "low bitrate" sound was content:
+  - the RVC voice is −9 dB above 6 kHz and −20 dB above 14 kHz vs the original singer;
+  - the Demucs rebuild matched the original's music-only parts to only 18.7 dB (MVSEP: 40.7 dB);
+  - our mixes were ~6 dB quieter (−13.7 vs −7.8 LUFS).
+  - "Preview" = the full song with the same engine settings; Save-as-full reuses it (no quality drop).
+- **Studio voice + mastering (`dcd9d22`):**
+  - `voice-polish.ts`: de-ess + 2:1 compression + air matched to the original lead's 10 kHz+ share. It matches the Q i prototype to −68 dB.
+  - `master.ts`: BS.1770 loudness (agrees with pyloudnorm ±0.1 dB) + 5 ms look-ahead limiter at −1 dBFS. The target is the upload's loudness, clamped to −16…−7 LUFS (fallback −9).
+  - Live = the same limiter as an AudioWorklet: worklet vs saved file −135 dBFS difference. The Original side is mastered too.
+  - Mix: music gets 6% of the voice's room, glue compression; Studio reverb 38, Level −2. Raw = no studio voice (still mastered).
+  - Note: the glue compressor (Web Audio) delays the swapped mix by 6 ms as a whole (harmless).
+- **MVSEP music (`5800859`):**
+  - `/api/hq-split` (BS-RoFormer 124 bands, 16-bit FLAC) runs next to Demucs. When it succeeds, vocals → lead/backing split → conversion and the music all come from MVSEP.
+  - The music is the single instrumental, and a key change shifts all of it. If MVSEP fails or takes > 12 min, the Demucs stems are used.
+  - Cost: 4 MVSEP credits for a 4:32 song (measured).
+- **Founder to do:**
+  1. Paste the new MVSEP token into `.env.local` (line `MVSEP_API_TOKEN=PASTE_NEW_MVSEP_TOKEN_HERE`). The old token is revoked; Vercel already has the new one.
+  2. Top up MVSEP credits: 20 left ≈ 4–5 songs.
+  3. Apply `supabase/migrations/20261009000000_audio_uploads_flac.sql`. Optional: until then FLAC is stored under the audio/mpeg label.
+- **Open checks:**
+  - MVSEP raw outputs peak up to +2.1 dBFS. 16-bit FLAC may clip ~700 peaks per song unless MVSEP lowers the level — check on the first real job (needs the token).
+  - The upload now waits for MVSEP (~4–6 min vs ~3).
+- **Part 2 research (clips, no app change):** borrow-the-sparkle, MVSEP Vocals Super Resolution, Apollo, 40 vs 48 kHz clone — in progress.
+
 ## ✅ 2026-10-09 (evening) — first-swap failure, save visibility, player line (`22691ae`); blend clips — founder to pick
 
 From the live test (Pehla Pyaar, Mausam (Singing), defaults); Vercel logs pulled within the hour + Replicate:
