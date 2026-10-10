@@ -17,7 +17,24 @@
 
 export const MASTER_CEILING_DB = -1
 export const MASTER_LOOKAHEAD_S = 0.005
-export const MASTER_RELEASE_S = 0.08
+// 30 ms (was 80 until 2026-10-10): with the slow release the limiter pulled
+// down everything around each peak, so the swap stalled ~1.6 dB quieter than
+// the original however hard it was pushed.
+export const MASTER_RELEASE_S = 0.03
+// Gentle soft clip of only the tallest peaks, BEFORE the limiter (2026-10-10):
+// linear up to CLIP_KNEE × the clip ceiling, then a smooth curve that never
+// passes the ceiling. On Pehla Pyaar it touched 0.84% of samples (≤ ~0.5 dB
+// each) and brought the swap to the original's loudness (−7.9 LUFS) with
+// 0.2 dB of average limiting. Same curve offline and in the live worklet.
+export const CLIP_CEILING_DB = -0.5
+export const CLIP_KNEE = 0.95
+const CLIP_C = 10 ** (CLIP_CEILING_DB / 20), CLIP_K = CLIP_KNEE * CLIP_C
+export function softClip(v: number): number {
+  const a = v < 0 ? -v : v
+  if (a <= CLIP_K) return v
+  const y = CLIP_K + (CLIP_C - CLIP_K) * Math.tanh((a - CLIP_K) / (CLIP_C - CLIP_K))
+  return v < 0 ? -y : y
+}
 // Target = the uploaded song's loudness, kept to a sensible range (and never
 // bought with heavy limiting — see MASTER_MAX_AVG_CUT_DB).
 export const MASTER_TARGET_MIN = -16
@@ -86,7 +103,7 @@ export function limit(channels: Float32Array[], sr: number, gain: number, out?: 
   // r = gain needed at each sample; m = smallest r over the next W samples;
   // s = m averaged over the last W samples (a ramp down that ends AT the peak).
   const r = new Float32Array(n)
-  for (let i = 0; i < n; i++) { let p = 0; for (const c of channels) p = Math.max(p, Math.abs(c[i] * gain)); r[i] = p > ceil ? ceil / p : 1 }
+  for (let i = 0; i < n; i++) { let p = 0; for (const c of channels) p = Math.max(p, Math.abs(softClip(c[i] * gain))); r[i] = p > ceil ? ceil / p : 1 }
   const m = new Float32Array(n), dq = new Int32Array(n + 1)
   let head = 0, tail = 0
   for (let j = 0; j < n + W; j++) {
@@ -103,8 +120,8 @@ export function limit(channels: Float32Array[], sr: number, gain: number, out?: 
     acc += m[i] - (i >= W ? m[i - W] : m[0])
     const s = acc / W
     g = s < g ? s : g + (s - g) * rel
-    const gg = gain * Math.min(g, s)
-    for (let c = 0; c < channels.length; c++) res[c][i] = channels[c][i] * gg
+    const gg = Math.min(g, s)
+    for (let c = 0; c < channels.length; c++) res[c][i] = softClip(channels[c][i] * gain) * gg
   }
   return res
 }
@@ -174,7 +191,7 @@ export function masterGain(premaster: Float32Array[], sr: number, targetLufs: nu
   // limit()'s gain envelope at linear gain g → env; returns the loudness.
   const pass = (g: number): number => {
     hops.fill(0)
-    const mAt = (j: number) => (peakW[j] * g > ceil ? ceil / (peakW[j] * g) : 1)
+    const mAt = (j: number) => { const pk = softClip(peakW[j] * g); return pk > ceil ? ceil / pk : 1 }
     const m0 = mAt(0)
     let acc = W * m0, ge = 1
     for (let j = 0; j < m; j++) {
@@ -233,6 +250,7 @@ class MvxLimiter extends AudioWorkletProcessor {
     super()
     const o = options.processorOptions || {}
     this.ceil = Math.pow(10, o.ceilingDb / 20)
+    this.clipC = Math.pow(10, (o.clipCeilingDb ?? 0) / 20); this.clipK = (o.clipKnee ?? 1) * this.clipC
     this.W = Math.max(1, Math.round(o.lookaheadS * sampleRate))
     this.rel = 1 - Math.exp(-1 / (o.releaseS * sampleRate))
     const W = this.W
@@ -248,7 +266,13 @@ class MvxLimiter extends AudioWorkletProcessor {
     for (let k = 0; k < frames; k++) {
       const n = this.n++
       let p = 0
-      for (let c = 0; c < 2; c++) { const ch = inp && inp[Math.min(c, inp.length - 1)]; const v = ch ? ch[k] : 0; this.delay[c][n % (W + 1)] = v; const a = Math.abs(v); if (a > p) p = a }
+      for (let c = 0; c < 2; c++) {
+        const ch = inp && inp[Math.min(c, inp.length - 1)]; let v = ch ? ch[k] : 0
+        // soft clip of the tallest peaks (softClip() in master.ts)
+        const av = v < 0 ? -v : v
+        if (av > this.clipK) { const y = this.clipK + (this.clipC - this.clipK) * Math.tanh((av - this.clipK) / (this.clipC - this.clipK)); v = v < 0 ? -y : y }
+        this.delay[c][n % (W + 1)] = v; const a = Math.abs(v); if (a > p) p = a
+      }
       const r = p > this.ceil ? this.ceil / p : 1
       // sliding minimum of r over [n−W, n] (monotone deque in a ring)
       while (this.size > 0 && this.dqV[(this.head + this.size - 1) % cap] >= r) this.size--

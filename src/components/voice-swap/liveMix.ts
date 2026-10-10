@@ -17,7 +17,7 @@
 //   → [clean | Lo-fi | Radio] → ×0.62 = PRE-MASTER
 //   → master gain → limiter (−1 dBFS) → out   (g = 1/√N for N main vocals)
 
-import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S } from '@/lib/audio-dsp/master'
+import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S, CLIP_CEILING_DB, CLIP_KNEE } from '@/lib/audio-dsp/master'
 import { TONE_EQ_CENTERS, TONE_EQ_Q } from '@/lib/audio-dsp/tone-match'
 
 export type PolishStyle = 'none' | 'hall' | 'lofi' | 'radio'
@@ -218,7 +218,7 @@ export class MixGraph {
       if (master_.worklet) {
         limiter = new AudioWorkletNode(ctx, 'mvx-limiter', {
           numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
-          processorOptions: { ceilingDb: MASTER_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S },
+          processorOptions: { ceilingDb: MASTER_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S, clipCeilingDb: CLIP_CEILING_DB, clipKnee: CLIP_KNEE },
         })
       } else {
         const c = ctx.createDynamicsCompressor()
