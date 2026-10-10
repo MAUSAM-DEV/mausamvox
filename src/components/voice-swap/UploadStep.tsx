@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
 import { uploadAudioToStorage } from '@/lib/audio-upload'
+import { clientTiming } from '@/lib/client-timing'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
@@ -362,7 +363,9 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
       // Steps 1–2 — presign + direct PUT to Supabase Storage (no file bytes
       // through Vercel). Oversize WAVs are compressed to 320 kbps MP3 first;
       // everything under the bucket limit uploads untouched.
+      const t0 = performance.now()
       const uploaded = await uploadAudioToStorage(file, { onCompressProgress: setCompressPct })
+      const uploadMs = performance.now() - t0
 
       setPhase('splitting')
 
@@ -446,6 +449,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
         }
         onDone(stemResult)
         setPhase('done')
+        clientTiming('upload-ready', { upload: uploadMs, total: performance.now() - t0, studio: 1 })
         onToast('Vocals and music separated in studio quality — ready!')
         // Stem cards: add Demucs's Bass/Drums/Other when they land (not used by the swap).
         demucs.then((dm) => onStemsAdded?.(uploaded.path, {
@@ -477,6 +481,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
       }
       onDone(stemResult)
       setPhase('done')
+      clientTiming('upload-ready', { upload: uploadMs, total: performance.now() - t0, studio: 0 })
       onToast('Stems separated — vocals and instrumental ready! (Studio-quality separation was unavailable, so the standard one is used.)')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'

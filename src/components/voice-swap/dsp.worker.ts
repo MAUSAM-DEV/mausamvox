@@ -38,9 +38,11 @@ ctx.onmessage = async (e) => {
     } else if (req.op === 'lufs') {
       ctx.postMessage({ id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) })
     } else if (req.op === 'master') {
+      const t0 = performance.now()
       const gain = req.gain ?? masterGain(req.channels, req.sampleRate, req.targetLufs)
+      const t1 = performance.now()
       const channels = limit(req.channels, req.sampleRate, gain)
-      ctx.postMessage({ id: req.id, ok: true, value: gain, channels }, channels.map((c) => c.buffer))
+      ctx.postMessage({ id: req.id, ok: true, value: gain, channels, ms: { search: t1 - t0, limit: performance.now() - t1 } }, channels.map((c) => c.buffer))
     } else {
       const { stem, mode } = await renderHarmony(req.mono, req.sampleRate, req.voices, req.key, req.formantSemitones)
       ctx.postMessage({ id: req.id, ok: true, channels: [stem], mode }, [stem.buffer])

@@ -16,6 +16,7 @@ import { VToast } from './VToast'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
 import { detectMedianF0, autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
 import { dspPitchStats } from './dspClient'
+import { clientTiming } from '@/lib/client-timing'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -666,7 +667,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // ResultStep re-save (UPDATE) the same row when the user adjusts polish
     // after this first save (handlePolishResave, below). The context is reset
     // on the next swap (handleProcess) / new swap.
+    const t0 = performance.now()
     persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
+      .then((ok) => clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 }))
       .catch(() => { /* ignore — swap is still complete */ })
   }
 
@@ -1310,7 +1313,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // conversion phase (F0 detection + the voice-convert round-trip) up to the
     // converted vocal being ready. Split stages (Demucs/karaoke/MVSEP) are
     // logged server-side in Vercel; mix + upload are separate client [timing]
-    // lines. Grep devtools for [timing]. Only meaningful for a full swap.
+    // lines (also printed in Vercel via /api/timing). Only meaningful for a full swap.
     const convertStart = performance.now()
     // Clear any prior deferred-persist arming up front so a preview never uploads
     // a mix or persists; full swaps re-arm it on success below.
@@ -1445,7 +1448,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
-        console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full-duet`)
+        clientTiming('convert-full-duet', { total: performance.now() - convertStart })
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
@@ -1570,7 +1573,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setPreviewSaveCost(null)
         lastSavedKeyRef.current = takeKey(takeKeyShift)
       }
-      if (type === 'full') console.log(`[timing] stage=total ms=${Math.round(performance.now() - convertStart)} phase=convert type=full`)
+      if (type === 'full') clientTiming('convert-full', { total: performance.now() - convertStart })
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
 
       // Deduct credits and record swap (non-blocking).

@@ -15,10 +15,12 @@ type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTarg
 type AirShareReq = { op: 'airShare'; mono: Float32Array; sampleRate: number }
 type LufsReq = { op: 'lufs'; channels: Float32Array[]; sampleRate: number }
 type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number }
+// Mastering step times inside the worker: the gain search, then the limiter.
+export type MasterMs = { search: number; limit: number }
 type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq
 export type DspRequest = AnyReq & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number; ms?: MasterMs }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -85,8 +87,11 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
   }
   if (req.op === 'master') {
     const { masterGain, limit } = await import('@/lib/audio-dsp/master')
+    const t0 = performance.now()
     const gain = req.gain ?? masterGain(req.channels, req.sampleRate, req.targetLufs)
-    return { id: req.id, ok: true, value: gain, channels: limit(req.channels, req.sampleRate, gain) }
+    const t1 = performance.now()
+    const channels = limit(req.channels, req.sampleRate, gain)
+    return { id: req.id, ok: true, value: gain, channels, ms: { search: t1 - t0, limit: performance.now() - t1 } }
   }
   const { renderHarmony } = await import('@/lib/audio-dsp/harmony')
   const { stem, mode } = await renderHarmony(req.mono, req.sampleRate, req.voices, req.key, req.formantSemitones)
@@ -158,9 +163,9 @@ export async function dspLufs(channels: Float32Array[], sampleRate: number): Pro
 }
 
 // Mastering (master.ts): finds the gain for `targetLufs` (or uses `gain`) and
-// returns it with the limited audio.
-export async function dspMaster(channels: Float32Array[], sampleRate: number, targetLufs: number, gain?: number): Promise<{ gain: number; channels: Float32Array[] }> {
+// returns it with the limited audio (+ how long the search and limiter took).
+export async function dspMaster(channels: Float32Array[], sampleRate: number, targetLufs: number, gain?: number): Promise<{ gain: number; channels: Float32Array[]; ms: MasterMs }> {
   const r = await call({ op: 'master', channels, sampleRate, targetLufs, gain }, channels.map((c) => c.buffer))
   if (!r.ok || typeof r.value !== 'number' || !r.channels?.length) throw new Error('Mastering failed')
-  return { gain: r.value, channels: r.channels }
+  return { gain: r.value, channels: r.channels, ms: r.ms ?? { search: NaN, limit: NaN } }
 }

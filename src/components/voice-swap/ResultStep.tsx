@@ -14,6 +14,7 @@ import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
 import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspAirShare, dspLufs, dspMaster } from './dspClient'
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
+import { clientTiming } from '@/lib/client-timing'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -72,12 +73,21 @@ const PLAY_MODES: { id: PlayMode; label: string }[] = [
   { id: 'vocals', label: 'Vocals only' },
 ]
 
-// Encode a WAV mix to MP3 (320 kbps) and upload it to audio-uploads via the
+// Encode a mix to WAV → MP3 (320 kbps) and upload it to audio-uploads via the
 // presign → PUT flow (bypasses Vercel's body limit — a full-song mix is
-// large). Returns the storage path, or null on any failure.
-async function uploadMixMp3(wav: Blob, filename = 'swap-full-mix.mp3'): Promise<string | null> {
+// large). Returns the storage path, or null on any failure. Adds each step's
+// time (ms) to `t` for the [timing] save line.
+type SaveMs = { wav: number; mp3: number; upload: number }
+async function uploadMixMp3(buf: AudioBuffer, t: SaveMs, filename = 'swap-full-mix.mp3'): Promise<string | null> {
   try {
-    const mp3 = encodeMp3FromWav(await wav.arrayBuffer(), SAVED_MP3_KBPS)
+    let t0 = performance.now()
+    const wav = encodeWav(buf)
+    const wavBytes = await wav.arrayBuffer()
+    t.wav += performance.now() - t0
+    t0 = performance.now()
+    const mp3 = encodeMp3FromWav(wavBytes, SAVED_MP3_KBPS)
+    t.mp3 += performance.now() - t0
+    t0 = performance.now()
     const presignRes = await fetch('/api/upload-stem/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,6 +101,7 @@ async function uploadMixMp3(wav: Blob, filename = 'swap-full-mix.mp3'): Promise<
       headers: { 'Content-Type': 'audio/mpeg', 'x-upsert': 'false' },
     })
     if (!putRes.ok) return null
+    t.upload += performance.now() - t0
     return presign.path as string
   } catch {
     return null
@@ -671,18 +682,26 @@ export function ResultStep({
     if (!r.ids.has(b)) r.ids.set(b, r.next++)
     return r.ids.get(b)!
   }
-  const masterCacheRef = useRef<{ key: string; result: Promise<{ gain: number; buf: AudioBuffer }> } | null>(null)
-  function masteredMix(params: MixParams): Promise<{ gain: number; buf: AudioBuffer }> {
+  // `ms` = how long it took (render, wait for the loudness target, gain search,
+  // limiter); `cached` = an earlier result for the same settings was reused.
+  type Mastered = { gain: number; buf: AudioBuffer; ms: { render: number; target: number; search: number; limit: number }; cached?: boolean }
+  const masterCacheRef = useRef<{ key: string; result: Promise<Mastered> } | null>(null)
+  function masteredMix(params: MixParams): Promise<Mastered> {
     const full = { ...params, vocalsOnly: false }
     const inp = inputsRef.current!
     // Blend's original singer only changes the mix when Blend is up.
     const audioKey = [...inp.voices, ...inp.harmony, inp.partner, inp.bed, ...(full.blend > 0 ? inp.originals : [])].map(bufId).join(',')
     const key = `${JSON.stringify(full)}|${audioKey}`
-    if (masterCacheRef.current?.key === key) return masterCacheRef.current.result
+    if (masterCacheRef.current?.key === key) return masterCacheRef.current.result.then((r) => ({ ...r, cached: true }))
     const result = (async () => {
+      let t0 = performance.now()
       const pre = await renderMix(inp, full)
-      const { gain, channels } = await dspMaster(channelsOf(pre), pre.sampleRate, await masterTarget())
-      return { gain, buf: toBuffer(channels, pre.sampleRate) }
+      const render = performance.now() - t0
+      t0 = performance.now()
+      const target = await masterTarget()
+      const targetMs = performance.now() - t0
+      const { gain, channels, ms } = await dspMaster(channelsOf(pre), pre.sampleRate, target)
+      return { gain, buf: toBuffer(channels, pre.sampleRate), ms: { render, target: targetMs, search: ms.search, limit: ms.limit } }
     })()
     masterCacheRef.current = { key, result }
     result.catch(() => { if (masterCacheRef.current?.result === result) masterCacheRef.current = null })
@@ -717,12 +736,14 @@ export function ResultStep({
     const mixStart = performance.now()
     ;(async () => {
       // 1. The voice first, so "Vocals only" can play while the music is prepared.
+      let t0 = performance.now()
       const [layers, partner] = await Promise.all([
         voiceLayers(voiceFx),
         duetUntouchedVocalsUrl ? inKey(duetUntouchedVocalsUrl).catch(fxFallback('the key change', null)) : Promise.resolve(null),
       ])
       if (cancelled) return
       setInputs({ ...layers, partner, originals: [], bed: null })
+      const voiceMs = performance.now() - t0
       if (musicUrlsAll.length === 0) {
         // No music stems — Full song is impossible; save the vocal (null path).
         setFullMixState('no-stems'); setMode('vocals')
@@ -731,24 +752,40 @@ export function ResultStep({
         return
       }
       // 2. Music + backing in the take's key, and the Original side.
+      t0 = performance.now()
       const bed = await buildBed()
       const leadUrl = stemResult.leadVocalsUrl || stemResult.vocalsUrl
       const lead = await decoded(leadUrl)
       const originalBed = keyShift ? await buildBed({ originalKey: true }) : bed
+      const musicMs = performance.now() - t0
+      t0 = performance.now()
       const originalPre = await renderMix({ voices: [lead], harmony: [], partner: null, originals: [], bed: originalBed }, NEUTRAL_PARAMS)
+      const originalRenderMs = performance.now() - t0
       if (cancelled) return
       setInputs({ ...inputsRef.current!, bed })
       // Mastering: the swapped side's gain, and the Original side mastered to
       // the same loudness so the A/B compare is fair.
-      const [{ gain }, originalFull] = await Promise.all([
+      t0 = performance.now()
+      let originalMs = { search: NaN, limit: NaN }
+      const [{ gain, ms }, originalFull] = await Promise.all([
         masteredMix(liveParamsRef.current),
-        masterTarget().then((t) => dspMaster(channelsOf(originalPre), originalPre.sampleRate, t)).then((m) => toBuffer(m.channels, originalPre.sampleRate)),
+        masterTarget().then((t) => dspMaster(channelsOf(originalPre), originalPre.sampleRate, t)).then((m) => { originalMs = m.ms; return toBuffer(m.channels, originalPre.sampleRate) }),
       ])
+      const masterMs = performance.now() - t0
       if (cancelled) return
       player?.setMasterGain(gain)
       player?.setOriginal(originalFull, lead)
       setFullMixState('ready')
-      console.log(`[timing] stage=mix ms=${Math.round(performance.now() - mixStart)}`)
+      // Where the Result screen's wait goes (ms). voice = converted vocal + its
+      // polish; music = backing in the take's key; render = the swapped mix;
+      // target = fetching + measuring the uploaded song's loudness; search /
+      // limit = mastering (swapped side; *Original = the A/B side). master =
+      // wall time of both masters together (they share one worker).
+      clientTiming('result-mix', {
+        voice: voiceMs, music: musicMs, renderOriginal: originalRenderMs, render: ms.render, target: ms.target,
+        search: ms.search, limit: ms.limit, searchOriginal: originalMs.search, limitOriginal: originalMs.limit,
+        master: masterMs, total: performance.now() - mixStart,
+      })
       // 3. Blend's original singer(s), ready in the background so Blend is instant.
       const originals = await Promise.all((convertedSourceUrls ?? []).filter(Boolean).map((u) => inKey(u, () => decoded(u))))
         .catch(fxFallback('voice blend', [] as AudioBuffer[]))
@@ -802,10 +839,21 @@ export function ResultStep({
     const firstSave = lastSavedSigRef.current === null
     savingRef.current = true
     let saved = false
-    const uploadStart = performance.now()
+    const saveStart = performance.now()
+    // Where the save's time goes (ms): master = getting the mastered mix (≈0
+    // when the player already made it for these settings), wav/mp3 = encoding,
+    // upload = presign + PUT; inst* = the music-only backing (first save only);
+    // row = updating the saved track (re-saves; the first save's row is logged
+    // by the page as result-save-row).
+    const mixMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }, instMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }
+    const extra: Record<string, number> = {}
     try {
-      const { buf: mix, gain } = await masteredMix(settledParams())
-      const mixPath = await uploadMixMp3(encodeWav(mix))
+      let t0 = performance.now()
+      const { buf: mix, gain, cached, ms } = await masteredMix(settledParams())
+      extra.master = performance.now() - t0
+      extra.cached = cached ? 1 : 0
+      if (!cached) { extra.render = ms.render; extra.search = ms.search; extra.limit = ms.limit }
+      const mixPath = await uploadMixMp3(mix, mixMs)
       if (!mixPath) {
         saved = false
       } else if (firstSave) {
@@ -813,19 +861,30 @@ export function ResultStep({
         // built + uploaded ONCE on the first save. Strictly best-effort.
         let instrumentalPath: string | null | undefined
         try {
+          t0 = performance.now()
           const music = await buildBed({ musicOnly: true })
-          if (music) instrumentalPath = await uploadMixMp3(encodeWav(await masterWithGain(await renderMix({ voices: [], harmony: [], partner: null, originals: [], bed: music }, NEUTRAL_PARAMS), gain)), 'swap-instrumental.mp3')
+          if (music) {
+            const inst = await masterWithGain(await renderMix({ voices: [], harmony: [], partner: null, originals: [], bed: music }, NEUTRAL_PARAMS), gain)
+            extra.instMix = performance.now() - t0
+            instrumentalPath = await uploadMixMp3(inst, instMs, 'swap-instrumental.mp3')
+          }
         } catch { /* row just won't offer the music-only backing */ }
-        console.log(`[timing] stage=upload ms=${Math.round(performance.now() - uploadStart)}`)
         onFullMixReady?.(mixPath, instrumentalPath)
         saved = true
       } else {
+        t0 = performance.now()
         const ok = await onPolishResave?.(mixPath)
+        extra.row = performance.now() - t0
         saved = ok !== false
       }
     } catch {
       saved = false
     }
+    clientTiming(firstSave ? 'result-save' : 'result-resave', {
+      ...extra, wav: mixMs.wav, mp3: mixMs.mp3, upload: mixMs.upload,
+      ...(firstSave ? { instWav: instMs.wav, instMp3: instMs.mp3, instUpload: instMs.upload } : {}),
+      ok: saved ? 1 : 0, total: performance.now() - saveStart,
+    })
     savingRef.current = false
     if (saved) {
       saveRetriesRef.current = 0
