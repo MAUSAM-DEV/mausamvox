@@ -125,7 +125,8 @@ async function uploadMp3(mp3: Blob, t: SaveMs, filename = 'swap-full-mix.mp3'): 
 // "Raw" zeros all five. Tune the natural-unit constants below; they convert to
 // the knobs' internal units. Studio = "Blend f" / Q i (founder, 2026-10-09):
 // with the studio voice (voice-polish.ts), the music sharing 6% of the voice's
-// room, glue compression, Level −2 dB and mastering to the original's loudness.
+// room, gentle glue compression, Level 0 dB (−2 until the 2026-10-10 sound
+// study) and mastering to the original's loudness.
 const STUDIO_WARMTH_DB = 4      // +4 dB low-shelf warmth
 const STUDIO_REVERB_WET = 0.19 // 19% wet reverb (knob 38)
 const STUDIO_ECHO_WET = 0      // no echo by default
@@ -181,7 +182,8 @@ const CHARACTER_MAX = 4     // Voice character: formants −4…+4 semitones
 type HarmonySetting = 'off' | '2' | '4'
 interface VoiceFx { level: number; blend: number; character: number; harmony: HarmonySetting; style: PolishStyle }
 type VoiceLayerFx = { character: number; harmony: HarmonySetting; studio: boolean }
-const DEFAULT_FX: VoiceFx = { level: -2, blend: 0, character: 0, harmony: 'off', style: 'none' }
+// Voice level 0 dB (was −2 until the 2026-10-10 sound study: the voice sat low, the mix tilted to bass).
+const DEFAULT_FX: VoiceFx = { level: 0, blend: 0, character: 0, harmony: 'off', style: 'none' }
 // The Result screen's starting mix (Studio polish + default voice level) —
 // Compare keys renders its previews with exactly this (keyPreviews.ts).
 export const DEFAULT_MIX_PARAMS: MixParams = {

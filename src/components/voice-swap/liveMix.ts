@@ -57,6 +57,15 @@ export const REVERB_MAX_WET = 0.5
 const REVERB_IR_SECONDS = 1.8
 const REVERB_IR_DECAY = 2.5
 export const ECHO_MAX_WET = 0.5
+// Low cut on every reverb's return (2026-10-10 sound study): the rooms were
+// full-range noise, so they piled reverb onto the voice's low end and the
+// music's bass and kick — part of the muddiness.
+const REVERB_LOW_CUT_HZ = 250
+// Glue (music only), made much gentler (2026-10-10): the old −24 dB / 1.8:1
+// halved the song's loudness range (7.7 → ~4 LU) and tilted it toward bass.
+const GLUE_THRESHOLD_DB = -18
+const GLUE_RATIO = 1.3
+const GLUE_KNEE_DB = 12
 const ECHO_DELAY_S = 0.3
 const ECHO_FEEDBACK = 0.35
 const ECHO_DAMP_HZ = 3500
@@ -152,8 +161,10 @@ export class MixGraph {
     const hall = ctx.createConvolver(); hall.buffer = impulse(ctx, HALL_IR_SECONDS, HALL_IR_DECAY, 2)
     const pre = ctx.createDelay(1); pre.delayTime.value = HALL_PREDELAY_S
     this.trebleF.connect(this.revDry); this.revDry.connect(echoIn)
-    this.trebleF.connect(room); room.connect(this.roomWet); this.roomWet.connect(echoIn)
-    this.trebleF.connect(pre); pre.connect(hall); hall.connect(this.hallWet); this.hallWet.connect(echoIn)
+    const lowCut = () => { const f = filter('highpass', REVERB_LOW_CUT_HZ); f.Q.value = BUTTERWORTH_Q_DB; return f }
+    const roomCut = lowCut(), hallCut = lowCut()
+    this.trebleF.connect(room); room.connect(roomCut); roomCut.connect(this.roomWet); this.roomWet.connect(echoIn)
+    this.trebleF.connect(pre); pre.connect(hall); hall.connect(hallCut); hallCut.connect(this.hallWet); this.hallWet.connect(echoIn)
 
     // Echo: feedback delay, each repeat darker (tape-echo style).
     const styleIn = gain()
@@ -169,7 +180,7 @@ export class MixGraph {
     // lead +0.149 → +0.085). Same settings, fed at the level it was tuned on.
     const bed = gain()
     const glue = ctx.createDynamicsCompressor()
-    glue.threshold.value = -24; glue.knee.value = 10; glue.ratio.value = 1.8; glue.attack.value = 0.03; glue.release.value = 0.25
+    glue.threshold.value = GLUE_THRESHOLD_DB; glue.knee.value = GLUE_KNEE_DB; glue.ratio.value = GLUE_RATIO; glue.attack.value = 0.03; glue.release.value = 0.25
     const glueInLevel = gain(PRE_MASTER_GAIN), glueOutLevel = gain(1 / PRE_MASTER_GAIN)
     this.glueOn = gain(0); this.glueOff = gain(1)
     this.bedIn.connect(glueInLevel); glueInLevel.connect(glue); glue.connect(glueOutLevel); glueOutLevel.connect(this.glueOn); this.glueOn.connect(bed)
@@ -178,7 +189,8 @@ export class MixGraph {
     // Shared room: the music through the voice's Studio room (its own copy).
     const bedRoom = ctx.createConvolver(); bedRoom.buffer = impulse(ctx, REVERB_IR_SECONDS, REVERB_IR_DECAY, 1)
     this.bedRoomWet = gain(0)
-    bed.connect(bedRoom); bedRoom.connect(this.bedRoomWet); this.bedRoomWet.connect(styleIn)
+    const bedRoomCut = lowCut()
+    bed.connect(bedRoom); bedRoom.connect(bedRoomCut); bedRoomCut.connect(this.bedRoomWet); this.bedRoomWet.connect(styleIn)
 
     // Pre-master, then — live only — the master
     // gain and the look-ahead limiter.
