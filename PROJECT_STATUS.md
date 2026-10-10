@@ -6,6 +6,15 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-10 (late night, 5) — Auto Key 0, loudness, blend-in, high-note assist (`0c82002`, `f6ea805`, `0bc2f84`, `a6f0774`) — ⚠️ founder live test pending
+
+- Founder preferred "Key test 0".
+- **`0c82002` Auto Key:** voice's comfortable band = its median ± 4 st; song inside → key 0; outside → move only to the band's edge (Pehla Pyaar −3 → 0).
+- **`f6ea805` Loudness:** soft clip of the tallest peaks (knee 0.95 × −0.5 dBFS, tanh) before the limiter + release 80 → 30 ms, offline AND live worklet (max diff −138.5 dBFS). Pehla Pyaar −9.5 → −8.0 LUFS (original −7.9); clipper touches ~0.75% of samples; >12 kHz change ±0.01 dB.
+- **`0bc2f84` Blend in like the original:** before the first mix, "Match song" (reverb/warmth/treble from the original lead vs the polished voice, first 90 s; treble boost capped +2 dB) is the default, level matched to the original lead vs music (−2…+4 dB), and a sibilance target (new `sibilance()`; second de-ess pass by bisection). Pehla Pyaar: sibilance −12.9 → −14.6 (original −15.0), warmth 4.6 dB, treble +2, reverb 13%, level +0.5 dB. ~+4 s processing.
+- **`a6f0774` High-note assist:** above the voice's comfortable top (90th-percentile note of its sample; "Mausam (Singing)" G#4), 20% of the original lead (take's key) is added UNDER the voice (fade over 2 st, 80/250 ms), own graph input; voice never lowered. Result: "High-note assist On | Off" (default On); strength `HIGH_NOTE_ASSIST` in liveMix.ts. Blend unchanged (trades voice for original across the whole song, 0–50%). Pehla Pyaar key 0: on 6.2% of the sung time.
+- **"Smooth test"** (Saved Tracks, song name exactly "Smooth test"; older 2026-10-09 "Smooth test · …" clips also exist): key 0, every fix, chorus 3:42–4:12 at −11 LUFS. Full song: every band within ±1.7 dB of the original, −8.0 LUFS, loudness range 6.8 LU (original 7.7).
+
 ## 🔍 2026-10-10 (late night, 4) — format/tempo check, loudness plan, key test (no app change) — loudness fix AWAITING APPROVAL
 
 - **Founder's 6:24 swap (16:32 IST) was a Preview at −3 and was NOT saved** (no Save press) — kept in "Recent — not saved" until ~16:38 IST next day. Result screen: music prewarmed (0 s), tone match 1.8 s, total 26.3 s.
