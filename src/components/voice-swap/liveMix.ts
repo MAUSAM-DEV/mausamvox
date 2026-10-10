@@ -82,6 +82,8 @@ export const BLEND_MAX = 50
 // The separated-then-converted vocal sits low against the music; lift it.
 const VOCAL_MAKEUP = 1.3
 const MUSIC_GAIN = 0.8
+// How much louder the graph makes the voice than the music (dB), for level matching.
+export const VOICE_OVER_MUSIC_DB = 20 * Math.log10(VOCAL_MAKEUP / MUSIC_GAIN)
 const BUTTERWORTH_Q_DB = -3.01 // Web Audio low/high-pass Q is in dB; −3.01 dB = Q 0.707
 // Level before mastering: the ×0.7 headroom × 0.89 trim of the old final
 // stage. The music's glue sees the music at that same level (as when tuned).

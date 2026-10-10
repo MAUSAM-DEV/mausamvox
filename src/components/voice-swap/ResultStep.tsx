@@ -6,14 +6,14 @@ import { encodeWav, encodeMp3, SAVED_MP3_KBPS } from './audioClip'
 import { encodeMp3Background } from './mp3Client'
 import { fetchRetry } from '@/lib/poll'
 import {
-  LivePlayer, renderMix, NEUTRAL_PARAMS, BED_ROOM, type MixInputs, type MixParams, type PolishStyle,
+  LivePlayer, renderMix, NEUTRAL_PARAMS, BED_ROOM, VOICE_OVER_MUSIC_DB, type MixInputs, type MixParams, type PolishStyle,
   WARMTH_MAX_DB, BASS_MAX_DB, TREBLE_MAX_DB, REVERB_MAX_WET, ECHO_MAX_WET, LEVEL_MAX_DB, BLEND_MAX,
 } from './liveMix'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
 import { keyName, type KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import { harmonyMode } from '@/lib/audio-dsp/harmony-mode'
 import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
-import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspAirShare, dspLufs, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
+import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspVoiceTargets, dspLufs, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
 import { subShelfDb, SUB_SHELF_HZ, toneMatchDb, toneEqFilters } from '@/lib/audio-dsp/tone-match'
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
@@ -155,25 +155,8 @@ function matchedToPreset(m: MatchedPolish): PolishPreset {
     treble: m.trebleDb,
   }
 }
-const MATCH_SAMPLE_RATE = 22050   // enough for the 5–10 kHz band
-const MATCH_MAX_SECONDS = 90      // bounds decode memory
-
-// Decode a URL to mono at 22.05 kHz (first 90 s). null on any failure.
-async function decodeForMatch(url: string): Promise<Float32Array | null> {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const ctx = new OfflineAudioContext(1, 1, MATCH_SAMPLE_RATE)
-    const buf = await ctx.decodeAudioData(await res.arrayBuffer())
-    const n = Math.min(buf.length, MATCH_MAX_SECONDS * buf.sampleRate)
-    const out = new Float32Array(n)
-    for (let c = 0; c < buf.numberOfChannels; c++) {
-      const ch = buf.getChannelData(c)
-      for (let i = 0; i < n; i++) out[i] += ch[i] / buf.numberOfChannels
-    }
-    return out
-  } catch { return null }
-}
+const MATCH_MAX_SECONDS = 90      // first 90 s are enough for the match
+const BLEND_TREBLE_MAX_DB = 2     // automatic blend-in: brighten the voice at most +2 dB (smooth, not sharp)
 const RAW_PRESET = { warmth: 0, reverb: 0, echo: 0, bass: 0, treble: 0 }
 
 // ── Voice controls (Result screen) ───────────────────────────────────────────
@@ -619,19 +602,6 @@ export function ResultStep({
   // ── Song-matched polish: worked out in the background, applied on tap ──────
   const [matched, setMatched] = useState<{ preset: PolishPreset; info: MatchedPolish } | null>(null)
   const userSet = (setter: (v: number) => void) => (v: number) => { setPolishSource('custom'); setter(v) }
-  const originalVocalUrl = stemResult?.leadVocalsUrl || stemResult?.vocalsUrl || ''
-  useEffect(() => {
-    if (!convertedVocalsUrl || !originalVocalUrl) return
-    let cancelled = false
-    ;(async () => {
-      const original = await decodeForMatch(originalVocalUrl)
-      const converted = original ? await decodeForMatch(convertedVocalsUrl) : null
-      if (cancelled || !original || !converted) return
-      const info = matchPolish(original, converted, MATCH_SAMPLE_RATE)
-      setMatched({ preset: matchedToPreset(info), info })
-    })().catch(() => { /* no Match song chip */ })
-    return () => { cancelled = true }
-  }, [convertedVocalsUrl, originalVocalUrl])
 
   // ── Processed audio (key change, Character, Harmony, Blend's original) ──────
   // Made in the background worker (dspClient) and cached, so turning an
@@ -703,26 +673,28 @@ export function ResultStep({
   }
   const shiftedKey = (k: KeyEstimate | null) => (k ? { ...k, tonic: (((k.tonic + keyShift) % 12) + 12) % 12 } : null)
 
-  // Studio voice target: the ORIGINAL lead's share of air (voice-polish.ts),
-  // so each song's voice gets as bright as its own singer was.
-  const airTargetRef = useRef<Promise<number> | null>(null)
-  function airTarget(): Promise<number> {
+  // Studio voice targets from the ORIGINAL lead (voice-polish.ts): its share
+  // of air (each song's voice gets as bright as its own singer was) and how
+  // sharp its "s" sounds are (ours are de-essed down to that, never sharper).
+  const voiceTargetsRef = useRef<Promise<{ air: number; sib?: number }> | null>(null)
+  function voiceTargets(): Promise<{ air: number; sib?: number }> {
     const leadUrl = stemResult?.leadVocalsUrl || stemResult?.vocalsUrl
-    airTargetRef.current ??= (async () => {
-      if (!leadUrl) return DEFAULT_AIR_TARGET_DB
+    voiceTargetsRef.current ??= (async () => {
+      if (!leadUrl) return { air: DEFAULT_AIR_TARGET_DB }
       const lead = await decoded(leadUrl)
-      const v = await dspAirShare(monoOf(lead), lead.sampleRate)
-      console.log('[voice-fx] original lead air share', v.toFixed(1), 'dB')
-      return Number.isFinite(v) && v > -60 ? v : DEFAULT_AIR_TARGET_DB
-    })().catch(() => DEFAULT_AIR_TARGET_DB)
-    return airTargetRef.current
+      const { air, sib } = await dspVoiceTargets(monoOf(lead), lead.sampleRate)
+      console.log('[voice-fx] original lead air share', air.toFixed(1), 'dB, sibilance', sib.toFixed(1), 'dB')
+      return { air: Number.isFinite(air) && air > -60 ? air : DEFAULT_AIR_TARGET_DB, sib: Number.isFinite(sib) && sib > -80 ? sib : undefined }
+    })().catch(() => ({ air: DEFAULT_AIR_TARGET_DB }))
+    return voiceTargetsRef.current
   }
   // The converted voice with the studio voice applied (or as it came, for Raw).
   function baseVoice(url: string, studio: boolean): Promise<AudioBuffer> {
     if (!studio) return decoded(url)
     return cached(`pol:${url}`, `pol|${url}`, async () => {
       const v = await decoded(url)
-      return toBuffer([await dspPolishVoice(monoOf(v), v.sampleRate, await airTarget())], v.sampleRate)
+      const t = await voiceTargets()
+      return toBuffer([await dspPolishVoice(monoOf(v), v.sampleRate, t.air, t.sib)], v.sampleRate)
     }).catch(fxFallback('the studio voice', null)).then((b) => b ?? decoded(url))
   }
 
@@ -845,6 +817,35 @@ export function ResultStep({
       const musicMs = performance.now() - t0
       if (cancelled) return
       setInputs({ ...inputsRef.current!, bed })
+      // Blend in like the original singer (2026-10-10): before the first mix,
+      // match the voice's space (reverb), warmth and brightness to the original
+      // lead ("Match song", polish-match.ts) and its level against the music to
+      // how the original sat — never below −2 dB, so the voice stays in front.
+      // (Sharp "s" sounds are matched inside the studio voice.)
+      t0 = performance.now()
+      let blendIn: Partial<MixParams> = {}
+      try {
+        // Compared with the voice as it goes into the mix (studio voice on),
+        // first 90 s. Treble boost capped at +2 dB: smooth, never sharp.
+        const n = Math.min(lead.length, layers.voices[0]?.length ?? 0, MATCH_MAX_SECONDS * lead.sampleRate)
+        if (n > lead.sampleRate * 10 && layers.voices[0] && !cancelled) {
+          const raw = matchPolish(monoOf(lead).subarray(0, n), monoOf(layers.voices[0]).subarray(0, n), lead.sampleRate)
+          const info = { ...raw, trebleDb: Math.min(raw.trebleDb, BLEND_TREBLE_MAX_DB) }
+          const preset = matchedToPreset(info)
+          setMatched({ preset, info })
+          blendIn = { warmth: preset.warmth, reverb: preset.reverb, echo: preset.echo, bass: preset.bass, treble: preset.treble }
+        }
+        if (converted.length === 1 && !partner && layers.voices[0]) {
+          const [lLead, lVoice] = await Promise.all([dspLufs(channelsOf(lead), lead.sampleRate), dspLufs(channelsOf(layers.voices[0]), layers.voices[0].sampleRate)])
+          const lvl = lLead - lVoice - VOICE_OVER_MUSIC_DB
+          if (Number.isFinite(lvl)) blendIn.levelDb = Math.round(Math.max(-2, Math.min(4, lvl)) * 2) / 2
+        }
+      } catch (err) { console.warn('[voice-fx] blend-in match skipped:', err) }
+      if (cancelled) return
+      if (blendIn.warmth !== undefined) { applyPreset({ warmth: blendIn.warmth, reverb: blendIn.reverb!, echo: blendIn.echo!, bass: blendIn.bass!, treble: blendIn.treble! }); setPolishSource('matched') }
+      if (blendIn.levelDb !== undefined) setLevel(blendIn.levelDb)
+      const blendMs = performance.now() - t0
+      console.log('[voice-fx] blend-in match', JSON.stringify(blendIn))
       // Mastering: the swapped side's gain (the Original side is mastered to
       // the same loudness when it's built, so the A/B compare is fair).
       // Tone match (2026-10-10, the founder's pick "C"): render once without it,
@@ -853,7 +854,7 @@ export function ResultStep({
       t0 = performance.now()
       let gains: number[] | undefined, prebuilt: { pre: AudioBuffer; renderMs: number } | undefined, toneMs = NaN
       try {
-        const flat = { ...liveParamsRef.current, vocalsOnly: false, toneEq: undefined }
+        const flat = { ...liveParamsRef.current, ...blendIn, vocalsOnly: false, toneEq: undefined }
         const r0 = performance.now()
         const [pre, ref] = await Promise.all([renderMix(inputsRef.current!, flat), songRef()])
         const renderMs = performance.now() - r0
@@ -867,7 +868,7 @@ export function ResultStep({
       } catch (err) { console.warn('[master] tone match skipped:', err); gains = undefined; prebuilt = undefined }
       if (cancelled) return
       setToneEq(gains)
-      const { gain, ms } = await masteredMix({ ...liveParamsRef.current, toneEq: gains }, prebuilt)
+      const { gain, ms } = await masteredMix({ ...liveParamsRef.current, ...blendIn, toneEq: gains }, prebuilt)
       const masterMs = performance.now() - t0
       if (cancelled) return
       player?.setMasterGain(gain)
@@ -878,7 +879,7 @@ export function ResultStep({
       // the swapped mix; target = waiting for the uploaded song's loudness;
       // search / limit = mastering; master = render + target + search + limit.
       clientTiming('result-mix', {
-        voice: voiceMs, music: musicMs, render: ms.render, target: ms.target, tone: toneMs,
+        voice: voiceMs, music: musicMs, blend: blendMs, render: ms.render, target: ms.target, tone: toneMs,
         search: ms.search, limit: ms.limit, master: masterMs, total: performance.now() - mixStart,
       })
       // 3. Blend's original singer(s), ready in the background so Blend is instant.

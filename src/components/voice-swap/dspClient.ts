@@ -12,7 +12,7 @@ type KeyReq = { op: 'key'; mono: Float32Array; sampleRate: number }
 type DoublesReq = { op: 'doubles'; channels: Float32Array[]; sampleRate: number; lead: Float32Array }
 type PitchStatsReq = { op: 'pitchStats'; mono: Float32Array; sampleRate: number }
 type HarmonyReq = { op: 'harmony'; mono: Float32Array; sampleRate: number; voices: HarmonyVoices; key: KeyEstimate | null; formantSemitones: number }
-type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTargetDb: number }
+type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTargetDb: number; sibTargetDb?: number }
 type AirShareReq = { op: 'airShare'; mono: Float32Array; sampleRate: number }
 type LufsReq = { op: 'lufs'; channels: Float32Array[]; sampleRate: number }
 type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number }
@@ -79,11 +79,11 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
   }
   if (req.op === 'polish') {
     const { polishVoice } = await import('@/lib/audio-dsp/voice-polish')
-    return { id: req.id, ok: true, channels: [polishVoice(req.mono, req.sampleRate, req.airTargetDb)] }
+    return { id: req.id, ok: true, channels: [polishVoice(req.mono, req.sampleRate, req.airTargetDb, req.sibTargetDb)] }
   }
   if (req.op === 'airShare') {
-    const { airShare } = await import('@/lib/audio-dsp/voice-polish')
-    return { id: req.id, ok: true, value: airShare(req.mono, req.sampleRate) }
+    const { airShare, sibilance } = await import('@/lib/audio-dsp/voice-polish')
+    return { id: req.id, ok: true, value: airShare(req.mono, req.sampleRate), nums: [sibilance(req.mono, req.sampleRate)] }
   }
   if (req.op === 'lufs') {
     const { lufs } = await import('@/lib/audio-dsp/master')
@@ -155,8 +155,8 @@ export async function dspHarmony(
 
 // Studio voice (voice-polish.ts): de-ess + gentle compression + air tuned to
 // `airTargetDb` (the original lead's airShare).
-export async function dspPolishVoice(mono: Float32Array, sampleRate: number, airTargetDb: number): Promise<Float32Array> {
-  const r = await call({ op: 'polish', mono, sampleRate, airTargetDb }, [mono.buffer])
+export async function dspPolishVoice(mono: Float32Array, sampleRate: number, airTargetDb: number, sibTargetDb?: number): Promise<Float32Array> {
+  const r = await call({ op: 'polish', mono, sampleRate, airTargetDb, sibTargetDb }, [mono.buffer])
   if (!r.ok || !r.channels?.[0]) throw new Error('Voice polish failed')
   return r.channels[0]
 }
@@ -165,6 +165,12 @@ export async function dspAirShare(mono: Float32Array, sampleRate: number): Promi
   const r = await call({ op: 'airShare', mono, sampleRate }, [mono.buffer])
   if (!r.ok || typeof r.value !== 'number') throw new Error('Air analysis failed')
   return r.value
+}
+// The original lead's air share AND sibilance (the studio voice's two targets).
+export async function dspVoiceTargets(mono: Float32Array, sampleRate: number): Promise<{ air: number; sib: number }> {
+  const r = await call({ op: 'airShare', mono, sampleRate }, [mono.buffer])
+  if (!r.ok || typeof r.value !== 'number') throw new Error('Voice analysis failed')
+  return { air: r.value, sib: r.nums?.[0] ?? NaN }
 }
 
 export async function dspLufs(channels: Float32Array[], sampleRate: number): Promise<number> {

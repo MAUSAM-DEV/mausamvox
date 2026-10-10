@@ -8,7 +8,7 @@ import { detectKey } from '@/lib/audio-dsp/key-detect'
 import { renderHarmony } from '@/lib/audio-dsp/harmony'
 import { removeDoubles } from '@/lib/audio-dsp/doubles'
 import { pitchStats } from '@/lib/audio-dsp/pitch-track'
-import { polishVoice, airShare } from '@/lib/audio-dsp/voice-polish'
+import { polishVoice, airShare, sibilance } from '@/lib/audio-dsp/voice-polish'
 import { lufs, limit, masterGain } from '@/lib/audio-dsp/master'
 import { powerSpectrum, applyFilters, alignLag } from '@/lib/audio-dsp/tone-match'
 import type { DspRequest, DspResponse } from './dspClient'
@@ -32,10 +32,10 @@ ctx.onmessage = async (e) => {
     } else if (req.op === 'key') {
       ctx.postMessage({ id: req.id, ok: true, key: detectKey(req.mono, req.sampleRate) })
     } else if (req.op === 'polish') {
-      const out = polishVoice(req.mono, req.sampleRate, req.airTargetDb)
+      const out = polishVoice(req.mono, req.sampleRate, req.airTargetDb, req.sibTargetDb)
       ctx.postMessage({ id: req.id, ok: true, channels: [out] }, [out.buffer])
     } else if (req.op === 'airShare') {
-      ctx.postMessage({ id: req.id, ok: true, value: airShare(req.mono, req.sampleRate) })
+      ctx.postMessage({ id: req.id, ok: true, value: airShare(req.mono, req.sampleRate), nums: [sibilance(req.mono, req.sampleRate)] })
     } else if (req.op === 'lufs') {
       ctx.postMessage({ id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) })
     } else if (req.op === 'spectrum') {
