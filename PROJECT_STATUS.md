@@ -6,7 +6,20 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
-## 🧪 2026-10-10 — retrain test: 500 epochs on the full recording wins — founder to listen; live model NOT switched
+## ❌ 2026-10-10 — founder's verdict: M3 (500 epochs) REJECTED — keep M0; the identity score is NOT reliable
+
+- **Founder listened:** M3 "sounds totally different from me and can't pronounce words properly" — although it scored best.
+- **⚠️ The CAM++ identity score is not reliable for judging voices.** It flattered an over-trained model (it compares against the same recording the model was trained on, and it doesn't hear pronunciation). **The founder's listening is the deciding test from now on**; scores are background only.
+- **Decisions:**
+  - "Mausam (Singing)" stays on M0 (`voice_clones.model_path` = `…/12e16c4b-0615-4892-9751-ca4be76588ff.zip`, verified unchanged);
+  - the training default for new users is NOT changed (Studio 50 / Express 18 epochs);
+  - M1/M2/M3 are kept for possible listening (`voice-models/8371…/research-e150|e300|e500.zip`, plus local copies in `seedvc-local/work/retrain/`).
+- **Clean-up:**
+  - stopped the leftover background wait loops and the local clip receiver (test site on :3100 already stopped);
+  - cancelled 3 lead-split jobs stuck "starting" on Replicate since 2026-10-09 (duplicates `jjct8r9t`, `7rq5gwdw`; warm ping `gw7x15qk`) — nothing left running;
+  - MVSEP 606 credits, no pending jobs.
+
+## 🧪 2026-10-10 — retrain test: 500 epochs on the full recording scored best — REJECTED by ear (see above)
 
 - **Trained** (full 3:48, HPF 80 Hz only, 23 clips, same base/settings): 150 / 300 / 500 epochs.
   - Compute 407 / 779 / 1279 s on an L40S = $2.40; plus 7 T4 conversions ≈ $0.10 and a Señorita lead split.
