@@ -157,20 +157,22 @@ export function autoOctaveShiftSemitones(sourceF0: number | null, targetF0: numb
 }
 
 // ── Auto Song Key ────────────────────────────────────────────────────────────
-// Move the whole song (voice + music) so its melody sits where the voice
-// usually sings: the clone sounds most like the singer inside its own range
-// (founder, 2026-10-04: Pehla Pyaar at Key −3 — the value this rule gives for
-// "Mausam (Singing)" — "sounds most like me"). Uses the MEDIAN sung note of the
-// whole song and of the voice's sample (pitch-track.ts; two different pitch
-// trackers agreed within ~1.5 semitones on medians, but not on the top notes).
-// octaveShift = the auto octave already applied to the voice alone.
-// Careful by design (2026-10-09: a −4 from a misread octave sent the voice
-// +8 and it sounded thin): an octave shift in play, or a key further than
-// AUTO_KEY_MAX away, means a reading is off → Original key (0), never the cap.
+// Stay at the ORIGINAL key unless the song is clearly out of the voice's
+// range (founder, 2026-10-10: "Key test 0" beat −3 by ear — the old rule
+// moved Pehla Pyaar's median onto the voice's, −3, and sounded heavier).
+// The voice's comfortable band is its median sung note ± AUTO_KEY_COMFORT
+// semitones (medians of the whole song and of the voice's sample —
+// pitch-track.ts). Inside the band → 0. Outside → move just far enough to
+// reach the band's edge. Careful by design (2026-10-09: a −4 from a misread
+// octave sent the voice +8 and it sounded thin): an octave shift in play, or
+// a gap so big the key would pass AUTO_KEY_MAX, means a reading is off → 0.
 export const AUTO_KEY_MAX = 4
+export const AUTO_KEY_COMFORT = 4
 export const AUTO_KEY_MIN_VOICED_S = 20 // less clear singing than this → Original key
 export function autoKeySemitones(songMedianMidi: number, voiceMedianMidi: number, octaveShift: number): number {
   if (!Number.isFinite(songMedianMidi) || !Number.isFinite(voiceMedianMidi) || octaveShift !== 0) return 0
-  const key = Math.round(voiceMedianMidi - songMedianMidi)
+  const gap = voiceMedianMidi - songMedianMidi
+  if (Math.abs(gap) <= AUTO_KEY_COMFORT) return 0
+  const key = Math.round(gap - Math.sign(gap) * AUTO_KEY_COMFORT)
   return Math.abs(key) > AUTO_KEY_MAX ? 0 : key
 }

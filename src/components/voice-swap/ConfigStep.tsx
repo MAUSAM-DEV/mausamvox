@@ -371,7 +371,7 @@ export function ConfigStep({
               <button className={`vs-key-mode${keyAuto ? ' vs-key-mode--on' : ''}`} onClick={() => setKeyAuto(true)}>Auto</button>
             </div>
             <div className="vs-ctrl-hint">
-              Moves the whole song — your voice and the music together (drums stay as they are). <strong>Auto</strong> fits the song to where the chosen voice usually sings, so it sounds most like you. Pitch Shift above moves only the voice.
+              Moves the whole song — your voice and the music together (drums stay as they are). <strong>Auto</strong> keeps the original key unless the song is clearly out of the chosen voice&rsquo;s range — then it moves just enough. Pitch Shift above moves only the voice.
             </div>
             {keyCompare && <KeyCompare {...keyCompare} />}
           </div>
