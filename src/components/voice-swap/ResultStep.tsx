@@ -13,7 +13,8 @@ import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
 import { keyName, type KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import { harmonyMode } from '@/lib/audio-dsp/harmony-mode'
 import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
-import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspAirShare, dspLufs, dspMaster } from './dspClient'
+import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspAirShare, dspLufs, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
+import { subShelfDb, SUB_SHELF_HZ } from '@/lib/audio-dsp/tone-match'
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
 import { clientTiming } from '@/lib/client-timing'
@@ -234,13 +235,41 @@ function sum(bufs: AudioBuffer[]): AudioBuffer {
 // Demucs stems sit ~25 ms later and would smear it; a key change moves all of
 // it. Demucs fallback: drums stay put. Backing vocals (lead/backing split) go
 // back under the swapped lead — not for duets, whose stems already hold them.
-export type BedSpec = { musicUrls: string[]; tonalUrls: string[]; drumsUrl: string | null; backingUrl: string | null; leadUrl: string | null; keyShift: number }
+//
+// Key changes (2026-10-10 sound study): drums have no key, so they stay put —
+// with the studio split, Demucs's drum stem (lined up: its MP3 sits 1105
+// samples late) is taken out of the instrumental, the rest is shifted, the
+// drums go back unshifted; at the original key nothing changes. Then the
+// music's deep sub (20–45 Hz) is cut back to the original music's level (a
+// −3 shift had pushed the kick/bass there, +8–11 dB — the "too much bass").
+export type BedSpec = { hq: boolean; musicUrls: string[]; tonalUrls: string[]; drumsUrl: string | null; backingUrl: string | null; leadUrl: string | null; keyShift: number }
 export function bedSpecFor(stemResult: StemResult | null, keyShift: number, duet: boolean): BedSpec {
   const hq = !!(stemResult?.hqSplit && stemResult.instrumentalUrl)
   const tonalUrls = hq ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
   const musicUrls = hq ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
   const backingUrl = stemResult?.leadVocalsUrl && stemResult.backingVocalsUrl && !duet ? stemResult.backingVocalsUrl : null
-  return { musicUrls, tonalUrls, drumsUrl: !hq && stemResult?.drumsUrl ? stemResult.drumsUrl : null, backingUrl, leadUrl: stemResult?.leadVocalsUrl || null, keyShift }
+  return { hq, musicUrls, tonalUrls, drumsUrl: stemResult?.drumsUrl || null, backingUrl, leadUrl: stemResult?.leadVocalsUrl || null, keyShift }
+}
+// The studio instrumental split into (everything but drums, drums), using
+// Demucs's drum stem lined up with it. null when they don't line up clearly.
+async function splitDrums(inst: AudioBuffer, drums: AudioBuffer): Promise<{ tonal: AudioBuffer; drums: AudioBuffer } | null> {
+  const a = await dspAlign(channelsOf(inst), channelsOf(drums), inst.sampleRate)
+  if (!a || Math.abs(a.lag) > 3000 || a.gain < 0.3 || a.gain > 2) { console.warn('[voice-fx] drums did not line up — shifting the whole instrumental', a); return null }
+  const n = inst.length, d = [new Float32Array(n), new Float32Array(n)], t = [new Float32Array(n), new Float32Array(n)]
+  for (let c = 0; c < 2; c++) {
+    const src = drums.getChannelData(Math.min(c, drums.numberOfChannels - 1)), x = inst.getChannelData(Math.min(c, inst.numberOfChannels - 1))
+    for (let i = 0; i < n; i++) { const j = i - a.lag, v = j >= 0 && j < src.length ? src[j] * a.gain : 0; d[c][i] = v; t[c][i] = x[i] - v }
+  }
+  console.log(`[voice-fx] drums kept at the original key (lag ${a.lag} samples, gain ${a.gain.toFixed(2)})`)
+  return { tonal: toBuffer(t, inst.sampleRate), drums: toBuffer(d, inst.sampleRate) }
+}
+// Cut the shifted music's 20–45 Hz back to the original music's share.
+async function cutDeepSub(music: AudioBuffer, original: AudioBuffer): Promise<AudioBuffer> {
+  const [have, want] = await Promise.all([dspSpectrum(channelsOf(music), music.sampleRate), dspSpectrum(channelsOf(original), original.sampleRate)])
+  const g = subShelfDb(have, want, music.sampleRate)
+  if (g >= 0) return music
+  console.log(`[voice-fx] deep sub cut ${g} dB below ${SUB_SHELF_HZ} Hz`)
+  return toBuffer(await dspFilters(channelsOf(music), music.sampleRate, [{ type: 'lowshelf', freq: SUB_SHELF_HZ, gainDb: g }]), music.sampleRate)
 }
 type BedOpts = { musicOnly?: boolean; originalKey?: boolean }
 type Fallback = <T>(what: string, value: T) => (err: unknown) => T
@@ -252,8 +281,14 @@ async function makeBed(spec: BedSpec, opts: BedOpts, fallback: Fallback): Promis
   if (opts.originalKey || !spec.keyShift || spec.tonalUrls.length === 0) {
     parts.push(...await Promise.all(spec.musicUrls.map(decodeUrl)))
   } else {
-    parts.push(await shiftBuf(sum(await Promise.all(spec.tonalUrls.map(decodeUrl))), { semitones: spec.keyShift }))
-    if (spec.drumsUrl) parts.push(await decodeUrl(spec.drumsUrl))
+    // Music in the take's key — drums unshifted — then the deep sub put right.
+    const tonal = sum(await Promise.all(spec.tonalUrls.map(decodeUrl)))
+    const drums = spec.drumsUrl ? await decodeUrl(spec.drumsUrl).catch(() => null) : null
+    const split = spec.hq && drums ? await splitDrums(tonal, drums).catch(fallback('keeping the drums in key', null)) : null
+    const keep = split ? split.drums : spec.hq ? null : drums // Demucs stems: drums are already separate
+    const shifted = await shiftBuf(split ? split.tonal : tonal, { semitones: spec.keyShift })
+    const music = keep ? sum([shifted, keep]) : shifted
+    parts.push(await cutDeepSub(music, keep && !spec.hq ? sum([tonal, keep]) : tonal).catch(fallback('the bass clean-up', music)))
   }
   if (spec.backingUrl && !opts.musicOnly) {
     const raw = await decodeUrl(spec.backingUrl)
@@ -272,7 +307,7 @@ async function makeBed(spec: BedSpec, opts: BedOpts, fallback: Fallback): Promis
 }
 // Last few beds (each ~95 MB for a 4½-min song, so only a few are kept).
 const bedCache = new Map<string, Promise<AudioBuffer | null>>()
-function bedFor(spec: BedSpec, opts: BedOpts = {}, fallback: Fallback = quietFallback): Promise<AudioBuffer | null> {
+export function bedFor(spec: BedSpec, opts: BedOpts = {}, fallback: Fallback = quietFallback): Promise<AudioBuffer | null> {
   const key = JSON.stringify([spec, !!opts.musicOnly, !!opts.originalKey])
   const hit = bedCache.get(key)
   if (hit) return hit

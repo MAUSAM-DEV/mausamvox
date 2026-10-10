@@ -5,6 +5,7 @@
 import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
 import type { KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import type { HarmonyMode, HarmonyVoices } from '@/lib/audio-dsp/harmony-mode'
+import type { Filter } from '@/lib/audio-dsp/tone-match'
 
 type ShiftReq = { op: 'shift'; channels: Float32Array[]; sampleRate: number; options: ShiftOptions }
 type KeyReq = { op: 'key'; mono: Float32Array; sampleRate: number }
@@ -15,12 +16,15 @@ type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTarg
 type AirShareReq = { op: 'airShare'; mono: Float32Array; sampleRate: number }
 type LufsReq = { op: 'lufs'; channels: Float32Array[]; sampleRate: number }
 type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number }
+type SpectrumReq = { op: 'spectrum'; channels: Float32Array[]; sampleRate: number }
+type FiltersReq = { op: 'filters'; channels: Float32Array[]; sampleRate: number; filters: Filter[] }
+type AlignReq = { op: 'align'; channels: Float32Array[]; sampleRate: number; other: Float32Array[] }
 // Mastering step times inside the worker: the gain search, then the limiter.
 export type MasterMs = { search: number; limit: number }
-type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq
+type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq | SpectrumReq | FiltersReq | AlignReq
 export type DspRequest = AnyReq & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number; ms?: MasterMs }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number; ms?: MasterMs; nums?: number[] }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -84,6 +88,13 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
   if (req.op === 'lufs') {
     const { lufs } = await import('@/lib/audio-dsp/master')
     return { id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) }
+  }
+  if (req.op === 'spectrum' || req.op === 'filters' || req.op === 'align') {
+    const t = await import('@/lib/audio-dsp/tone-match')
+    if (req.op === 'spectrum') return { id: req.id, ok: true, channels: [Float32Array.from(t.powerSpectrum(req.channels))] }
+    if (req.op === 'filters') return { id: req.id, ok: true, channels: t.applyFilters(req.channels, req.sampleRate, req.filters) }
+    const a = t.alignLag(req.channels, req.other, req.sampleRate)
+    return { id: req.id, ok: true, nums: a ? [a.lag, a.gain] : [] }
   }
   if (req.op === 'master') {
     const { masterGain, limit } = await import('@/lib/audio-dsp/master')
@@ -168,4 +179,23 @@ export async function dspMaster(channels: Float32Array[], sampleRate: number, ta
   const r = await call({ op: 'master', channels, sampleRate, targetLufs, gain }, channels.map((c) => c.buffer))
   if (!r.ok || typeof r.value !== 'number' || !r.channels?.length) throw new Error('Mastering failed')
   return { gain: r.value, channels: r.channels, ms: r.ms ?? { search: NaN, limit: NaN } }
+}
+
+// Tone tools (audio-dsp/tone-match.ts): average power spectrum of the loud
+// parts (bin k = k·sr/8192 Hz), a biquad chain applied offline, and the
+// delay + gain that line `other` up with `channels` (null = no clear match).
+export async function dspSpectrum(channels: Float32Array[], sampleRate: number): Promise<Float64Array> {
+  const r = await call({ op: 'spectrum', channels, sampleRate }, channels.map((c) => c.buffer))
+  if (!r.ok || !r.channels?.[0]) throw new Error('Spectrum failed')
+  return Float64Array.from(r.channels[0])
+}
+export async function dspFilters(channels: Float32Array[], sampleRate: number, filters: Filter[]): Promise<Float32Array[]> {
+  const r = await call({ op: 'filters', channels, sampleRate, filters }, channels.map((c) => c.buffer))
+  if (!r.ok || !r.channels?.length) throw new Error('Filtering failed')
+  return r.channels
+}
+export async function dspAlign(channels: Float32Array[], other: Float32Array[], sampleRate: number): Promise<{ lag: number; gain: number } | null> {
+  const r = await call({ op: 'align', channels, sampleRate, other }, [...channels, ...other].map((c) => c.buffer))
+  if (!r.ok) throw new Error('Alignment failed')
+  return r.nums && r.nums.length === 2 ? { lag: r.nums[0], gain: r.nums[1] } : null
 }

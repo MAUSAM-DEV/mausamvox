@@ -10,6 +10,7 @@ import { removeDoubles } from '@/lib/audio-dsp/doubles'
 import { pitchStats } from '@/lib/audio-dsp/pitch-track'
 import { polishVoice, airShare } from '@/lib/audio-dsp/voice-polish'
 import { lufs, limit, masterGain } from '@/lib/audio-dsp/master'
+import { powerSpectrum, applyFilters, alignLag } from '@/lib/audio-dsp/tone-match'
 import type { DspRequest, DspResponse } from './dspClient'
 
 const ctx = self as unknown as {
@@ -37,6 +38,15 @@ ctx.onmessage = async (e) => {
       ctx.postMessage({ id: req.id, ok: true, value: airShare(req.mono, req.sampleRate) })
     } else if (req.op === 'lufs') {
       ctx.postMessage({ id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) })
+    } else if (req.op === 'spectrum') {
+      const spec = Float32Array.from(powerSpectrum(req.channels))
+      ctx.postMessage({ id: req.id, ok: true, channels: [spec] }, [spec.buffer])
+    } else if (req.op === 'filters') {
+      const channels = applyFilters(req.channels, req.sampleRate, req.filters)
+      ctx.postMessage({ id: req.id, ok: true, channels }, channels.map((c) => c.buffer))
+    } else if (req.op === 'align') {
+      const a = alignLag(req.channels, req.other, req.sampleRate)
+      ctx.postMessage({ id: req.id, ok: true, nums: a ? [a.lag, a.gain] : [] })
     } else if (req.op === 'master') {
       const t0 = performance.now()
       const gain = req.gain ?? masterGain(req.channels, req.sampleRate, req.targetLufs)
