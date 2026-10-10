@@ -777,8 +777,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             : prev
         )
         try {
-          const merged: StemResult = { ...result, ...patch }
-          localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: merged, savedAt: Date.now() }))
+          // Merge into the saved session (stem cards may have landed meanwhile).
+          const raw = localStorage.getItem(STEM_CACHE_KEY)
+          const cached = raw ? JSON.parse(raw) : null
+          const base: StemResult = cached?.result?.storagePath === result.storagePath ? cached.result : result
+          localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: { ...base, ...patch }, savedAt: cached?.savedAt ?? Date.now() }))
         } catch { /* ignore */ }
         console.log(`[karaoke-split] lead/backing ready for ${result.fileName}`)
         // Group-vocals warning — after the stems are shown, so it never delays
@@ -986,6 +989,19 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         void runKaraokeSplit(result)
       }
     }
+  }
+
+  // Demucs's Bass/Drums/Other arriving after a studio-quality split already
+  // made the song ready — for the stem cards only (the swap uses MVSEP's music).
+  function handleStemsAdded(storagePath: string, patch: Partial<StemResult>) {
+    setStemResult((prev) => (prev && prev.storagePath === storagePath ? { ...prev, ...patch } : prev))
+    try {
+      const raw = localStorage.getItem(STEM_CACHE_KEY)
+      const cached = raw ? JSON.parse(raw) : null
+      if (cached?.result?.storagePath === storagePath) {
+        localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, ...patch } }))
+      }
+    } catch { /* ignore */ }
   }
 
   function handleStemContinue() {
@@ -1631,6 +1647,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 userId={userId}
                 result={stemResult}
                 onDone={handleStemDone}
+                onStemsAdded={handleStemsAdded}
                 onContinue={handleStemContinue}
                 onToast={showToast}
                 plan={plan}

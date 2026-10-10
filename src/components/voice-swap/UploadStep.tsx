@@ -142,6 +142,9 @@ interface UploadStepProps {
   userId: string | null
   result: StemResult | null
   onDone: (result: StemResult) => void
+  // Demucs's Bass/Drums/Other arriving after the song is already ready
+  // (studio split): merged into the result for the stem cards only.
+  onStemsAdded?: (storagePath: string, patch: Partial<StemResult>) => void
   onContinue: () => void
   onToast: (msg: string) => void
   plan: string | null
@@ -258,7 +261,7 @@ function StemCard({
   )
 }
 
-export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle', isDuet, onSetIsDuet, isAdmin = false, guided = false }: UploadStepProps) {
+export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, onToast, plan, creditsRemaining, genderSplitting, onSplitDuet, karaokeStatus = 'idle', isDuet, onSetIsDuet, isAdmin = false, guided = false }: UploadStepProps) {
   const [phase, setPhase] = useState<Phase>(result ? 'done' : 'idle')
   const [activeStemUrl, setActiveStemUrl] = useState<string | null>(null)
   const [activeStemLabel, setActiveStemLabel] = useState('')
@@ -405,35 +408,76 @@ export function UploadStep({ userId, result, onDone, onContinue, onToast, plan, 
       return { stems, vocalsPath, bassPath, drumsPath, otherPath }
       })()
 
-      // Wait for both. Demucs alone failing is fine when the studio split worked.
-      const [d, h] = await Promise.allSettled([demucs, hq.then((r) => { setHqWaiting(false); return r })])
-      const dm = d.status === 'fulfilled' ? d.value : null
-      const hs = h.status === 'fulfilled' ? h.value : null
-      if (!dm && !hs) throw (d.status === 'rejected' ? d.reason : new Error('Stem split failed'))
+      // Don't wait for Demucs (2026-10-10: it took 4 min 44 s while the
+      // studio split was ready after 68 s, and the swap doesn't use its music
+      // when the studio split works). As soon as MVSEP is ready the song is
+      // ready — the lead/backing split starts right away on MVSEP's vocals —
+      // and Demucs keeps running only for the Bass/Drums/Other stem cards.
+      // MVSEP failed → wait for Demucs. MVSEP still running 90 s after Demucs
+      // finished → use Demucs rather than keep the user waiting.
+      demucs.catch(() => { /* handled below / background */ })
+      const DEMUCS_GRACE_MS = 90_000
+      const first = await Promise.race([
+        hq.then((r) => ({ hq: r })),
+        demucs.then(
+          async () => { await new Promise((r) => setTimeout(r, DEMUCS_GRACE_MS)); return { hq: undefined } },
+          () => new Promise<never>(() => {}), // Demucs failed: only the studio split can answer
+        ),
+      ])
+      setHqWaiting(false)
+      const hs = first.hq ?? null
 
+      if (hs) {
+        const stemResult: StemResult = {
+          storagePath:     uploaded.path,
+          vocalsUrl:       hs.vocalsUrl,
+          vocalsPath:      hs.vocalsPath,
+          leadVocalsUrl:   '',
+          backingVocalsUrl:'',
+          maleVocalsUrl:   '',
+          femaleVocalsUrl: '',
+          instrumentalUrl: hs.instrumentalUrl,
+          instrumentalPath: hs.instrumentalPath,
+          hqSplit:         true,
+          bassUrl:         '',
+          drumsUrl:        '',
+          otherUrl:        '',
+          fileName:        file.name,
+        }
+        onDone(stemResult)
+        setPhase('done')
+        onToast('Vocals and music separated in studio quality — ready!')
+        // Stem cards: add Demucs's Bass/Drums/Other when they land (not used by the swap).
+        demucs.then((dm) => onStemsAdded?.(uploaded.path, {
+          bassUrl: dm.stems.bass, drumsUrl: dm.stems.drums, otherUrl: dm.stems.other,
+          bassPath: dm.bassPath || undefined, drumsPath: dm.drumsPath || undefined, otherPath: dm.otherPath || undefined,
+        }), () => { /* stem cards just won't show bass/drums/other */ })
+        return
+      }
+
+      // Studio split unavailable (or too slow): the Demucs stems.
+      const dm = await demucs
       const stemResult: StemResult = {
         storagePath:     uploaded.path,
-        vocalsUrl:       hs ? hs.vocalsUrl : dm!.stems.vocals,
-        vocalsPath:      hs ? hs.vocalsPath : dm!.vocalsPath,
+        vocalsUrl:       dm.stems.vocals,
+        vocalsPath:      dm.vocalsPath,
         leadVocalsUrl:   '',
         backingVocalsUrl:'',
         maleVocalsUrl:   '',
         femaleVocalsUrl: '',
-        instrumentalUrl: hs?.instrumentalUrl ?? '',
-        instrumentalPath: hs?.instrumentalPath,
-        hqSplit:         !!hs,
-        bassUrl:         dm?.stems.bass ?? '',
-        drumsUrl:        dm?.stems.drums ?? '',
-        otherUrl:        dm?.stems.other ?? '',
-        bassPath:        dm?.bassPath,
-        drumsPath:       dm?.drumsPath,
-        otherPath:       dm?.otherPath,
+        instrumentalUrl: '',
+        hqSplit:         false,
+        bassUrl:         dm.stems.bass,
+        drumsUrl:        dm.stems.drums,
+        otherUrl:        dm.stems.other,
+        bassPath:        dm.bassPath,
+        drumsPath:       dm.drumsPath,
+        otherPath:       dm.otherPath,
         fileName:        file.name,
       }
-
       onDone(stemResult)
       setPhase('done')
-      onToast(hs ? 'Stems separated in studio quality — vocals and music ready!' : 'Stems separated — vocals and instrumental ready! (Studio-quality separation was unavailable, so the standard one is used.)')
+      onToast('Stems separated — vocals and instrumental ready! (Studio-quality separation was unavailable, so the standard one is used.)')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong'
       setErrorMsg(msg)
