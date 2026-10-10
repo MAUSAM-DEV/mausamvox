@@ -45,6 +45,9 @@ const MAX_POLL_ERRORS = 12
 // When a job has been waiting this long, say the engine is warming up.
 const WARMING_NOTE_AFTER_MS = 15000
 const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up to 2 minutes. Keep this page open.'
+// Engine warm pings on Configure/Result: every minute, stopping after 30 min with no activity.
+const WARM_PING_EVERY_MS = 60_000
+const WARM_IDLE_STOP_MS = 30 * 60_000
 // Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
 const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -1126,17 +1129,31 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   function takeKey(key = keyShift): string {
     return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, key, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
   }
-  // Keep the voice engine warm while the user is on Configure: it went cold
+  // Keep the voice engine warm while Configure or Result is open: it went cold
   // ~3 min after the upload's warm-up on 2026-10-09 and the next swap waited
-  // 89 s to start. One ping on arrival, then every 60 s (max 10; the route is
-  // rate-limited and a warm-up only boots an instance, ~$0.001 each).
+  // 89 s to start. One ping on arrival, then every 60 s (~$0.001 each; the
+  // upload itself pings once in /api/stem-split). After 30 min with no clicks,
+  // keys, scrolls or touches the pings stop, so an idle tab doesn't keep
+  // spending; the next activity pings at once and restarts them.
+  const lastActivityRef = useRef(Date.now())
   useEffect(() => {
-    if (step !== 2) return
+    if (step !== 2 && step !== 3) return
+    lastActivityRef.current = Date.now() // arriving on the page counts as activity
+    const idle = () => Date.now() - lastActivityRef.current > WARM_IDLE_STOP_MS
     const ping = () => { fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {}) }
+    const onActivity = () => {
+      const wasIdle = idle()
+      lastActivityRef.current = Date.now()
+      if (wasIdle) ping()
+    }
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
+    events.forEach((e) => window.addEventListener(e, onActivity, { capture: true, passive: true }))
     ping()
-    let n = 1
-    const id = setInterval(() => { if (n++ < 10) ping() }, 60_000)
-    return () => clearInterval(id)
+    const id = setInterval(() => { if (!idle()) ping() }, WARM_PING_EVERY_MS)
+    return () => {
+      clearInterval(id)
+      events.forEach((e) => window.removeEventListener(e, onActivity, { capture: true }))
+    }
   }, [step])
 
   // Work out the Auto key as soon as a song + voice are chosen (shown on Configure).
