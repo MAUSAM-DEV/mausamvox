@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Space_Grotesk, Inter } from 'next/font/google'
 import './globals.css'
+import { NewVersionBar } from '@/components/NewVersionBar'
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({
         style={{ background: '#05050F', color: '#F0F0FF', fontFamily: 'var(--font-inter), Inter, sans-serif' }}
       >
         {children}
+        <NewVersionBar />
       </body>
     </html>
   )

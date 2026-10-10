@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // This build's version (the commit Vercel built), baked into the browser code
+  // and /api/version: a page whose version differs from /api/version's is an
+  // old tab and offers "New version — Reload" (src/components/NewVersionBar).
+  // Empty locally → the check is off.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA || '',
+  },
   experimental: {
     // Enables src/instrumentation.ts (server startup hook).
     instrumentationHook: true,
