@@ -18,6 +18,7 @@
 //   → master gain → limiter (−1 dBFS) → out   (g = 1/√N for N main vocals)
 
 import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S } from '@/lib/audio-dsp/master'
+import { TONE_EQ_CENTERS, TONE_EQ_Q } from '@/lib/audio-dsp/tone-match'
 
 export type PolishStyle = 'none' | 'hall' | 'lofi' | 'radio'
 
@@ -33,6 +34,10 @@ export interface MixParams {
   vocalsOnly: boolean
   bedRoom: number   // share of the voice's Studio room on the music (0–1) — "shared room"
   glue: boolean     // gentle compression of the MUSIC (never the voice — it costs the singer's identity)
+  // Match the original's tone (2026-10-10): dB per TONE_EQ_CENTERS octave band
+  // on the whole mix, worked out per take (ResultStep). Off for vocals-only
+  // and the Lo-fi / Radio styles. Absent = flat.
+  toneEq?: number[]
 }
 
 export interface MixInputs {
@@ -128,6 +133,7 @@ export class MixGraph {
   private lofi: GainNode
   private radio: GainNode
   private bedRoomWet: GainNode
+  private toneF: BiquadFilterNode[] = []
   private glueOn: GainNode
   private glueOff: GainNode
   private masterGain: GainNode | null = null
@@ -195,7 +201,15 @@ export class MixGraph {
     // Pre-master, then — live only — the master
     // gain and the look-ahead limiter.
     const premaster = gain(PRE_MASTER_GAIN)
-    const master = premaster
+    // Tone match: the last stage before the pre-master level — linear, so the
+    // same EQ applied offline to a rendered mix gives the identical result.
+    const master = gain()
+    let toneTail: AudioNode = master
+    for (const f of TONE_EQ_CENTERS) {
+      const b = filter('peaking', f); b.Q.value = TONE_EQ_Q
+      toneTail.connect(b); toneTail = b; this.toneF.push(b)
+    }
+    toneTail.connect(premaster)
     if (!master_) premaster.connect(out)
     else {
       this.masterGain = gain(master_.gain)
@@ -273,6 +287,8 @@ export class MixGraph {
     to(this.clean.gain, p.style === 'lofi' || p.style === 'radio' ? 0 : 1)
     to(this.lofi.gain, p.style === 'lofi' ? 1 : 0)
     to(this.radio.gain, p.style === 'radio' ? 1 : 0)
+    const tone = !p.vocalsOnly && p.style !== 'lofi' && p.style !== 'radio' && p.toneEq ? p.toneEq : null
+    this.toneF.forEach((f, i) => to(f.gain, tone ? tone[i] ?? 0 : 0))
   }
 
   // Master gain (live): glides so a new loudness setting never jumps.

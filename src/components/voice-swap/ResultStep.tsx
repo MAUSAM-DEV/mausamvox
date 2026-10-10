@@ -14,7 +14,7 @@ import { keyName, type KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import { harmonyMode } from '@/lib/audio-dsp/harmony-mode'
 import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
 import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspAirShare, dspLufs, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
-import { subShelfDb, SUB_SHELF_HZ } from '@/lib/audio-dsp/tone-match'
+import { subShelfDb, SUB_SHELF_HZ, toneMatchDb, toneEqFilters } from '@/lib/audio-dsp/tone-match'
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
 import { clientTiming } from '@/lib/client-timing'
@@ -593,10 +593,12 @@ export function ResultStep({
   const [studioVoice, setStudioVoice] = useState(true)
 
   // Live: every knob move goes straight to the graph.
-  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: BED_ROOM, glue: true }
+  // Tone match for this take (set once the first mix is measured; undefined = flat).
+  const [toneEq, setToneEq] = useState<number[] | undefined>(undefined)
+  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: BED_ROOM, glue: true, toneEq }
   const liveParamsRef = useRef(liveParams)
   liveParamsRef.current = liveParams
-  useEffect(() => { player?.setParams(liveParams) }, [warmth, bass, treble, reverb, echo, level, blend, style, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { player?.setParams(liveParams) }, [warmth, bass, treble, reverb, echo, level, blend, style, mode, toneEq]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { player?.setView({ side: ab === 'Original' ? 'original' : 'swapped', vocalsOnly: mode === 'vocals' }) }, [ab, mode, player])
 
   // Settled settings (for the saved file): 600 ms after the last change.
@@ -745,21 +747,24 @@ export function ResultStep({
   // ── Mastering (master.ts): as loud as the uploaded song, peaks at −1 dBFS ──
   // Target = the upload's loudness. The gain is found on the pre-master mix
   // for the settled settings; the live player uses it with the same limiter.
-  const targetRef = useRef<Promise<number> | null>(null)
-  function masterTarget(): Promise<number> {
-    targetRef.current ??= (async () => {
+  // The uploaded song, measured once: its loudness (→ the mastering target)
+  // and its spectrum (→ the tone match).
+  const songRefRef = useRef<Promise<{ target: number; spectrum: Float64Array | null }> | null>(null)
+  function songRef(): Promise<{ target: number; spectrum: Float64Array | null }> {
+    songRefRef.current ??= (async () => {
       const path = stemResult?.storagePath
-      if (!path) return MASTER_TARGET_FALLBACK
+      if (!path) return { target: MASTER_TARGET_FALLBACK, spectrum: null }
       const res = await fetch('/api/upload-stem/sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })
-      if (!res.ok) return MASTER_TARGET_FALLBACK
+      if (!res.ok) return { target: MASTER_TARGET_FALLBACK, spectrum: null }
       const { url } = await res.json()
       const song = await decodeUrl(url)
-      const l = await dspLufs(channelsOf(song), song.sampleRate)
+      const [l, spectrum] = await Promise.all([dspLufs(channelsOf(song), song.sampleRate), dspSpectrum(channelsOf(song), song.sampleRate).catch(() => null)])
       console.log('[master] uploaded song loudness', l.toFixed(1), 'LUFS → target', clampTarget(l).toFixed(1))
-      return clampTarget(l)
-    })().catch(() => MASTER_TARGET_FALLBACK)
-    return targetRef.current
+      return { target: clampTarget(l), spectrum }
+    })().catch(() => ({ target: MASTER_TARGET_FALLBACK, spectrum: null }))
+    return songRefRef.current
   }
+  const masterTarget = (): Promise<number> => songRef().then((r) => r.target)
   // Mastered swapped mix for these settings (+ its gain), cached per settings
   // and audio; Vocals-only renders use the full mix's gain.
   const bufIdsRef = useRef({ ids: new WeakMap<AudioBuffer, number>(), next: 1 })
@@ -773,7 +778,7 @@ export function ResultStep({
   // limiter); `cached` = an earlier result for the same settings was reused.
   type Mastered = { gain: number; buf: AudioBuffer; ms: { render: number; target: number; search: number; limit: number }; cached?: boolean }
   const masterCacheRef = useRef<{ key: string; result: Promise<Mastered> } | null>(null)
-  function masteredMix(params: MixParams): Promise<Mastered> {
+  function masteredMix(params: MixParams, prebuilt?: { pre: AudioBuffer; renderMs: number }): Promise<Mastered> {
     const full = { ...params, vocalsOnly: false }
     const inp = inputsRef.current!
     // Blend's original singer only changes the mix when Blend is up.
@@ -782,8 +787,8 @@ export function ResultStep({
     if (masterCacheRef.current?.key === key) return masterCacheRef.current.result.then((r) => ({ ...r, cached: true }))
     const result = (async () => {
       let t0 = performance.now()
-      const pre = await renderMix(inp, full)
-      const render = performance.now() - t0
+      const pre = prebuilt?.pre ?? await renderMix(inp, full)
+      const render = prebuilt?.renderMs ?? performance.now() - t0
       t0 = performance.now()
       const target = await masterTarget()
       const targetMs = performance.now() - t0
@@ -812,7 +817,8 @@ export function ResultStep({
     let cancelled = false
     originalRef.current = null
     originalTakeRef.current++
-    void masterTarget() // the uploaded song's loudness, measured alongside
+    setToneEq(undefined)
+    void songRef() // the uploaded song's loudness, measured alongside
     setFullMixState('mixing')
     const mixStart = performance.now()
     ;(async () => {
@@ -841,8 +847,27 @@ export function ResultStep({
       setInputs({ ...inputsRef.current!, bed })
       // Mastering: the swapped side's gain (the Original side is mastered to
       // the same loudness when it's built, so the A/B compare is fair).
+      // Tone match (2026-10-10, the founder's pick "C"): render once without it,
+      // compare with the original song's spectrum, EQ that same render offline
+      // (identical to the graph's EQ) and master it — no second render.
       t0 = performance.now()
-      const { gain, ms } = await masteredMix(liveParamsRef.current)
+      let gains: number[] | undefined, prebuilt: { pre: AudioBuffer; renderMs: number } | undefined, toneMs = NaN
+      try {
+        const flat = { ...liveParamsRef.current, vocalsOnly: false, toneEq: undefined }
+        const r0 = performance.now()
+        const [pre, ref] = await Promise.all([renderMix(inputsRef.current!, flat), songRef()])
+        const renderMs = performance.now() - r0
+        if (ref.spectrum && !cancelled) {
+          const t1 = performance.now()
+          gains = toneMatchDb(await dspSpectrum(channelsOf(pre), pre.sampleRate), ref.spectrum, pre.sampleRate)
+          prebuilt = { pre: toBuffer(await dspFilters(channelsOf(pre), pre.sampleRate, toneEqFilters(gains)), pre.sampleRate), renderMs }
+          toneMs = performance.now() - t1
+          console.log('[master] tone match (dB @ 31.5 Hz…16 kHz):', gains.join(' '))
+        }
+      } catch (err) { console.warn('[master] tone match skipped:', err); gains = undefined; prebuilt = undefined }
+      if (cancelled) return
+      setToneEq(gains)
+      const { gain, ms } = await masteredMix({ ...liveParamsRef.current, toneEq: gains }, prebuilt)
       const masterMs = performance.now() - t0
       if (cancelled) return
       player?.setMasterGain(gain)
@@ -853,7 +878,7 @@ export function ResultStep({
       // the swapped mix; target = waiting for the uploaded song's loudness;
       // search / limit = mastering; master = render + target + search + limit.
       clientTiming('result-mix', {
-        voice: voiceMs, music: musicMs, render: ms.render, target: ms.target,
+        voice: voiceMs, music: musicMs, render: ms.render, target: ms.target, tone: toneMs,
         search: ms.search, limit: ms.limit, master: masterMs, total: performance.now() - mixStart,
       })
       // 3. Blend's original singer(s), ready in the background so Blend is instant.
