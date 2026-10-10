@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Checks + key test (no app change):** saved swaps are 320 kbps, same length/tempo (constant 30 ms offset); loudness plan = gentle peak soft-clip + 30 ms limiter release → −7.9 LUFS at 0.2 dB limiting; "Key test 0 / −3 / original" clips saved.
 - **Hotfix: "Finding the lead vocal" can't hang forever** — lead-quality check capped at 45 s, lead-split status requests at 70 s (live hang 16:05–16:22 IST: the page got "done" and never unlocked). `tsc --noEmit` clean; clean build passed. `8347ff3`
 - **Tone match to the original** on every swap (10-band, ±6 dB, no extra render). `tsc --noEmit` clean; clean build passed. `151811d`
 - **Cleaner mix:** gentler glue, 250 Hz low cut on reverbs, voice level 0 dB. `tsc --noEmit` clean; clean build passed. `529b793`

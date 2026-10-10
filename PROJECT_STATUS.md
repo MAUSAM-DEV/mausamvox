@@ -6,6 +6,13 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-10 (late night, 4) — format/tempo check, loudness plan, key test (no app change) — loudness fix AWAITING APPROVAL
+
+- **Founder's 6:24 swap (16:32 IST) was a Preview at −3 and was NOT saved** (no Save press) — kept in "Recent — not saved" until ~16:38 IST next day. Result screen: music prewarmed (0 s), tone match 1.8 s, total 26.3 s.
+- **Format/tempo (latest saved swap 338f9f4a):** MP3 320 kbps, 44.1 kHz stereo; length 272.588 s vs original 272.556 s (+32 ms = MP3 start padding); timing offset vs original constant 30 ms at 0:20 / 1:30 / 2:40 / 3:50 → tempo identical. "Slower" = the lower key (−3).
+- **Loudness:** the fixed mix's pre-master crest factor is 16.9 dB (original 10.8), so the look-ahead limiter (80 ms release) stalls: +5 dB gain → +0.5 LU; reaching −7.8 that way needs 3–4 dB average limiting. **Plan (safest):** gentle soft-clip of only the tallest peaks (knee 0.95 of −0.5 dBFS; 0.84% of samples) + limiter release 80 → 30 ms (offline AND the live AudioWorklet), keep the 1 dB cap → −7.9 LUFS measured with 0.23 dB average limiting. Clipper to be oversampled; listening clip first.
+- **Key test (Saved Tracks voice "Key test", chorus 3:42–4:12, all −11 LUFS):** "Key test 0", "Key test −3", "Key test · original (reference)" — full fixed chain (F1+F2+F3); both within ±1.8 dB of the original per band.
+
 ## 🚨 2026-10-10 (late night, 3) — LIVE HANG "Finding the lead vocal" 17 min — hotfix `8347ff3`; full "no wait forever" plan AWAITING APPROVAL
 
 - **What happened (Vercel logs, 16:02–16:22 IST):** upload 16:02:33 · studio split done 16:03:43 · lead split done on the server 16:05:12 (the page's LAST status check) · Demucs 16:05:17 · page alive (warm pings to 16:19:39) but stayed on Configure, no conversion · after refresh (16:20:26) the lead split started again → the lead never reached the page.
