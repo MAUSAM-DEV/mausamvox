@@ -9,7 +9,7 @@ import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
 import { ConfigStep, VoiceOption, DuetMode, AUTOTUNE_AMOUNT, type Autotune } from './ConfigStep'
-import { ResultStep } from './ResultStep'
+import { ResultStep, NEW_TAKE_SAVE, type SaveInfo } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
@@ -252,23 +252,45 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // (true only for full swaps, never previews, so previews don't waste an upload).
   const persistContextRef = useRef<{ predictionId: string; songName: string; voiceUsed: string } | null>(null)
   const [armMixUpload, setArmMixUpload] = useState(false)
-  // First save of a full swap: shown on the Result screen; while 'saving',
-  // leaving the page asks first and Saved Tracks shows it as "still saving".
-  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'failed' | null>(null)
-  function markSaving(songName: string) {
-    setSaveStatus('saving')
-    try { localStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ song: songName, at: Date.now() })) } catch { /* ignore */ }
-  }
-  function markSaveDone(ok: boolean) {
-    setSaveStatus(ok ? 'saved' : 'failed')
-    try { localStorage.removeItem(PENDING_SAVE_KEY) } catch { /* ignore */ }
-  }
+  // Saving is MANUAL (2026-10-10): the Result screen's "Save to library"
+  // button saves; nothing saves by itself. saveInfo = the current take's save
+  // state (null = no take). Kept here, not in ResultStep, because the Result
+  // screen unmounts when the user steps back to Configure.
+  const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null)
+  const updateSave = useCallback((patch: Partial<SaveInfo>) => setSaveInfo((cur) => (cur ? { ...cur, ...patch } : cur)), [])
+  // Set when a save was asked for outside the Result screen (Configure's
+  // "Save to library · N cr"); ResultStep starts it once the mix is ready.
+  const [saveRequested, setSaveRequested] = useState(false)
+  // While saving, Saved Tracks shows the song as "still saving".
   useEffect(() => {
-    if (saveStatus !== 'saving') return
+    try {
+      if (saveInfo?.state === 'saving') localStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ song: persistContextRef.current?.songName ?? 'Your swap', at: Date.now() }))
+      else localStorage.removeItem(PENDING_SAVE_KEY)
+    } catch { /* ignore */ }
+  }, [saveInfo?.state])
+  // Unsaved take (never saved, failed, or saved with older settings): closing
+  // or reloading the page shows the browser's warning, and in-app links /
+  // New swap / a new conversion ask first.
+  const unsavedTake = !!saveInfo && (saveInfo.state !== 'saved' || saveInfo.changed)
+  const unsavedRef = useRef(false)
+  unsavedRef.current = unsavedTake
+  const confirmLeave = (what = 'leave anyway') => !unsavedRef.current || window.confirm(`You haven't saved this swap — ${what}?`)
+  useEffect(() => {
+    if (!unsavedTake) return
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    // In-app links (sidebar, Saved Tracks…) don't fire beforeunload — ask here.
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return
+      const url = new URL(a.href, window.location.href)
+      if (url.origin === window.location.origin && url.pathname === window.location.pathname) return
+      if (!window.confirm("You haven't saved this swap — leave anyway?")) { e.preventDefault(); e.stopPropagation() }
+    }
     window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [saveStatus])
+    document.addEventListener('click', onClick, true)
+    return () => { window.removeEventListener('beforeunload', warn); document.removeEventListener('click', onClick, true) }
+  }, [unsavedTake])
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps of
   // the same pair don't re-fetch + re-decode the same audio.
@@ -629,14 +651,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       })
       if (!res.ok) {
         console.error('[voice-swap] persist failed:', res.status, await res.text().catch(() => ''))
-        // Re-saves are best-effort (the previous version stays intact) — stay quiet.
-        if (!silent) { showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000); markSaveDone(false) }
         return false
       }
       const persisted = await res.json()
       console.log('[voice-swap] persisted swap', persisted.swapId, persisted.resaved ? '(re-saved — polish updated)' : persisted.persisted ? '→ storage path saved' : '(result_url only, no durable copy)')
       if (persisted.swapId) setPersistedSwapId(persisted.swapId)
-      if (!silent) { showToast('Saved to your Saved Tracks ✓', 4000); markSaveDone(true) }
+      if (!silent) showToast('Saved to your library ✓', 4000)
       // Refresh the Recent Swaps panel after the FIRST save (a re-save doesn't
       // change the row's identity or position — skip the needless query).
       if (!silent) {
@@ -652,7 +672,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       return true
     } catch (err) {
       console.error('[voice-swap] persist threw:', err instanceof Error ? err.message : String(err))
-      if (!silent) { showToast("Swap is ready, but we couldn't save it to Recent Swaps. Download it now — it may not appear in your history.", 8000); markSaveDone(false) }
       return false
     }
   }
@@ -661,17 +680,16 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // mixedPath means the mix/upload failed — we still persist, falling back to the
   // vocal-only result so the swap isn't lost from Recent Swaps. No-op when there's
   // no armed context (e.g. a preview, or already handled).
-  function handleFullMixReady(mixedPath: string | null, instrumentalPath?: string | null) {
+  function handleFullMixReady(mixedPath: string | null, instrumentalPath?: string | null): Promise<boolean> {
     const ctx = persistContextRef.current
-    if (!ctx) return
+    if (!ctx) return Promise.resolve(false)
     // Do NOT null the context or disarm here anymore: keeping it armed lets
     // ResultStep re-save (UPDATE) the same row when the user adjusts polish
     // after this first save (handlePolishResave, below). The context is reset
     // on the next swap (handleProcess) / new swap.
     const t0 = performance.now()
-    persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
-      .then((ok) => clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 }))
-      .catch(() => { /* ignore — swap is still complete */ })
+    return persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
+      .then((ok) => { clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 }); return ok })
   }
 
   // Called by ResultStep when polish settles to a NEW value after the first
@@ -1256,7 +1274,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       voiceUsed: voices.find((v) => v.id === selectedVoiceId)?.name ?? 'Unknown Voice',
     }
     setArmMixUpload(true)
-    markSaving(persistContextRef.current.songName)
+    setSaveRequested(true)
     setStep(3)
     showToast(p.charged > 0 ? `Saving your swap — ${cost} cr (your ${p.charged} cr preview counts toward it)` : 'Saving your swap — no re-conversion needed')
     return true
@@ -1268,7 +1286,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   function handleFullClick() {
     if (savePreviewAsFull()) return
     if (lastSavedKeyRef.current === takeKey()) {
-      showToast('This exact take is already in your Saved Tracks — change the voice, pitch, key or auto-tune for a new one.', 6000)
+      // Already paid for: never convert (or charge) the same take twice.
+      if (saveInfo && saveInfo.state !== 'saved' && convertedVocalsUrl) {
+        setStep(3)
+        showToast('This take is ready — press Save to library to keep it.', 6000)
+      } else {
+        showToast('This exact take is already in your Saved Tracks — change the voice, pitch, key or auto-tune for a new one.', 6000)
+      }
       return
     }
     const p = lastPreviewRef.current
@@ -1292,6 +1316,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       charge = true,
       discount = 0,
     } = opts
+    if (!confirmLeave('replace it with a new one')) return
     if (!stemResult) {
       showToast('Upload a track first')
       return
@@ -1444,6 +1469,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         await new Promise((r) => setTimeout(r, 350))
         setOvSteps(['done', 'done', 'done', 'done'])
 
+        setSaveInfo(NEW_TAKE_SAVE)
+        setSaveRequested(false)
         setConvertedVocalsUrl(urlA)
         setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!] })
         setConvertedVocalsUrl2(urlB)
@@ -1462,7 +1489,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceUsed: `${voice.name} + ${voice2.name}`,
         }
         setArmMixUpload(true)
-        markSaving(persistContextRef.current.songName)
         return
       }
 
@@ -1561,6 +1587,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       await new Promise((r) => setTimeout(r, 350))
       setOvSteps(['done', 'done', 'done', 'done'])
 
+      setSaveInfo(NEW_TAKE_SAVE)
+      setSaveRequested(false)
       setConvertedVocalsUrl(convertedUrl)
       setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [vocalsToConvert] })
       setProcessing(false)
@@ -1588,7 +1616,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceUsed: voice?.name ?? 'Unknown Voice',
         }
         setArmMixUpload(true)
-        markSaving(persistContextRef.current.songName)
       }
       // Previews are no longer charged here — the server-side gate in
       // /api/voice-convert handles the "first 2 free, then 50" pricing at job
@@ -1604,6 +1631,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   }
 
   function handleNewSwap() {
+    if (!confirmLeave('start a new swap anyway')) return
     // Invalidate any in-flight background karaoke + gender split so neither can
     // apply to the cleared/next stems.
     karaokeJobRef.current++
@@ -1621,7 +1649,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setSelectedVoiceId2(null)
     setIsDuet(false)
     setPersistedSwapId(null) // new track → Share must wait for its own save
-    setSaveStatus(null)
+    setSaveInfo(null)
+    setSaveRequested(false)
     lastPreviewRef.current = null // new track → no previewed take to save
     lastSavedKeyRef.current = null
     setPreviewSaveCost(null)
@@ -1730,8 +1759,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 ].filter(Boolean).join(' + ') || null}
                 persistedSwapId={persistedSwapId}
                 previewSaveCost={savablePreview() ? previewSaveCost : null}
-                saveStatus={saveStatus}
-                onSaveFailed={() => markSaveDone(false)}
+                saveInfo={saveInfo}
+                onSaveUpdate={updateSave}
+                saveRequested={saveRequested}
+                onSaveRequestHandled={() => setSaveRequested(false)}
                 onSavePreview={() => {
                   if (!savePreviewAsFull()) showToast('This preview can no longer be saved — press ⚡ Process Full Track on Configure for a fresh full swap.', 7000)
                 }}
@@ -1811,7 +1842,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                     {leadPending
                       ? '⏳ Finding the lead vocal…'
                       : savablePreview()
-                      ? `💾 Save previewed take · ${previewSaveCost ?? FULL_SWAP_CREDITS} cr`
+                      ? `💾 Save to library · ${previewSaveCost ?? FULL_SWAP_CREDITS} cr`
                       : guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
                   </button>
                 )}

@@ -34,13 +34,14 @@ interface ResultStepProps {
   // Duet Mode 2/3: the second converted vocal (female singer). When present,
   // the swapped mix blends both converted stems (each at 1/√2 gain).
   convertedVocalsUrl2?: string | null
-  // When true (a full swap, not a preview), upload the built full-song mix and
-  // report its storage path via onFullMixReady so Recent Swaps saves the FULL
-  // track. A null path means the mix/upload failed → caller persists the vocal.
+  // True when this take may be saved for free (a full swap, or a preview the
+  // user has paid to save). "Save to library" uploads the built full-song mix
+  // and reports its storage path via onFullMixReady, which saves the row and
+  // resolves true on success. A null path = no music (vocal-only save).
   // instrumentalPath is the sibling MUSIC-ONLY mix (Performance Mode's "Music
   // only" backing) — best-effort, null whenever its render/upload fails.
   persistMix?: boolean
-  onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => void
+  onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => Promise<boolean> | void
   // Re-save the saved track's audio when polish changes AFTER the first save
   // (UPDATE the same row — no re-conversion, no credits). Returns success.
   onPolishResave?: (mixedPath: string) => Promise<boolean> | void
@@ -62,10 +63,23 @@ interface ResultStepProps {
   // The exact vocal stem(s) that were converted, in convertedVocalsUrl(2)
   // order — Voice blend mixes these (the original singer) under the new voice.
   convertedSourceUrls?: string[]
-  // First save of a full swap (it runs in the background for ~a minute).
-  saveStatus?: 'saving' | 'saved' | 'failed' | null
-  onSaveFailed?: () => void
+  // Manual saving (2026-10-10): this take's save state, owned by the page so it
+  // survives stepping back to Configure. saveRequested = a save was asked for
+  // elsewhere (Configure's button) — start it once the mix is ready.
+  saveInfo?: SaveInfo | null
+  onSaveUpdate?: (patch: Partial<SaveInfo>) => void
+  saveRequested?: boolean
+  onSaveRequestHandled?: () => void
 }
+
+// Save state of the current take. changed = saved, but the settings have
+// changed since (the library holds the earlier version). stalled = the last
+// try took longer than SAVE_STALL_MS and was reported as not saved.
+export type SaveInfo = { state: 'unsaved' | 'saving' | 'saved' | 'failed'; savedSig: string | null; changed: boolean; stalled: boolean }
+export const NEW_TAKE_SAVE: SaveInfo = { state: 'unsaved', savedSig: null, changed: false, stalled: false }
+// A save still running after this long is shown as "Not saved — Retry" (it
+// may still finish; if it does, the screen switches to Saved ✓).
+const SAVE_STALL_MS = 3 * 60_000
 
 const AB_SIDES: AbSide[] = ['Original', 'Swapped']
 const PLAY_MODES: { id: PlayMode; label: string }[] = [
@@ -412,7 +426,7 @@ export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
-  keyShift = 0, autotuneLabel, convertedSourceUrls, saveStatus, onSaveFailed,
+  keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
 }: ResultStepProps) {
   const [ab, setAb] = useState<AbSide>('Swapped')
   const [mode, setMode] = useState<PlayMode>('full')
@@ -720,17 +734,8 @@ export function ResultStep({
   }
 
   // ── Build everything when a new converted vocal arrives ─────────────────────
-  // Re-arms saving: a new take is saved as a first save (new row + its own
-  // music-only backing), even if the settings are unchanged.
-  const persistedRef = useRef(false)
-  const lastSavedSigRef = useRef<string | null>(null)
-  const savingRef = useRef(false)
-  const saveRetriesRef = useRef(0)
   useEffect(() => {
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
-    persistedRef.current = false
-    lastSavedSigRef.current = null
-    savingRef.current = false
     let cancelled = false
     setFullMixState('mixing')
     const mixStart = performance.now()
@@ -745,10 +750,8 @@ export function ResultStep({
       setInputs({ ...layers, partner, originals: [], bed: null })
       const voiceMs = performance.now() - t0
       if (musicUrlsAll.length === 0) {
-        // No music stems — Full song is impossible; save the vocal (null path).
+        // No music stems — Full song is impossible; Save keeps the vocal (null path).
         setFullMixState('no-stems'); setMode('vocals')
-        persistedRef.current = true
-        if (persistMix) onFullMixReady?.(null)
         return
       }
       // 2. Music + backing in the take's key, and the Original side.
@@ -794,8 +797,6 @@ export function ResultStep({
       if (cancelled) return
       console.error('[result] mix preparation failed:', err)
       setFullMixState('error'); setMode('vocals')
-      persistedRef.current = true
-      if (persistMix) onFullMixReady?.(null)
     })
     return () => { cancelled = true }
   }, [convertedVocalsUrl, stemResult?.vocalsUrl]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -827,24 +828,21 @@ export function ResultStep({
   }, [settledSig, settingsSig, fullMixState, updating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Saved track = offline render of the same graph with the settled settings
+  // Saving is MANUAL: only "Save to library" (or "Save changes" / "Retry")
+  // starts it. First save inserts the row (+ the music-only backing); later
+  // saves UPDATE it — no re-conversion, no credits.
   const settledParams = (): MixParams => liveParams.vocalsOnly ? { ...liveParams, vocalsOnly: false } : liveParams
-  const savedFlashTimerRef = useRef<ReturnType<typeof setTimeout>>()
-  const [savedFlash, setSavedFlash] = useState(false)
   const settledSigRef = useRef(settledSig)
   settledSigRef.current = settledSig
-  async function savePolish() {
-    if (savingRef.current || !inputsRef.current?.bed) return
-    const sig = settledSigRef.current
-    if (sig === lastSavedSigRef.current) return
-    const firstSave = lastSavedSigRef.current === null
-    savingRef.current = true
+  // Build, encode and upload the mix for settings `sig`, then save the row.
+  // Resolves true only when the library has it.
+  async function saveMix(firstSave: boolean): Promise<boolean> {
     let saved = false
     const saveStart = performance.now()
     // Where the save's time goes (ms): master = getting the mastered mix (≈0
     // when the player already made it for these settings), wav/mp3 = encoding,
     // upload = presign + PUT; inst* = the music-only backing (first save only);
-    // row = updating the saved track (re-saves; the first save's row is logged
-    // by the page as result-save-row).
+    // row = saving the library entry.
     const mixMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }, instMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }
     const extra: Record<string, number> = {}
     try {
@@ -858,7 +856,7 @@ export function ResultStep({
         saved = false
       } else if (firstSave) {
         // Music-only backing (Perform Live / Sing along), in the take's key —
-        // built + uploaded ONCE on the first save. Strictly best-effort.
+        // built + uploaded with the first save. Strictly best-effort.
         let instrumentalPath: string | null | undefined
         try {
           t0 = performance.now()
@@ -869,8 +867,7 @@ export function ResultStep({
             instrumentalPath = await uploadMixMp3(inst, instMs, 'swap-instrumental.mp3')
           }
         } catch { /* row just won't offer the music-only backing */ }
-        onFullMixReady?.(mixPath, instrumentalPath)
-        saved = true
+        saved = (await onFullMixReady?.(mixPath, instrumentalPath)) === true
       } else {
         t0 = performance.now()
         const ok = await onPolishResave?.(mixPath)
@@ -885,37 +882,43 @@ export function ResultStep({
       ...(firstSave ? { instWav: instMs.wav, instMp3: instMs.mp3, instUpload: instMs.upload } : {}),
       ok: saved ? 1 : 0, total: performance.now() - saveStart,
     })
-    savingRef.current = false
-    if (saved) {
-      saveRetriesRef.current = 0
-      lastSavedSigRef.current = sig
-      setSavedFlash(true)
-      clearTimeout(savedFlashTimerRef.current)
-      savedFlashTimerRef.current = setTimeout(() => setSavedFlash(false), 2200)
-      if (settledSigRef.current !== sig) void savePolish()
-    } else if (firstSave) {
-      // A failed FIRST save: retry twice, then say so.
-      if (saveRetriesRef.current < 2) { saveRetriesRef.current++; setTimeout(() => { void savePolish() }, 3000) }
-      else { onToast("Couldn't save your track — check your connection. Change any knob to try again, or download it now."); onSaveFailed?.() }
-    } else {
-      // A failed RE-save (new polish): retry twice, then say the earlier
-      // version is what's saved — never leave the user believing it updated.
-      if (saveRetriesRef.current < 2) { saveRetriesRef.current++; setTimeout(() => { void savePolish() }, 3000) }
-      else { saveRetriesRef.current = 0; onToast("Couldn't update your saved track with these changes — the earlier version is still saved. Change any knob to try again.") }
-    }
+    return saved
   }
-  // Keep the SAVED track in sync with the settled settings (first run inserts
-  // the row; later changes UPDATE it — no re-conversion, no credits).
+  // One save attempt, shown as Saving… → Saved ✓ / Not saved — Retry. A try
+  // still running after SAVE_STALL_MS is shown as not saved (Retry starts a
+  // new one); if the slow one does finish, the screen switches to Saved ✓.
+  const saveTokenRef = useRef(0)
+  async function saveNow() {
+    if (!saveInfo || !onSaveUpdate) return
+    const sig = settledSigRef.current
+    const firstSave = saveInfo.savedSig === null
+    const token = ++saveTokenRef.current
+    onSaveUpdate({ state: 'saving', stalled: false })
+    const stall = setTimeout(() => { if (saveTokenRef.current === token) onSaveUpdate({ state: 'failed', stalled: true }) }, SAVE_STALL_MS)
+    let ok = false
+    try {
+      ok = fullMixState === 'ready' && inputsRef.current?.bed
+        ? await saveMix(firstSave)
+        : (await onFullMixReady?.(null)) === true // no music: the converted voice alone
+    } catch { ok = false }
+    clearTimeout(stall)
+    if (ok) onSaveUpdate({ state: 'saved', savedSig: sig, stalled: false })
+    else if (saveTokenRef.current === token) onSaveUpdate({ state: 'failed', stalled: false })
+  }
+  // The mix is ready to save: built, and the knobs have settled.
+  const saveReady = (fullMixState === 'ready' || fullMixState === 'no-stems' || fullMixState === 'error') && !updating && settledSig === settingsSig
+    && character === voiceFx.character && harmony === voiceFx.harmony && studioVoice === voiceFx.studio
+  // A save asked for on Configure: start it once the mix is ready.
   useEffect(() => {
-    if (!persistMix || persistedRef.current) return
-    if (fullMixState !== 'ready' || updating) return
-    if (settledSig !== settingsSig || character !== voiceFx.character || harmony !== voiceFx.harmony || studioVoice !== voiceFx.studio) return
-    if (savingRef.current || settledSig === lastSavedSigRef.current) return
-    const t = setTimeout(() => { void savePolish() }, 1000)
-    return () => clearTimeout(t)
-  }, [persistMix, fullMixState, updating, settledSig, settingsSig, voiceFx]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => clearTimeout(savedFlashTimerRef.current), [])
+    if (!saveRequested || !saveReady || saveInfo?.state === 'saving') return
+    onSaveRequestHandled?.()
+    void saveNow()
+  }, [saveRequested, saveReady]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Saved, then the knobs moved: the library holds the earlier version.
+  const changedSinceSave = saveInfo?.state === 'saved' && saveInfo.savedSig !== null && saveInfo.savedSig !== settledSig
+  useEffect(() => {
+    if (saveInfo && saveInfo.changed !== changedSinceSave) onSaveUpdate?.({ changed: changedSinceSave })
+  }, [changedSinceSave, saveInfo?.changed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Player controls ─────────────────────────────────────────────────────────
   const fullReady = fullMixState === 'ready'
@@ -1183,7 +1186,6 @@ export function ResultStep({
           <div className="vs-polish">
             <div className="vs-polish-head">
               <span className="vs-polish-title">Polish</span>
-              {savedFlash && <span className="vs-polish-saved">Saved ✓</span>}
               <span className="vs-polish-presets">
                 {matched && (
                   <button className={`vs-polish-preset${polishSource === 'matched' ? ' vs-polish-preset--on' : ''}`} onClick={() => { setPolishSource('matched'); setStudioVoice(true); setStyle('none'); applyPreset(matched.preset) }} title="Warmth, treble and reverb matched to the original singer's vocal">Match song</button>
@@ -1257,26 +1259,52 @@ export function ResultStep({
         )}
 
 
-        {/* Unsaved preview → save it as the full swap (no re-conversion) */}
-        {previewSaveCost != null && onSavePreview && (
-          <div className="vs-save-preview">
-            <div className="vs-save-preview-txt">
-              <strong>This is a preview — not saved yet.</strong> Like it? Save this exact take as your full swap —
-              no re-conversion{previewSaveCost < 200 ? <>, and the {200 - previewSaveCost} cr you paid for the preview counts toward it</> : null}.
+        {/* Save to library — saving happens only when the user presses it. */}
+        {saveInfo && (persistMix || (previewSaveCost != null && onSavePreview)) && (() => {
+          const payFirst = !persistMix && previewSaveCost != null
+          const label = payFirst ? `Save to library · ${previewSaveCost} cr` : 'Save to library'
+          const saveBtn = (text: string) => (
+            <button
+              className="vs-save-preview-btn"
+              disabled={!saveReady}
+              onClick={() => { if (payFirst) onSavePreview?.(); else void saveNow() }}
+            >
+              {saveReady ? text : 'Preparing the mix…'}
+            </button>
+          )
+          if (saveInfo.state === 'saving') {
+            return <div className="vs-save-status vs-save-status--saving" role="status"><span className="vs-polish-spin" /> Saving… please keep this page open.</div>
+          }
+          if (saveInfo.state === 'failed') {
+            return (
+              <div className="vs-save-status vs-save-status--failed" role="alert">
+                <span className="vs-save-status-txt">Not saved{saveInfo.stalled ? ' — it was taking too long' : ''}.</span>
+                {saveBtn('Retry')}
+              </div>
+            )
+          }
+          if (saveInfo.state === 'saved') {
+            return changedSinceSave ? (
+              <div className="vs-save-status vs-save-status--saving" role="status">
+                <span className="vs-save-status-txt">Saved ✓ with your earlier settings — these changes aren&rsquo;t saved yet.</span>
+                {saveBtn('Save changes')}
+              </div>
+            ) : (
+              <div className="vs-save-status vs-save-status--saved" role="status">Saved ✓ · <a href="/swaps">Open Saved Tracks</a></div>
+            )
+          }
+          return (
+            <div className="vs-save-preview">
+              <div className="vs-save-preview-txt">
+                <strong>Not saved yet.</strong>{' '}
+                {payFirst
+                  ? <>This is a preview. Saving keeps this exact take — no re-conversion{previewSaveCost! < 200 ? <>, and the {200 - previewSaveCost!} cr you paid for the preview counts toward it</> : null}.</>
+                  : <>Press Save to keep this swap in your library.</>}
+              </div>
+              {saveBtn(label)}
             </div>
-            <button className="vs-save-preview-btn" onClick={onSavePreview}>💾 Save as full swap · {previewSaveCost} cr</button>
-          </div>
-        )}
-
-        {/* First save: it takes about a minute — say so, so nobody looks in
-            Saved Tracks too early (2026-10-09 live test). */}
-        {saveStatus && (
-          <div className={`vs-save-status vs-save-status--${saveStatus}`} role="status">
-            {saveStatus === 'saving' && <><span className="vs-polish-spin" /> Saving to your library… about a minute. You can keep listening; please keep this page open.</>}
-            {saveStatus === 'saved' && <>✓ Saved to your library · <a href="/swaps">Open Saved Tracks</a></>}
-            {saveStatus === 'failed' && <>Couldn&rsquo;t save this track — download it now, or change any knob to try again.</>}
-          </div>
-        )}
+          )
+        })()}
 
         {/* Download / Share */}
         <div className="vs-dl-row">
@@ -1419,11 +1447,6 @@ export function ResultStep({
         @keyframes vsPolishSpin { to { transform: rotate(360deg); } }
         .vs-updating { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #C4B5FD; margin-left: 8px; }
         .vs-updating-sub { color: #8E8EB4; }
-        .vs-polish-saved {
-          font-size: 10px; font-weight: 700; color: #34D399;
-          letter-spacing: 0.3px; animation: vsSavedFade 0.25s ease;
-        }
-        @keyframes vsSavedFade { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
         .vs-polish-presets { display: flex; gap: 8px; margin-left: auto; }
         .vs-polish-preset {
           border: 1px solid #3C3C6A; background: transparent; color: #A0A0C8;
@@ -1475,6 +1498,8 @@ export function ResultStep({
         .vs-save-status--saved { color: #34D399; background: rgba(16,185,129,.07); border: 1px solid rgba(16,185,129,.25); }
         .vs-save-status--saved a { color: #F0F0FF; font-weight: 600; }
         .vs-save-status--failed { color: #F87171; background: rgba(248,113,113,.06); border: 1px solid rgba(248,113,113,.25); }
+        .vs-save-status-txt { flex: 1 1 220px; }
+        .vs-save-preview-btn:disabled { opacity: .55; cursor: default; }
         .vs-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
         .vs-dl-btn {
           padding: 10px 20px; border-radius: 8px;

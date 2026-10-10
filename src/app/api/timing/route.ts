@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const stage = typeof body.stage === 'string' && /^[a-z0-9-]{1,32}$/.test(body.stage) ? body.stage : null
   if (!stage || !body.fields || typeof body.fields !== 'object') return new NextResponse(null, { status: 400 })
   const parts = Object.entries(body.fields as Record<string, unknown>)
-    .filter(([k, v]) => /^[a-zA-Z]{1,24}$/.test(k) && typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e8)
+    .filter(([k, v]) => /^[a-zA-Z][a-zA-Z0-9]{0,23}$/.test(k) && typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e8)
     .slice(0, 16)
     .map(([k, v]) => `${k}=${Math.round(v as number)}`)
   console.log(`[timing] client stage=${stage} ${parts.join(' ')} user=${user.id.slice(0, 8)}`)
