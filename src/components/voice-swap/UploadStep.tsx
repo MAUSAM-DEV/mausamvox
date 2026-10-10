@@ -1,6 +1,6 @@
 'use client'
 
-import { pollUntil, fetchRetry } from '@/lib/poll'
+import { pollUntil, fetchRetry, waitOrVisible } from '@/lib/poll'
 import { useState, useRef, useEffect } from 'react'
 import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
@@ -318,7 +318,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
       if (!start.ok || !hash) { console.warn('[hq-split] not started:', error ?? start.status); return null }
       let errors = 0
       while (Date.now() - t0 < HQ_MAX_MS) {
-        await new Promise((r) => setTimeout(r, HQ_POLL_MS))
+        await waitOrVisible(HQ_POLL_MS)
         const res = await fetch(`/api/hq-split?hash=${encodeURIComponent(hash)}&t=${Date.now() - t0}`).catch(() => null)
         const data = res?.ok ? await res.json().catch(() => null) : null
         if (!data) { if (++errors > 10) return null; continue }

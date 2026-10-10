@@ -1,7 +1,7 @@
 'use client'
 
 import { makeKeyPreviews, type KeyPreview } from './keyPreviews'
-import { pollUntil, fetchRetry } from '@/lib/poll'
+import { pollUntil, fetchRetry, waitOrVisible } from '@/lib/poll'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ADMIN_EMAILS } from '@/lib/admin'
@@ -743,7 +743,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     const started = Date.now()
     let pollErrors = 0
     while (Date.now() - started < MAX_WAIT_MS) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      await waitOrVisible(POLL_INTERVAL_MS)
       if (karaokeJobRef.current !== jobId) return 'superseded'
       let pollData: Record<string, unknown>
       try {
@@ -1334,7 +1334,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         const started = Date.now()
         let pollErrors = 0
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+          await waitOrVisible(POLL_INTERVAL_MS)
           let data: { status?: string; error?: string; convertedVocalsUrl?: string }
           try {
             const res = await fetch(`/api/voice-convert?id=${predictionId}`)

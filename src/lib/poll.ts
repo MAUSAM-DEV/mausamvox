@@ -13,6 +13,25 @@ export class PollError extends Error {}
 
 export type PollStep<R> = { done: R } | { failed: string } | 'wait'
 
+// Sleep for `ms` between status checks — but wake at once when the page comes
+// back into view (2026-10-10: browsers slow timers in a background tab, so a
+// finished conversion went unnoticed for 45 s after the user returned).
+export function waitOrVisible(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') { setTimeout(resolve, ms); return }
+    const onBack = () => { if (document.visibilityState === 'visible') done() }
+    const done = () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onBack)
+      window.removeEventListener('focus', onBack)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    document.addEventListener('visibilitychange', onBack)
+    window.addEventListener('focus', onBack)
+  })
+}
+
 const transientStatus = (s: number) => s >= 500 || s === 429 || s === 408
 
 // fetch that retries a dropped connection or a transient server reply
@@ -45,7 +64,7 @@ export async function pollUntil<R, T = Record<string, unknown>>(opts: {
   const started = Date.now()
   let errors = 0
   while (Date.now() - started < opts.maxWaitMs) {
-    await new Promise((r) => setTimeout(r, opts.intervalMs))
+    await waitOrVisible(opts.intervalMs)
     if (opts.cancelled?.()) return null
     let data: T, ok: boolean
     try {
