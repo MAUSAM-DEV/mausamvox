@@ -6,14 +6,14 @@ import { encodeWav, encodeMp3, SAVED_MP3_KBPS } from './audioClip'
 import { encodeMp3Background } from './mp3Client'
 import { fetchRetry } from '@/lib/poll'
 import {
-  LivePlayer, renderMix, NEUTRAL_PARAMS, BED_ROOM, VOICE_OVER_MUSIC_DB, type MixInputs, type MixParams, type PolishStyle,
+  LivePlayer, renderMix, NEUTRAL_PARAMS, BED_ROOM, VOICE_OVER_MUSIC_DB, HIGH_NOTE_ASSIST, type MixInputs, type MixParams, type PolishStyle,
   WARMTH_MAX_DB, BASS_MAX_DB, TREBLE_MAX_DB, REVERB_MAX_WET, ECHO_MAX_WET, LEVEL_MAX_DB, BLEND_MAX,
 } from './liveMix'
 import { matchPolish, type MatchedPolish } from '@/lib/polish-match'
 import { keyName, type KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import { harmonyMode } from '@/lib/audio-dsp/harmony-mode'
 import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
-import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspVoiceTargets, dspLufs, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
+import { dspHarmony, dspKey, dspRemoveDoubles, dspShift, dspPolishVoice, dspVoiceTargets, dspLufs, dspPitchTrack, dspMaster, dspAlign, dspSpectrum, dspFilters } from './dspClient'
 import { subShelfDb, SUB_SHELF_HZ, toneMatchDb, toneEqFilters } from '@/lib/audio-dsp/tone-match'
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
@@ -47,6 +47,9 @@ interface ResultStepProps {
   onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => Promise<boolean> | void
   // The music-only backing, uploaded AFTER the first save (Saved ✓ doesn't wait for it).
   onInstrumentalReady?: (instrumentalPath: string) => Promise<boolean> | void
+  // Top of the chosen voice's comfortable range (MIDI) — the high-note assist
+  // starts above it. Absent for duets.
+  voiceTop?: () => Promise<number | null>
   // Re-save the saved track's audio when polish changes AFTER the first save
   // (UPDATE the same row — no re-conversion, no credits). Returns success.
   onPolishResave?: (mixedPath: string) => Promise<boolean> | void
@@ -290,6 +293,34 @@ async function makeBed(spec: BedSpec, opts: BedOpts, fallback: Fallback): Promis
   }
   return sum(parts)
 }
+// ── High-note assist (2026-10-10) ──────────────────────────────────────────
+// Where our voice sings above its comfortable top note, a little of the
+// original singer's lead (in the take's key) goes UNDER it for fullness: 0 at
+// the top note, full at ASSIST_FADE_ST above, smoothed (80 ms in, 250 ms out).
+// The voice itself is never turned down (unlike Blend, which trades the two).
+const ASSIST_FADE_ST = 2, ASSIST_ATTACK_S = 0.08, ASSIST_RELEASE_S = 0.25
+function assistEnvelope(midi: Float32Array, hopS: number, topMidi: number): Float32Array {
+  const env = new Float32Array(midi.length), up = 1 - Math.exp(-hopS / ASSIST_ATTACK_S), down = 1 - Math.exp(-hopS / ASSIST_RELEASE_S)
+  let e = 0
+  for (let i = 0; i < midi.length; i++) {
+    const m = midi[i], want = Number.isNaN(m) ? 0 : Math.max(0, Math.min(1, (m - topMidi) / ASSIST_FADE_ST))
+    e += (want - e) * (want > e ? up : down)
+    env[i] = e
+  }
+  return env
+}
+function applyEnvelope(src: AudioBuffer, env: Float32Array, hopS: number): AudioBuffer {
+  const out = src.numberOfChannels === 1 ? [new Float32Array(src.length)] : [new Float32Array(src.length), new Float32Array(src.length)]
+  for (let c = 0; c < out.length; c++) {
+    const x = src.getChannelData(c)
+    for (let i = 0; i < x.length; i++) {
+      const t = i / src.sampleRate / hopS, k = Math.floor(t), f = t - k
+      out[c][i] = x[i] * ((env[k] ?? 0) * (1 - f) + (env[k + 1] ?? 0) * f)
+    }
+  }
+  return toBuffer(out, src.sampleRate)
+}
+
 // Last few beds (each ~95 MB for a 4½-min song, so only a few are kept).
 const bedCache = new Map<string, Promise<AudioBuffer | null>>()
 export function bedFor(spec: BedSpec, opts: BedOpts = {}, fallback: Fallback = quietFallback): Promise<AudioBuffer | null> {
@@ -514,7 +545,7 @@ function PolishKnob({
 export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
+  persistMix, onFullMixReady, onInstrumentalReady, voiceTop, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
   keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
 }: ResultStepProps) {
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -578,14 +609,17 @@ export function ResultStep({
   // Live: every knob move goes straight to the graph.
   // Tone match for this take (set once the first mix is measured; undefined = flat).
   const [toneEq, setToneEq] = useState<number[] | undefined>(undefined)
-  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: BED_ROOM, glue: true, toneEq }
+  // High-note assist: on by default; the strength is HIGH_NOTE_ASSIST (liveMix).
+  const [assistOn, setAssistOn] = useState(true)
+  const [assistShare, setAssistShare] = useState<number | null>(null) // % of the sung time it touches
+  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: BED_ROOM, glue: true, toneEq, assist: assistOn ? HIGH_NOTE_ASSIST : 0 }
   const liveParamsRef = useRef(liveParams)
   liveParamsRef.current = liveParams
-  useEffect(() => { player?.setParams(liveParams) }, [warmth, bass, treble, reverb, echo, level, blend, style, mode, toneEq]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { player?.setParams(liveParams) }, [warmth, bass, treble, reverb, echo, level, blend, style, mode, toneEq, assistOn]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { player?.setView({ side: ab === 'Original' ? 'original' : 'swapped', vocalsOnly: mode === 'vocals' }) }, [ab, mode, player])
 
   // Settled settings (for the saved file): 600 ms after the last change.
-  const settingsSig = `${warmth}|${bass}|${treble}|${reverb}|${echo}|${level}|${blend}|${style}|${character}|${harmony}|${studioVoice}`
+  const settingsSig = `${warmth}|${bass}|${treble}|${reverb}|${echo}|${level}|${blend}|${style}|${character}|${harmony}|${studioVoice}|${assistOn}`
   const [settledSig, setSettledSig] = useState(settingsSig)
   useEffect(() => {
     const t = setTimeout(() => setSettledSig(settingsSig), 600)
@@ -754,7 +788,7 @@ export function ResultStep({
     const full = { ...params, vocalsOnly: false }
     const inp = inputsRef.current!
     // Blend's original singer only changes the mix when Blend is up.
-    const audioKey = [...inp.voices, ...inp.harmony, inp.partner, inp.bed, ...(full.blend > 0 ? inp.originals : [])].map(bufId).join(',')
+    const audioKey = [...inp.voices, ...inp.harmony, inp.partner, inp.bed, ...(full.blend > 0 ? inp.originals : []), ...(full.assist ? [inp.assist ?? null] : [])].map(bufId).join(',')
     const key = `${JSON.stringify(full)}|${audioKey}`
     if (masterCacheRef.current?.key === key) return masterCacheRef.current.result.then((r) => ({ ...r, cached: true }))
     const result = (async () => {
@@ -790,6 +824,7 @@ export function ResultStep({
     originalRef.current = null
     originalTakeRef.current++
     setToneEq(undefined)
+    setAssistShare(null)
     void songRef() // the uploaded song's loudness, measured alongside
     setFullMixState('mixing')
     const mixStart = performance.now()
@@ -846,6 +881,28 @@ export function ResultStep({
       if (blendIn.levelDb !== undefined) setLevel(blendIn.levelDb)
       const blendMs = performance.now() - t0
       console.log('[voice-fx] blend-in match', JSON.stringify(blendIn))
+      // High-note assist layer (single voice): our voice's notes vs its
+      // comfortable top → the original lead (take's key) faded in only there.
+      t0 = performance.now()
+      try {
+        const top = converted.length === 1 && !partner && voiceTop ? await voiceTop() : null
+        if (top !== null && !cancelled) {
+          const conv = await decoded(converted[0])
+          const { midi, hopSeconds } = await dspPitchTrack(monoOf(conv), conv.sampleRate)
+          const env = assistEnvelope(midi, hopSeconds, top)
+          let sung = 0, on = 0
+          for (let i = 0; i < midi.length; i++) if (!Number.isNaN(midi[i])) { sung++; if (env[i] > 0.5) on++ }
+          setAssistShare(sung ? Math.round((100 * on) / sung) : 0)
+          if (on > 0) {
+            const leadUrl = stemResult.leadVocalsUrl || stemResult.vocalsUrl
+            const src = await inKey(leadUrl, () => decoded(leadUrl))
+            if (!cancelled) setInputs({ ...inputsRef.current!, assist: applyEnvelope(src, env, hopSeconds) })
+          }
+          console.log(`[voice-fx] high-note assist: comfortable top MIDI ${top.toFixed(1)}, on ${sung ? ((100 * on) / sung).toFixed(1) : 0}% of the sung time`)
+        }
+      } catch (err) { console.warn('[voice-fx] high-note assist skipped:', err) }
+      const assistMs = performance.now() - t0
+      if (cancelled) return
       // Mastering: the swapped side's gain (the Original side is mastered to
       // the same loudness when it's built, so the A/B compare is fair).
       // Tone match (2026-10-10, the founder's pick "C"): render once without it,
@@ -879,7 +936,7 @@ export function ResultStep({
       // the swapped mix; target = waiting for the uploaded song's loudness;
       // search / limit = mastering; master = render + target + search + limit.
       clientTiming('result-mix', {
-        voice: voiceMs, music: musicMs, blend: blendMs, render: ms.render, target: ms.target, tone: toneMs,
+        voice: voiceMs, music: musicMs, blend: blendMs, assist: assistMs, render: ms.render, target: ms.target, tone: toneMs,
         search: ms.search, limit: ms.limit, master: masterMs, total: performance.now() - mixStart,
       })
       // 3. Blend's original singer(s), ready in the background so Blend is instant.
@@ -1319,6 +1376,13 @@ export function ResultStep({
                 format={(v) => (v === 0 ? 'Natural' : v < 0 ? `Deeper ${-v}` : `Brighter ${v}`)}
               />
             </div>
+            {assistShare !== null && assistShare > 0 && (
+              <div className="vs-harm-row">
+                <span className="vs-harm-lbl" title="On notes above your voice's comfortable range, a little of the original singer is blended UNDER your voice for fullness. Your voice stays in front.">High-note assist</span>
+                <button className={`vs-polish-preset${assistOn ? ' vs-polish-preset--on' : ''}`} onClick={() => setAssistOn(true)}>On</button>
+                <button className={`vs-polish-preset${!assistOn ? ' vs-polish-preset--on' : ''}`} onClick={() => setAssistOn(false)}>Off</button>
+              </div>
+            )}
             <div className="vs-harm-row">
               <span className="vs-harm-lbl">Add harmony</span>
               {(['off', '2', '4'] as HarmonySetting[]).map((h) => (
@@ -1335,6 +1399,7 @@ export function ResultStep({
                 ? <>Harmony: <strong>{harmony === '4' ? 'a 3rd and a 5th above, an octave below' : 'a 3rd above'}</strong>, following the {keyName(shiftedKey(songKey)!)} scale so every note is in key.{' '}</>
                 : <>Harmony: <strong>octaves</strong> — {shiftedKey(songKey)!.mode === 'minor' ? `the song is in ${keyName(shiftedKey(songKey)!)}` : 'the key isn’t clear enough for thirds'}, so octaves keep it from sounding off.{' '}</>
               )}
+              {assistShare !== null && assistShare > 0 && <>High-note assist {assistOn ? `adds ${Math.round(HIGH_NOTE_ASSIST * 100)}% of the original singer under your voice on your highest notes (${assistShare}% of the song)` : 'is off'}. </>}
               Level and Blend are instant; Character and Harmony take a few seconds. Free · applies to both tabs &amp; baked into the saved track.
             </div>
           </div>

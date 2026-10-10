@@ -19,12 +19,13 @@ type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; t
 type SpectrumReq = { op: 'spectrum'; channels: Float32Array[]; sampleRate: number }
 type FiltersReq = { op: 'filters'; channels: Float32Array[]; sampleRate: number; filters: Filter[] }
 type AlignReq = { op: 'align'; channels: Float32Array[]; sampleRate: number; other: Float32Array[] }
+type TrackReq = { op: 'track'; mono: Float32Array; sampleRate: number }
 // Mastering step times inside the worker: the gain search, then the limiter.
 export type MasterMs = { search: number; limit: number }
-type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq | SpectrumReq | FiltersReq | AlignReq
+type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq | SpectrumReq | FiltersReq | AlignReq | TrackReq
 export type DspRequest = AnyReq & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number; ms?: MasterMs; nums?: number[] }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number; p90Midi: number }; value?: number; ms?: MasterMs; nums?: number[] }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -89,6 +90,11 @@ async function runInline(req: DspRequest): Promise<DspResponse> {
     const { lufs } = await import('@/lib/audio-dsp/master')
     return { id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) }
   }
+  if (req.op === 'track') {
+    const { trackPitch } = await import('@/lib/audio-dsp/pitch-track')
+    const t = trackPitch(req.mono, req.sampleRate)
+    return { id: req.id, ok: true, channels: [t.midi], value: t.hopSeconds }
+  }
   if (req.op === 'spectrum' || req.op === 'filters' || req.op === 'align') {
     const t = await import('@/lib/audio-dsp/tone-match')
     if (req.op === 'spectrum') return { id: req.id, ok: true, channels: [Float32Array.from(t.powerSpectrum(req.channels))] }
@@ -133,7 +139,7 @@ export async function dspRemoveDoubles(channels: Float32Array[], sampleRate: num
 }
 
 // Median sung note + seconds of clear pitch (Auto Song Key).
-export async function dspPitchStats(mono: Float32Array, sampleRate: number): Promise<{ medianMidi: number; voicedSeconds: number }> {
+export async function dspPitchStats(mono: Float32Array, sampleRate: number): Promise<{ medianMidi: number; voicedSeconds: number; p90Midi: number }> {
   const r = await call({ op: 'pitchStats', mono, sampleRate }, [mono.buffer])
   if (!r.ok || !r.stats) throw new Error('Pitch analysis failed')
   return r.stats
@@ -204,4 +210,11 @@ export async function dspAlign(channels: Float32Array[], other: Float32Array[], 
   const r = await call({ op: 'align', channels, sampleRate, other }, [...channels, ...other].map((c) => c.buffer))
   if (!r.ok) throw new Error('Alignment failed')
   return r.nums && r.nums.length === 2 ? { lag: r.nums[0], gain: r.nums[1] } : null
+}
+
+// Pitch track (MIDI per hop, NaN = not sung) — for the high-note assist.
+export async function dspPitchTrack(mono: Float32Array, sampleRate: number): Promise<{ midi: Float32Array; hopSeconds: number }> {
+  const r = await call({ op: 'track', mono, sampleRate }, [mono.buffer])
+  if (!r.ok || !r.channels?.[0] || typeof r.value !== 'number') throw new Error('Pitch tracking failed')
+  return { midi: r.channels[0], hopSeconds: r.value }
 }

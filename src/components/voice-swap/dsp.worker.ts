@@ -7,7 +7,7 @@ import { shiftAudio } from '@/lib/audio-dsp/stretch'
 import { detectKey } from '@/lib/audio-dsp/key-detect'
 import { renderHarmony } from '@/lib/audio-dsp/harmony'
 import { removeDoubles } from '@/lib/audio-dsp/doubles'
-import { pitchStats } from '@/lib/audio-dsp/pitch-track'
+import { pitchStats, trackPitch } from '@/lib/audio-dsp/pitch-track'
 import { polishVoice, airShare, sibilance } from '@/lib/audio-dsp/voice-polish'
 import { lufs, limit, masterGain } from '@/lib/audio-dsp/master'
 import { powerSpectrum, applyFilters, alignLag } from '@/lib/audio-dsp/tone-match'
@@ -38,6 +38,10 @@ ctx.onmessage = async (e) => {
       ctx.postMessage({ id: req.id, ok: true, value: airShare(req.mono, req.sampleRate), nums: [sibilance(req.mono, req.sampleRate)] })
     } else if (req.op === 'lufs') {
       ctx.postMessage({ id: req.id, ok: true, value: lufs(req.channels, req.sampleRate) })
+    } else if (req.op === 'track') {
+      const t = trackPitch(req.mono, req.sampleRate)
+      const midi = Float32Array.from(t.midi)
+      ctx.postMessage({ id: req.id, ok: true, channels: [midi], value: t.hopSeconds }, [midi.buffer])
     } else if (req.op === 'spectrum') {
       const spec = Float32Array.from(powerSpectrum(req.channels))
       ctx.postMessage({ id: req.id, ok: true, channels: [spec] }, [spec.buffer])

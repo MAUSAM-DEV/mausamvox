@@ -1098,7 +1098,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   }
 
   // Median sung note of a recording (whole song / whole sample), cached per URL.
-  const pitchStatsRef = useRef<Record<string, Promise<{ medianMidi: number; voicedSeconds: number } | null>>>({})
+  const pitchStatsRef = useRef<Record<string, Promise<{ medianMidi: number; voicedSeconds: number; p90Midi: number } | null>>>({})
   function pitchStatsOf(url: string) {
     pitchStatsRef.current[url] ??= (async () => {
       const res = await fetch(url)
@@ -1117,6 +1117,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const { signedUrl } = await res.json()
       return typeof signedUrl === 'string' ? signedUrl : null
     } catch { return null }
+  }
+  // Top of the voice's comfortable range (90% of its sample's sung notes are
+  // lower) — the high-note assist starts above it. null when unknown.
+  async function voiceTopMidi(voiceId: string): Promise<number | null> {
+    const sample = await voiceSampleUrl(voiceId)
+    const st = sample ? await pitchStatsOf(sample) : null
+    return st && st.voicedSeconds >= AUTO_KEY_MIN_VOICED_S && Number.isFinite(st.p90Midi) ? st.p90Midi : null
   }
   // Auto Song Key for this song + voice (0 = Original). Worked out from the
   // LEAD vocal only: duet stems and the whole vocal track (no lead/backing
@@ -1902,6 +1909,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
                 persistMix={armMixUpload}
                 onFullMixReady={handleFullMixReady}
+                voiceTop={selectedVoiceId && !convertedVocalsUrl2 ? () => voiceTopMidi(selectedVoiceId) : undefined}
                 onInstrumentalReady={handleInstrumentalReady}
                 onPolishResave={handlePolishResave}
                 voiceName={[
