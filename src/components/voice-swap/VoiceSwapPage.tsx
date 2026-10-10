@@ -60,6 +60,14 @@ const AVATAR_PALETTE = [
   'linear-gradient(135deg,#0CC7E8,#9D5CFF)',
 ]
 
+// A take kept for "Recent — not saved" (/api/unsaved): everything needed to
+// rebuild its Result screen without converting again.
+type UnsavedTake = {
+  type: 'preview' | 'full'; charged: number; key: string; songName: string
+  voiceId: string; voiceName: string; pitchShift: number; keyShift: number; autotune: Autotune; duetSinger: 'male' | 'female'
+  stemResult: StemResult; at: number
+}
+
 // Every StemResult URL field that has a durable-path twin. Used on cache
 // restore to re-sign fresh URLs for all of them in one /api/stems/refresh call.
 const STEM_PATH_FIELDS: { path: keyof StemResult; url: keyof StemResult }[] = [
@@ -291,6 +299,21 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     document.addEventListener('click', onClick, true)
     return () => { window.removeEventListener('beforeunload', warn); document.removeEventListener('click', onClick, true) }
   }, [unsavedTake])
+  // "Recent — not saved": the most recent unsaved swap, kept 24 h by
+  // /api/unsaved. Shown as a card on the Upload step; Open rebuilds its
+  // Result screen (no re-conversion, same price to save as before).
+  const [recentUnsaved, setRecentUnsaved] = useState<{ predictionId: string; take: UnsavedTake; voiceUrl: string; createdAt: string } | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  useEffect(() => {
+    if (!userId) return
+    fetch('/api/unsaved').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.recent?.take?.stemResult) setRecentUnsaved(d.recent) }).catch(() => {})
+  }, [userId])
+  function discardRecentUnsaved() {
+    const r = recentUnsaved
+    if (!r) return
+    setRecentUnsaved(null)
+    void fetch(`/api/unsaved?id=${encodeURIComponent(r.predictionId)}`, { method: 'DELETE' }).catch(() => {})
+  }
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps of
   // the same pair don't re-fetch + re-decode the same audio.
@@ -689,7 +712,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // on the next swap (handleProcess) / new swap.
     const t0 = performance.now()
     return persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, mixedPath ?? undefined, instrumentalPath ?? undefined)
-      .then((ok) => { clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 }); return ok })
+      .then((ok) => {
+        clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 })
+        // Saved → its "Recent — not saved" copy is no longer needed.
+        if (ok) void fetch(`/api/unsaved?id=${encodeURIComponent(ctx.predictionId)}`, { method: 'DELETE' }).catch(() => {})
+        return ok
+      })
   }
 
   // The music-only backing, uploaded by ResultStep after the first save landed:
@@ -1242,6 +1270,50 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     return p
   }
 
+  // Reopen the "Recent — not saved" take on the Result screen. Same pricing as
+  // before it was closed: a Full swap saves free, a preview costs 200 − what
+  // it cost. Stem links are re-signed from their storage paths.
+  async function openRecentUnsaved() {
+    const r = recentUnsaved
+    if (!r || restoring || !confirmLeave('open the other one anyway')) return
+    setRestoring(true)
+    try {
+      const t = r.take
+      const sr = await refreshStemUrls(t.stemResult)
+      const kept = await keepLocal(r.voiceUrl)
+      if (!kept.local) throw new Error('voice download failed')
+      karaokeJobRef.current++
+      genderSplitJobRef.current++
+      setKaraokeStatus('idle'); setKaraokeError(null); setAllowFullVocal(false)
+      replaceLocalVocals([kept])
+      setStemResult(sr); setIsDuet(false); setDuetMode('one'); setDuetSinger(t.duetSinger); setSelectedVoiceId2(null)
+      setSelectedVoiceId(t.voiceId); setPitchShift(t.pitchShift); setKeyAuto(false); setManualKey(t.keyShift); setAutotune(t.autotune)
+      persistContextRef.current = { predictionId: r.predictionId, songName: t.songName, voiceUsed: t.voiceName }
+      if (t.type === 'preview') {
+        lastPreviewRef.current = { key: t.key, predictionId: r.predictionId, charged: t.charged, at: Date.now(), saved: false, local: true }
+        setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - t.charged))
+        setArmMixUpload(false)
+      } else {
+        lastPreviewRef.current = null
+        setPreviewSaveCost(null)
+        lastSavedKeyRef.current = t.key
+        setArmMixUpload(true)
+      }
+      setPersistedSwapId(null)
+      setSaveInfo(NEW_TAKE_SAVE); setSaveRequested(false)
+      setConvertedVocalsUrl2(null)
+      setConvertedVocalsUrl(kept.url)
+      setResultTake({ keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.leadVocalsUrl || sr.vocalsUrl] })
+      setRecentUnsaved(null)
+      setStep(3)
+    } catch (err) {
+      console.warn('[unsaved] reopen failed:', err)
+      showToast("Couldn't reopen that swap — it may have expired.", 6000)
+    } finally {
+      setRestoring(false)
+    }
+  }
+
   // Keep the converted voice in the page: Replicate deletes its copy ~1 h after
   // the conversion, and the Result screen re-reads the voice on every knob
   // change and when saving (2026-10-04 live test: Save did nothing after ~50
@@ -1612,6 +1684,18 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       }
       if (type === 'full') clientTiming('convert-full', { total: performance.now() - convertStart })
       showToast(type === 'preview' ? 'Preview ready!' : 'Swap complete!')
+      // Keep this take recoverable for 24 h until it's saved ("Recent — not
+      // saved"). Single-voice swaps only. Fire-and-forget.
+      if (!target) {
+        const take: UnsavedTake = {
+          type, charged: type === 'preview' ? previewCost : 0, key: takeKey(takeKeyShift),
+          songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+          voiceId: voice.id, voiceName: voice.name, pitchShift, keyShift: takeKeyShift, autotune, duetSinger,
+          stemResult, at: Date.now(),
+        }
+        void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: startData.predictionId, take }) }).catch(() => {})
+        setRecentUnsaved(null)
+      }
 
       // Deduct credits and record swap (non-blocking).
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
@@ -1698,6 +1782,29 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                     training required), and generate. Same engine as Voice Swap, same credits.
                   </div>
                 </div>
+              </div>
+            )}
+            {step === 1 && recentUnsaved && !(convertedVocalsUrl && persistContextRef.current?.predictionId === recentUnsaved.predictionId) && (
+              <div className="vs-recent" role="region" aria-label="Recent — not saved">
+                <div className="vs-recent-txt">
+                  <span className="vs-recent-tag">Recent — not saved</span>
+                  <strong>{recentUnsaved.take.songName}</strong> · {recentUnsaved.take.voiceName}
+                  {' '}· {(() => { const m = Math.max(1, Math.round((Date.now() - Date.parse(recentUnsaved.createdAt)) / 60000)); return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago` })()}
+                  <span className="vs-recent-sub">Kept for 24 hours so you can still save it.</span>
+                </div>
+                <div className="vs-recent-btns">
+                  <button className="vs-btn-solid" onClick={() => { void openRecentUnsaved() }} disabled={restoring}>{restoring ? 'Opening…' : 'Open'}</button>
+                  <button className="vs-btn-ghost" onClick={discardRecentUnsaved} disabled={restoring}>Discard</button>
+                </div>
+                <style>{`
+                  .vs-recent { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 14px; border-radius: 10px; background: rgba(157,92,255,.08); border: 1px solid rgba(157,92,255,.35); font-size: 13px; color: #C4C4E0; }
+                  .vs-recent-txt { flex: 1 1 260px; line-height: 1.5; }
+                  .vs-recent-txt strong { color: #F0F0FF; }
+                  .vs-recent-tag { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(249,69,158,.15); color: #F9A8D4; font-size: 11px; font-weight: 700; }
+                  .vs-recent-sub { display: block; font-size: 11px; color: #8E8EB4; }
+                  .vs-recent-btns { display: flex; gap: 8px; }
+                  @media (max-width: 480px) { .vs-recent-btns { width: 100%; } .vs-recent-btns button { flex: 1; min-height: 44px; } }
+                `}</style>
               </div>
             )}
             {step === 1 && (
