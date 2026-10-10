@@ -135,30 +135,9 @@ function activeRms(s: Float32Array, sr: number): number {
   return n ? Math.sqrt(a / n) : 0
 }
 
-// How sharp the "s" sounds are (2026-10-10): the loud end (95th percentile)
-// of the 5 kHz+ envelope next to the whole voice's, on the sung parts, in dB.
-// The original lead's value is the sibilance target.
-export function sibilance(s: Float32Array, sr: number): number {
-  const hi = new Float32Array(s.length); highpass4(s, hi, 5000, sr, true)
-  const eh = envelope(hi, 5, sr), ef = envelope(s, 20, sr), gate = percentile(ef, 50)
-  const q = new Float32Array(s.length)
-  for (let i = 0; i < s.length; i++) q[i] = ef[i] > gate ? 20 * Math.log10(Math.max(eh[i], 1e-9) / Math.max(ef[i], 1e-9)) : -200
-  return percentile(q, 95, (v) => v > -199)
-}
-
-// The whole chain. `airTargetDb` = airShare() of the song's original lead;
-// `sibTargetDb` = its sibilance(): when our voice's "s" sounds are sharper,
-// a second de-ess pass (threshold found by bisection) brings them down to it.
-export function polishVoice(mono: Float32Array, sr: number, airTargetDb = DEFAULT_AIR_TARGET_DB, sibTargetDb?: number): Float32Array {
-  let y = addAir(deEss(mono, sr), sr, airTargetDb)
-  if (sibTargetDb !== undefined && Number.isFinite(sibTargetDb) && sibilance(y, sr) > sibTargetDb + 0.5) {
-    let lo = 0.1, hi = 0.36, best = deEss(y, sr, lo)
-    for (let it = 0; it < 5; it++) {
-      const mid = (lo + hi) / 2, z = deEss(y, sr, mid)
-      if (sibilance(z, sr) > sibTargetDb + 0.5) hi = mid; else { lo = mid; best = z }
-    }
-    y = best
-  }
+// The whole chain. `airTargetDb` = airShare() of the song's original lead.
+export function polishVoice(mono: Float32Array, sr: number, airTargetDb = DEFAULT_AIR_TARGET_DB): Float32Array {
+  const y = addAir(deEss(mono, sr), sr, airTargetDb)
   const k = activeRms(mono, sr) / Math.max(1e-9, activeRms(y, sr))
   for (let i = 0; i < y.length; i++) y[i] *= k
   return y

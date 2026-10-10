@@ -38,9 +38,6 @@ export interface MixParams {
   // on the whole mix, worked out per take (ResultStep). Off for vocals-only
   // and the Lo-fi / Radio styles. Absent = flat.
   toneEq?: number[]
-  // High-note assist (2026-10-10): level of the original lead under the voice
-  // on notes above the voice's comfortable range (0 = off). Absent = off.
-  assist?: number
 }
 
 export interface MixInputs {
@@ -49,13 +46,7 @@ export interface MixInputs {
   partner: AudioBuffer | null    // duet: the singer that wasn't converted
   originals: AudioBuffer[]       // Voice blend: the original singer(s), in the take's key
   bed: AudioBuffer | null        // music + backing vocals, in the take's key
-  // High-note assist: the original lead in the take's key, already faded in
-  // only on the high notes (ResultStep) — added under the voice, never instead.
-  assist?: AudioBuffer | null
 }
-// High-note assist strength: 20% of the original lead on the high notes —
-// the one number to change (0.15–0.25 sounded right in planning).
-export const HIGH_NOTE_ASSIST = 0.2
 
 export const NEUTRAL_PARAMS: MixParams = { warmth: 0, bass: 0, treble: 0, reverb: 0, echo: 0, levelDb: 0, blend: 0, style: 'none', vocalsOnly: false, bedRoom: 0, glue: false }
 // Blend f (founder's pick, 2026-10-09): the music gets 6% of the voice's room.
@@ -91,8 +82,6 @@ export const BLEND_MAX = 50
 // The separated-then-converted vocal sits low against the music; lift it.
 const VOCAL_MAKEUP = 1.3
 const MUSIC_GAIN = 0.8
-// How much louder the graph makes the voice than the music (dB), for level matching.
-export const VOICE_OVER_MUSIC_DB = 20 * Math.log10(VOCAL_MAKEUP / MUSIC_GAIN)
 const BUTTERWORTH_Q_DB = -3.01 // Web Audio low/high-pass Q is in dB; −3.01 dB = Q 0.707
 // Level before mastering: the ×0.7 headroom × 0.89 trim of the old final
 // stage. The music's glue sees the music at that same level (as when tuned).
@@ -130,7 +119,6 @@ export class MixGraph {
   readonly voiceIn: GainNode
   readonly blendIn: GainNode
   readonly extraIn: GainNode
-  readonly assistIn: GainNode
   readonly bedIn: GainNode
   private vocalBus: GainNode
   private warmthF: BiquadFilterNode
@@ -162,9 +150,9 @@ export class MixGraph {
     const gain = (v = 1) => { const g = ctx.createGain(); g.gain.value = v; return g }
     const filter = (type: BiquadFilterType, f: number) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.gain.value = 0; return b }
 
-    this.voiceIn = gain(); this.blendIn = gain(0); this.extraIn = gain(); this.bedIn = gain(MUSIC_GAIN); this.assistIn = gain(0)
+    this.voiceIn = gain(); this.blendIn = gain(0); this.extraIn = gain(); this.bedIn = gain(MUSIC_GAIN)
     this.vocalBus = gain(VOCAL_MAKEUP)
-    this.voiceIn.connect(this.vocalBus); this.blendIn.connect(this.vocalBus); this.extraIn.connect(this.vocalBus); this.assistIn.connect(this.vocalBus)
+    this.voiceIn.connect(this.vocalBus); this.blendIn.connect(this.vocalBus); this.extraIn.connect(this.vocalBus)
 
     // Tone (linear shelves — order doesn't matter), then the time effects.
     this.warmthF = filter('lowshelf', WARMTH_FREQ_HZ)
@@ -281,7 +269,6 @@ export class MixGraph {
     const b = this.hasOriginals ? clamp(p.blend, 0, BLEND_MAX) / 100 : 0
     to(this.voiceIn.gain, 1 - b)
     to(this.blendIn.gain, b)
-    to(this.assistIn.gain, clamp(p.assist ?? 0, 0, 0.5))
     to(this.vocalBus.gain, VOCAL_MAKEUP * Math.pow(10, clamp(p.levelDb, -LEVEL_MAX_DB, LEVEL_MAX_DB) / 20))
     to(this.warmthF.gain, (clamp(p.warmth, 0, 100) / 100) * WARMTH_MAX_DB)
     to(this.bassF.gain, clamp(p.bass, -BASS_MAX_DB, BASS_MAX_DB))
@@ -334,14 +321,13 @@ export class MixGraph {
     inputs.harmony.forEach((b) => play(b, this.extraIn, g))
     if (inputs.partner) play(inputs.partner, this.extraIn, g)
     inputs.originals.forEach((b) => play(b, this.blendIn, g))
-    if (inputs.assist) play(inputs.assist, this.assistIn, 1)
     if (inputs.bed) play(inputs.bed, this.bedIn, 1)
     return sources
   }
 }
 
 export function mixDuration(inputs: MixInputs): number {
-  return Math.max(0, ...[...inputs.voices, ...inputs.harmony, ...inputs.originals, inputs.partner, inputs.bed, inputs.assist ?? null]
+  return Math.max(0, ...[...inputs.voices, ...inputs.harmony, ...inputs.originals, inputs.partner, inputs.bed]
     .filter((b): b is AudioBuffer => b !== null).map((b) => b.duration))
 }
 
