@@ -4,6 +4,10 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Faster Result screen** (music built during the conversion, Original side on demand, loudness from the start), engine warm from the Upload step, 15 s status-check timeout, page-pause diagnostics. `tsc --noEmit` clean; clean build passed. `4d86344`
+- **"Recent — not saved"** — latest unsaved single-voice swap recoverable 24 h (`/api/unsaved`, private storage, no DB). `tsc --noEmit` clean; clean build passed. `dfbf103`
+- **Fast save** — background MP3 worker (byte-identical), storage-side copy in persist, backing after Saved ✓. `tsc --noEmit` clean; clean build passed. `f89912c`
+- **Manual "Save to library"** + Saving… / Saved ✓ / Not saved — Retry + leave warnings; retest read (Preview → no auto-save; save 78.5 s). `tsc --noEmit` clean; clean build passed. `48af1fa`
 - **Check job status on return to the tab** (`waitOrVisible` in all swap waits). `tsc --noEmit` clean; clean build passed. `22014b3`
 - **"New version — Reload" bar** (build version vs `/api/version`, every 5 min + on return). Live test read: the founder's tab ran pre-fix code; swap not saved (Result save stalled) → Fix C planned incl. "Not saved yet — Retry save". `tsc --noEmit` clean; clean build passed. `7112757`
 - **Compare keys hidden** behind `KEY_COMPARE_ENABLED = false` (no link/panel/hint; `/api/key-compare` → 404); Song Key "Original" button removed. `tsc --noEmit` clean; clean `rm -rf node_modules .next && npm ci && npm run build` passed. `dcfa8ce`

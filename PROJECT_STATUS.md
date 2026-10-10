@@ -6,6 +6,15 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-10 (night) — manual save, fast save, "Recent — not saved", faster Result (`48af1fa`, `f89912c`, `dfbf103`, `4d86344`) — ⚠️ founder live test pending
+
+- **Retest 11:19–11:32 IST (fresh tab, Mac, Preview):** upload 6.4 s · studio split 86 s · lead split 71 s (warm, started instantly) · conversion 2 min 54 s (58 s cold engine + 73 s + 32 s page paused + 9 s) · Result 68 s (music 25 s, Original 19 s, mix 19 s, search 0.8 s) · save 78.5 s (MP3 ~25 s, uploads 21.6 s, backing 10 s, library entry 20.8 s). Upload → saved 13 min 16 s (app 6 min 53 s + founder 6 min 23 s). No auto-save because it was a Preview.
+- **`48af1fa` Save to library:** no auto-save. Result shows "Save to library" (Full: free) / "Save to library · N cr" (Preview: 200 − preview cost) → Saving… → Saved ✓ · Open Saved Tracks, or "Not saved — Retry" (also after 3 min stalled); "Save changes" after knob changes. Leave warnings while unsaved (browser close/reload; in-app links, New swap, new conversion ask). Save state lives on the page (`saveInfo`). `/api/timing` accepts digits in field names.
+- **`f89912c` Fast save:** MP3 encoded in its own worker (`mp3.worker.ts`, byte-identical to the old WAV→MP3 path; 4½ min in 6.5 s, page never blocked) while the user listens; persist route uses a storage-side copy (1.7 s for 10.9 MB) with download/upload fallback, own uploads only; music-only backing after Saved ✓ (`result-save-backing`).
+- **`dfbf103` Recent — not saved:** `/api/unsaved` keeps the latest unsaved single-voice take 24 h in `voice-swaps/<user>/unsaved/` (converted WAV ~26 MB + settings JSON; one per user; deleted on save / Discard / after 24 h on next visit; no DB). Upload-step card: Open (rebuilds Result, same save price) / Discard. Duet takes not kept. Storage ≈ $0.00002 per swap-day (Likely, unverified pricing). A user who never returns leaves one ≤26 MB file (no cron yet).
+- **`4d86344` Faster Result + diagnostics:** music bed built during the conversion (shared cached builder); Original A/B full mix on demand; loudness measured from the start; warm pings on the Upload step once a song is in; conversion status checks time out at 15 s; `page-stall` / `page-hidden` / `poll-slow` timing lines to find the ~70 s pauses (Mac display stayed on per pmset — not display sleep). **No Wake Lock** until these name the cause.
+- **Expected (Likely, unverified):** about 5 min upload → saved when clicking straight through (lead ready ~2 min 44 s, conversion ~1.5 min, Result ~25 s, save ~15–30 s).
+
 ## ✅ 2026-10-10 (evening) — live test read; "New version — Reload" (`7112757`), check on return to tab (`22014b3`); Fix C planned — ⚠️ founder fresh-tab retest pending
 
 - **Live test 10:47–11:04 IST (Pehla Pyaar, Mausam (Singing)) — NOT saved.** Server = `018d1cb`, but the browser tab ran the pre-fix code (lead split started after Demucs; no `/api/timing`; no Result pings).
