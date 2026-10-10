@@ -9,7 +9,7 @@ import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
 import { ConfigStep, VoiceOption, DuetMode, AUTOTUNE_AMOUNT, type Autotune } from './ConfigStep'
-import { ResultStep, NEW_TAKE_SAVE, type SaveInfo } from './ResultStep'
+import { ResultStep, NEW_TAKE_SAVE, prewarmResultMusic, type SaveInfo } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
@@ -1194,8 +1194,14 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // keys, scrolls or touches the pings stop, so an idle tab doesn't keep
   // spending; the next activity pings at once and restarts them.
   const lastActivityRef = useRef(Date.now())
+  const stepRef = useRef(step)
+  stepRef.current = step
+  // Also on the Upload step once a song is in (2026-10-10 retest: the engine
+  // went cold in the 96 s between the upload's ping and Configure → the
+  // conversion waited 58 s; 60 s pings gave 0 s waits everywhere else).
+  const songIn = !!stemResult
   useEffect(() => {
-    if (step !== 2 && step !== 3) return
+    if (step !== 2 && step !== 3 && !(step === 1 && songIn)) return
     lastActivityRef.current = Date.now() // arriving on the page counts as activity
     const idle = () => Date.now() - lastActivityRef.current > WARM_IDLE_STOP_MS
     const ping = () => { fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {}) }
@@ -1212,7 +1218,28 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       clearInterval(id)
       events.forEach((e) => window.removeEventListener(e, onActivity, { capture: true }))
     }
-  }, [step])
+  }, [step, songIn])
+
+  // Diagnostics (2026-10-10): twice the page stopped checking on a running
+  // conversion for ~70 s although the Mac's display stayed on. Log every gap
+  // so the next test says which it is: page-stall = the page couldn't run for
+  // > 5 s (hidden=1: the browser paused a hidden/covered tab; hidden=0: the
+  // page itself was frozen); page-hidden = how long the tab was out of view.
+  useEffect(() => {
+    let last = Date.now()
+    let hiddenAt = document.visibilityState === 'hidden' ? Date.now() : 0
+    const id = setInterval(() => {
+      const now = Date.now()
+      if (now - last > 5000) clientTiming('page-stall', { ms: now - last, hidden: document.visibilityState === 'hidden' ? 1 : 0, step: stepRef.current })
+      last = now
+    }, 1000)
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now()
+      else if (hiddenAt) { if (Date.now() - hiddenAt > 5000) clientTiming('page-hidden', { ms: Date.now() - hiddenAt, step: stepRef.current }); hiddenAt = 0 }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
 
   // Work out the Auto key as soon as a song + voice are chosen (shown on Configure).
   useEffect(() => {
@@ -1441,17 +1468,22 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await waitOrVisible(POLL_INTERVAL_MS)
           let data: { status?: string; error?: string; convertedVocalsUrl?: string }
+          const t0 = Date.now()
           try {
-            const res = await fetch(`/api/voice-convert?id=${predictionId}`)
+            // A status check answers in well under a second; one that hangs is
+            // dropped after 15 s and asked again (it never waits a minute).
+            const res = await fetch(`/api/voice-convert?id=${predictionId}`, typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(15_000) } : undefined)
             data = await res.json()
             if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
           } catch (err) {
+            if (Date.now() - t0 > 8000) clientTiming('poll-slow', { ms: Date.now() - t0, failed: 1 })
             pollErrors++
             console.warn(`[voice-swap] poll ${pollErrors}/${MAX_POLL_ERRORS} failed — retrying:`, err instanceof Error ? err.message : err)
             if (pollErrors >= MAX_POLL_ERRORS) throw new Error('Lost contact with the voice engine — check your connection and try again')
             continue
           }
           pollErrors = 0
+          if (Date.now() - t0 > 8000) clientTiming('poll-slow', { ms: Date.now() - t0, failed: 0 })
           if (data.status === 'succeeded') return data.convertedVocalsUrl as string
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
@@ -1612,6 +1644,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const takeKeyShift = keyAuto ? await computeAutoKey(vocalsToConvert, voice.id, !!target) : manualKey
       if (keyAuto) setAutoKey({ id: autoKeyId, value: takeKeyShift })
       const effectivePitch = clampPitch(autoShift + pitchShift + takeKeyShift)
+      // Build the music in the take's key while the voice converts, so the
+      // Result screen finds it ready (single-voice swaps).
+      if (!target) prewarmResultMusic(stemResult, takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
       const startConversion = async (retryOf?: string) => {

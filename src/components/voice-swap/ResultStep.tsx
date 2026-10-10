@@ -214,6 +214,78 @@ function toBuffer(channels: Float32Array[], sampleRate: number): AudioBuffer {
   channels.forEach((c, i) => b.getChannelData(i).set(c))
   return b
 }
+// Sum buffers into one stereo buffer.
+function sum(bufs: AudioBuffer[]): AudioBuffer {
+  const sr = bufs[0].sampleRate
+  const len = Math.max(...bufs.map((b) => b.length))
+  const out = [new Float32Array(len), new Float32Array(len)]
+  for (const b of bufs) for (let c = 0; c < 2; c++) {
+    const d = b.getChannelData(Math.min(c, b.numberOfChannels - 1))
+    for (let i = 0; i < d.length; i++) out[c][i] += d[i]
+  }
+  return toBuffer(out, sr)
+}
+
+// ── The music bed (music + backing vocals in the take's key) ───────────────
+// Built once per song + key and shared: the page starts it while the voice
+// converts (prewarmResultMusic), so the Result screen usually finds it ready
+// (2026-10-10 retest: building it took 25 s of the 68 s Result wait).
+// Studio-quality split: ONE instrumental (drums included) is the music — the
+// Demucs stems sit ~25 ms later and would smear it; a key change moves all of
+// it. Demucs fallback: drums stay put. Backing vocals (lead/backing split) go
+// back under the swapped lead — not for duets, whose stems already hold them.
+export type BedSpec = { musicUrls: string[]; tonalUrls: string[]; drumsUrl: string | null; backingUrl: string | null; leadUrl: string | null; keyShift: number }
+export function bedSpecFor(stemResult: StemResult | null, keyShift: number, duet: boolean): BedSpec {
+  const hq = !!(stemResult?.hqSplit && stemResult.instrumentalUrl)
+  const tonalUrls = hq ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+  const musicUrls = hq ? [stemResult!.instrumentalUrl] : [stemResult?.instrumentalUrl, stemResult?.bassUrl, stemResult?.drumsUrl, stemResult?.otherUrl].filter((u): u is string => Boolean(u))
+  const backingUrl = stemResult?.leadVocalsUrl && stemResult.backingVocalsUrl && !duet ? stemResult.backingVocalsUrl : null
+  return { musicUrls, tonalUrls, drumsUrl: !hq && stemResult?.drumsUrl ? stemResult.drumsUrl : null, backingUrl, leadUrl: stemResult?.leadVocalsUrl || null, keyShift }
+}
+type BedOpts = { musicOnly?: boolean; originalKey?: boolean }
+type Fallback = <T>(what: string, value: T) => (err: unknown) => T
+const quietFallback: Fallback = (what, value) => (err) => { console.warn(`[voice-fx] ${what} failed (prewarm):`, err); return value }
+const shiftBuf = async (b: AudioBuffer, opts: ShiftOptions) => toBuffer(await dspShift(channelsOf(b), b.sampleRate, opts), b.sampleRate)
+async function makeBed(spec: BedSpec, opts: BedOpts, fallback: Fallback): Promise<AudioBuffer | null> {
+  if (spec.musicUrls.length === 0) return null
+  const parts: AudioBuffer[] = []
+  if (opts.originalKey || !spec.keyShift || spec.tonalUrls.length === 0) {
+    parts.push(...await Promise.all(spec.musicUrls.map(decodeUrl)))
+  } else {
+    parts.push(await shiftBuf(sum(await Promise.all(spec.tonalUrls.map(decodeUrl))), { semitones: spec.keyShift }))
+    if (spec.drumsUrl) parts.push(await decodeUrl(spec.drumsUrl))
+  }
+  if (spec.backingUrl && !opts.musicOnly) {
+    const raw = await decodeUrl(spec.backingUrl)
+    if (opts.originalKey || !spec.leadUrl) parts.push(raw) // the Original side keeps the song as it was
+    else {
+      // Under the swapped voice: drop the backing's same-note doubles of the
+      // original lead (they sounded like a second voice — doubles.ts), keep
+      // the harmonies and chorus; then move it to the take's key.
+      const lead = await decodeUrl(spec.leadUrl)
+      const clean = await dspRemoveDoubles(channelsOf(raw), raw.sampleRate, monoOf(lead))
+        .then((chs) => toBuffer(chs, raw.sampleRate)).catch(fallback('the backing clean-up', raw))
+      parts.push(!spec.keyShift ? clean : await shiftBuf(clean, { semitones: spec.keyShift, formantCompensation: true }).catch(fallback('the key change', clean)))
+    }
+  }
+  return sum(parts)
+}
+// Last few beds (each ~95 MB for a 4½-min song, so only a few are kept).
+const bedCache = new Map<string, Promise<AudioBuffer | null>>()
+function bedFor(spec: BedSpec, opts: BedOpts = {}, fallback: Fallback = quietFallback): Promise<AudioBuffer | null> {
+  const key = JSON.stringify([spec, !!opts.musicOnly, !!opts.originalKey])
+  const hit = bedCache.get(key)
+  if (hit) return hit
+  const p = makeBed(spec, opts, fallback)
+  bedCache.set(key, p)
+  p.catch(() => bedCache.delete(key))
+  while (bedCache.size > 2) bedCache.delete(bedCache.keys().next().value!)
+  return p
+}
+// Called by the page when a single-voice conversion starts.
+export function prewarmResultMusic(stemResult: StemResult, keyShift: number) {
+  void bedFor(bedSpecFor(stemResult, keyShift, false)).catch(() => {})
+}
 
 // ---------------------------------------------------------------------------
 // Waveform canvas
@@ -563,17 +635,6 @@ export function ResultStep({
   async function shiftBuffer(b: AudioBuffer, opts: ShiftOptions): Promise<AudioBuffer> {
     return toBuffer(await dspShift(channelsOf(b), b.sampleRate, opts), b.sampleRate)
   }
-  // Sum buffers into one stereo buffer.
-  function sum(bufs: AudioBuffer[]): AudioBuffer {
-    const sr = bufs[0].sampleRate
-    const len = Math.max(...bufs.map((b) => b.length))
-    const out = [new Float32Array(len), new Float32Array(len)]
-    for (const b of bufs) for (let c = 0; c < 2; c++) {
-      const d = b.getChannelData(Math.min(c, b.numberOfChannels - 1))
-      for (let i = 0; i < d.length; i++) out[c][i] += d[i]
-    }
-    return toBuffer(out, sr)
-  }
   // A vocal that wasn't converted (duet partner, the backing vocals, Blend's
   // original singer) moved to the take's key, formants kept.
   function inKey(url: string, decodeIt: () => Promise<AudioBuffer> = () => decodeUrl(url)): Promise<AudioBuffer> {
@@ -581,30 +642,8 @@ export function ResultStep({
     return cached(`key:${url}`, `key|${url}|${keyShift}`, async () => shiftBuffer(await decodeIt(), { semitones: keyShift, formantCompensation: true }))
   }
   // Music (+ backing vocals unless musicOnly) in the take's key; drums stay put.
-  async function buildBed(opts: { musicOnly?: boolean; originalKey?: boolean } = {}): Promise<AudioBuffer | null> {
-    if (musicUrlsAll.length === 0) return null
-    const parts: AudioBuffer[] = []
-    if (opts.originalKey || !keyShift || tonalUrls.length === 0) {
-      parts.push(...await Promise.all(musicUrlsAll.map(decodeUrl)))
-    } else {
-      const tonal = await shiftBuffer(sum(await Promise.all(tonalUrls.map(decodeUrl))), { semitones: keyShift })
-      parts.push(tonal)
-      if (stemResult?.drumsUrl && !hqMusic) parts.push(await decodeUrl(stemResult.drumsUrl))
-    }
-    if (backingUrl && !opts.musicOnly) {
-      const raw = await decodeUrl(backingUrl)
-      if (opts.originalKey) parts.push(raw) // the Original side keeps the song as it was
-      else {
-        // Under the swapped voice: drop the backing's same-note doubles of the
-        // original lead (they sounded like a second voice — doubles.ts), keep
-        // the harmonies and chorus; then move it to the take's key.
-        const lead = await decoded(stemResult!.leadVocalsUrl!)
-        const clean = await dspRemoveDoubles(channelsOf(raw), raw.sampleRate, monoOf(lead))
-          .then((chs) => toBuffer(chs, raw.sampleRate)).catch(fxFallback('the backing clean-up', raw))
-        parts.push(!keyShift ? clean : await shiftBuffer(clean, { semitones: keyShift, formantCompensation: true }).catch(fxFallback('the key change', clean)))
-      }
-    }
-    return sum(parts)
+  function buildBed(opts: BedOpts = {}): Promise<AudioBuffer | null> {
+    return bedFor(bedSpecFor(stemResult, keyShift, !!(convertedVocalsUrl2 || duetUntouchedVocalsUrl)), opts, fxFallback)
   }
 
   // The song's key (from the original music), found once — for Add harmony.
@@ -734,6 +773,9 @@ export function ResultStep({
   useEffect(() => {
     if (!convertedVocalsUrl || !stemResult?.vocalsUrl) return
     let cancelled = false
+    originalRef.current = null
+    originalTakeRef.current++
+    void masterTarget() // the uploaded song's loudness, measured alongside
     setFullMixState('mixing')
     const mixStart = performance.now()
     ;(async () => {
@@ -751,40 +793,31 @@ export function ResultStep({
         setFullMixState('no-stems'); setMode('vocals')
         return
       }
-      // 2. Music + backing in the take's key, and the Original side.
+      // 2. Music + backing in the take's key (usually already built while the
+      // voice converted — prewarmResultMusic). The Original side's full mix is
+      // built only when first asked for (ensureOriginal); its vocals are here.
       t0 = performance.now()
       const bed = await buildBed()
-      const leadUrl = stemResult.leadVocalsUrl || stemResult.vocalsUrl
-      const lead = await decoded(leadUrl)
-      const originalBed = keyShift ? await buildBed({ originalKey: true }) : bed
+      const lead = await decoded(stemResult.leadVocalsUrl || stemResult.vocalsUrl)
       const musicMs = performance.now() - t0
-      t0 = performance.now()
-      const originalPre = await renderMix({ voices: [lead], harmony: [], partner: null, originals: [], bed: originalBed }, NEUTRAL_PARAMS)
-      const originalRenderMs = performance.now() - t0
       if (cancelled) return
       setInputs({ ...inputsRef.current!, bed })
-      // Mastering: the swapped side's gain, and the Original side mastered to
-      // the same loudness so the A/B compare is fair.
+      // Mastering: the swapped side's gain (the Original side is mastered to
+      // the same loudness when it's built, so the A/B compare is fair).
       t0 = performance.now()
-      let originalMs = { search: NaN, limit: NaN }
-      const [{ gain, ms }, originalFull] = await Promise.all([
-        masteredMix(liveParamsRef.current),
-        masterTarget().then((t) => dspMaster(channelsOf(originalPre), originalPre.sampleRate, t)).then((m) => { originalMs = m.ms; return toBuffer(m.channels, originalPre.sampleRate) }),
-      ])
+      const { gain, ms } = await masteredMix(liveParamsRef.current)
       const masterMs = performance.now() - t0
       if (cancelled) return
       player?.setMasterGain(gain)
-      player?.setOriginal(originalFull, lead)
+      player?.setOriginal(null, lead)
       setFullMixState('ready')
       // Where the Result screen's wait goes (ms). voice = converted vocal + its
-      // polish; music = backing in the take's key; render = the swapped mix;
-      // target = fetching + measuring the uploaded song's loudness; search /
-      // limit = mastering (swapped side; *Original = the A/B side). master =
-      // wall time of both masters together (they share one worker).
+      // polish; music = backing in the take's key (≈0 when prewarmed); render =
+      // the swapped mix; target = waiting for the uploaded song's loudness;
+      // search / limit = mastering; master = render + target + search + limit.
       clientTiming('result-mix', {
-        voice: voiceMs, music: musicMs, renderOriginal: originalRenderMs, render: ms.render, target: ms.target,
-        search: ms.search, limit: ms.limit, searchOriginal: originalMs.search, limitOriginal: originalMs.limit,
-        master: masterMs, total: performance.now() - mixStart,
+        voice: voiceMs, music: musicMs, render: ms.render, target: ms.target,
+        search: ms.search, limit: ms.limit, master: masterMs, total: performance.now() - mixStart,
       })
       // 3. Blend's original singer(s), ready in the background so Blend is instant.
       const originals = await Promise.all((convertedSourceUrls ?? []).filter(Boolean).map((u) => inKey(u, () => decoded(u))))
@@ -949,11 +982,41 @@ export function ResultStep({
     return () => clearTimeout(t)
   }, [savable, saveReady, fullMixState, settledSig, saveInfo?.state, changedSinceSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── The Original side's full mix, built on first use (it took 19 s + its own
+  // mastering on every Result screen, though many users never press it).
+  const originalRef = useRef<Promise<void> | null>(null)
+  const originalTakeRef = useRef(0) // bumped per take: a late build for an old take is dropped
+  const [originalPending, setOriginalPending] = useState(false)
+  function ensureOriginal(): Promise<void> {
+    if (originalRef.current) return originalRef.current
+    if (!stemResult || fullMixState !== 'ready' || !inputsRef.current?.bed) return Promise.resolve()
+    const take = originalTakeRef.current
+    const mine = (originalRef.current = (async () => {
+      setOriginalPending(true)
+      const start = performance.now()
+      const lead = await decoded(stemResult.leadVocalsUrl || stemResult.vocalsUrl)
+      const originalBed = keyShift ? await buildBed({ originalKey: true }) : inputsRef.current!.bed!
+      const pre = await renderMix({ voices: [lead], harmony: [], partner: null, originals: [], bed: originalBed }, NEUTRAL_PARAMS)
+      const m = await dspMaster(channelsOf(pre), pre.sampleRate, await masterTarget())
+      if (originalTakeRef.current !== take) return // a new take arrived meanwhile
+      player?.setOriginal(toBuffer(m.channels, pre.sampleRate), lead)
+      clientTiming('result-original', { search: m.ms.search, limit: m.ms.limit, total: performance.now() - start })
+    })())
+    mine.catch((err) => {
+      console.error('[result] original side failed:', err)
+      if (originalTakeRef.current === take) originalRef.current = null
+      onToast("Couldn't prepare the original song — try again")
+    }).finally(() => setOriginalPending(false))
+    return mine
+  }
+
   // ── Player controls ─────────────────────────────────────────────────────────
   const fullReady = fullMixState === 'ready'
   function handleSelectSide(side: AbSide) {
     if (side !== ab) setAb(side)
   }
+  // On the Original side → make sure its full mix is (being) built.
+  useEffect(() => { if (ab === 'Original' && fullMixState === 'ready') void ensureOriginal() }, [ab, fullMixState]) // eslint-disable-line react-hooks/exhaustive-deps
   function handleSelectMode(m: PlayMode) {
     if (m === mode) return
     if (m === 'full' && !fullReady) return
@@ -982,7 +1045,10 @@ export function ResultStep({
   // Downloads: the same graph offline, mastered (Original side: its own render).
   async function renderForDownload(): Promise<AudioBuffer | null> {
     if (!player) return null
-    if (ab === 'Original') return mode === 'vocals' ? player.original.vocals : player.original.full
+    if (ab === 'Original') {
+      if (mode !== 'vocals') await ensureOriginal()
+      return mode === 'vocals' ? player.original.vocals : player.original.full
+    }
     if (!inputsRef.current) return null
     const full = await masteredMix(liveParams)
     if (mode !== 'vocals' || !inputsRef.current.bed) return full.buf
@@ -1112,7 +1178,7 @@ export function ResultStep({
               )}
               {!canPlay ? (
                 <div className="vs-mix-note vs-mix-note--err">
-                  {ab === 'Original' && fullMixState === 'mixing' ? 'Preparing the original…' : `No audio available for ${ab} / ${mode === 'full' ? 'Full song' : 'Vocals only'}.`}
+                  {ab === 'Original' && (fullMixState === 'mixing' || originalPending) ? 'Preparing the original…' : `No audio available for ${ab} / ${mode === 'full' ? 'Full song' : 'Vocals only'}.`}
                 </div>
               ) : (
                 <>
