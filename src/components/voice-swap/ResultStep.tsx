@@ -159,6 +159,12 @@ type HarmonySetting = 'off' | '2' | '4'
 interface VoiceFx { level: number; blend: number; character: number; harmony: HarmonySetting; style: PolishStyle }
 type VoiceLayerFx = { character: number; harmony: HarmonySetting; studio: boolean }
 const DEFAULT_FX: VoiceFx = { level: -2, blend: 0, character: 0, harmony: 'off', style: 'none' }
+// The Result screen's starting mix (Studio polish + default voice level) —
+// Compare keys renders its previews with exactly this (keyPreviews.ts).
+export const DEFAULT_MIX_PARAMS: MixParams = {
+  warmth: STUDIO_PRESET.warmth, bass: STUDIO_PRESET.bass, treble: STUDIO_PRESET.treble, reverb: STUDIO_PRESET.reverb, echo: STUDIO_PRESET.echo,
+  levelDb: DEFAULT_FX.level, blend: 0, style: 'none', vocalsOnly: false, bedRoom: BED_ROOM, glue: true,
+}
 const HALL_REVERB = 70 // Concert Hall preset: Reverb knob 70 = 35% wet
 
 // Decode a URL to an AudioBuffer at 44.1 kHz (throws on failure) and move

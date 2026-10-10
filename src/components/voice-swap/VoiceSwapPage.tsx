@@ -1,5 +1,6 @@
 'use client'
 
+import { makeKeyPreviews, type KeyPreview } from './keyPreviews'
 import { pollUntil, fetchRetry } from '@/lib/poll'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -1133,6 +1134,40 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       .then((value) => setAutoKey((cur) => (cur.id === id ? { id, value } : cur)))
   }, [step, autoKeyId, keyAuto]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Compare keys (inside Song Key): three short chorus previews at Auto,
+  // Auto −2 and Auto +2 with this song, voice and pitch settings. Free.
+  function keyCompareProps() {
+    const lead = stemResult?.leadVocalsUrl
+    const duet = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
+    const why = !stemResult?.storagePath ? undefined
+      : duet ? 'not available for duet swaps'
+      : karaokeStatus === 'running' ? 'available once the lead vocal is separated'
+      : !lead ? 'needs the lead vocal'
+      : !selectedVoiceId ? 'choose a voice first'
+      : undefined
+    return {
+      available: !!(stemResult?.storagePath && lead && selectedVoiceId && !duet && karaokeStatus !== 'running'),
+      unavailableWhy: why,
+      settingsId: [stemResult?.storagePath ?? '', lead ?? '', selectedVoiceId ?? '', pitchShift, autotune].join('|'),
+      run: async (onStage: (s: string) => void) => {
+        if (!stemResult?.storagePath || !lead || !selectedVoiceId) throw new Error('the song or voice is missing')
+        onStage('Working out the keys')
+        const [autoValue, octave] = await Promise.all([computeAutoKey(lead, selectedVoiceId, false), autoKeyShift(lead, selectedVoiceId, false)])
+        return makeKeyPreviews({
+          trackKey: stemResult.storagePath, voiceId: selectedVoiceId, autoKey: autoValue, octaveShift: octave,
+          pitchShift, autotune: AUTOTUNE_AMOUNT[autotune], leadUrl: lead, backingUrl: stemResult.backingVocalsUrl || undefined,
+          hqInstrumentalUrl: stemResult.hqSplit ? stemResult.instrumentalUrl : undefined,
+          bassUrl: stemResult.bassUrl || undefined, drumsUrl: stemResult.drumsUrl || undefined, otherUrl: stemResult.otherUrl || undefined,
+        }, onStage)
+      },
+      onUse: (p: KeyPreview) => {
+        if (p.isAuto) setKeyAuto(true)
+        else { setKeyAuto(false); setManualKey(p.key) }
+        showToast(p.isAuto ? 'Song Key set to Auto' : `Song Key set to ${p.key === 0 ? 'Original' : `${p.key > 0 ? '+' : ''}${p.key}`}`, 3000)
+      },
+    }
+  }
+
   const FULL_SWAP_CREDITS = 200
   // A preview's converted vocal comes from Replicate and expires after ~1 h, so
   // only offer to save it within 50 minutes (after that, a normal full swap runs
@@ -1626,6 +1661,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 keyAuto={keyAuto}
                 autoKeyPending={keyAuto && !(autoKey.id === autoKeyId && autoKey.value !== null)}
                 setKeyAuto={setKeyAuto}
+                keyCompare={keyCompareProps()}
                 autotune={autotune}
                 setAutotune={setAutotune}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}

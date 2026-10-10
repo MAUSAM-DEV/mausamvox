@@ -1,5 +1,6 @@
 'use client'
 
+import { KeyCompare } from './KeyCompare'
 import Link from 'next/link'
 
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -14,6 +15,7 @@ export const AUTOTUNE_AMOUNT: Record<Autotune, number> = { Off: 0, Light: 0.5, S
 // Key change: voice + music move together (drums stay). Clips at ±2 were
 // clearly audible; beyond ±4 the shifted music starts to sound processed.
 export const KEY_SHIFT_MAX = 4
+type KeyCompareProps = React.ComponentProps<typeof KeyCompare>
 
 export interface VoiceOption {
   id: string
@@ -45,6 +47,8 @@ interface ConfigStepProps {
   keyAuto: boolean
   autoKeyPending: boolean
   setKeyAuto: (v: boolean) => void
+  // Compare keys (inside the Song Key box): see KeyCompare.tsx.
+  keyCompare?: KeyCompareProps
   autotune: Autotune
   setAutotune: (v: Autotune) => void
   // Duet mode — only rendered when hasDuet is true (both male+female URLs present).
@@ -147,7 +151,7 @@ function VoiceGrid({
 export function ConfigStep({
   voiceTab, setVoiceTab, voices, voicesLoading, selectedVoiceId, setSelectedVoiceId,
   gender, setGender,
-  pitchShift, setPitchShift, keyShift, setKeyShift, keyAuto, autoKeyPending, setKeyAuto, autotune, setAutotune,
+  pitchShift, setPitchShift, keyShift, setKeyShift, keyAuto, autoKeyPending, setKeyAuto, keyCompare, autotune, setAutotune,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
 }: ConfigStepProps) {
@@ -370,6 +374,7 @@ export function ConfigStep({
             <div className="vs-ctrl-hint">
               Moves the whole song — your voice and the music together (drums stay as they are). <strong>Auto</strong> fits the song to where the chosen voice usually sings, so it sounds most like you. Pitch Shift above moves only the voice.
             </div>
+            {keyCompare && <KeyCompare {...keyCompare} />}
           </div>
 
           <div className="vs-ctrl-group vs-ctrl-full">

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash } from 'crypto'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { INDEXED_CREPE_HOP, INDEXED_F0_METHOD, VOICE_SWAP_FILTER_RADIUS, VOICE_SWAP_INDEX_RATE, VOICE_SWAP_PROTECT, VOICE_SWAP_RMS_MIX_RATE, rvcEngine, rvcVersion } from '@/lib/rvc-engine'
+import { rvcEngine, rvcVersion } from '@/lib/rvc-engine'
+import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 
 export const maxDuration = 30
 
@@ -52,7 +52,6 @@ function safeStringify(v: unknown): string {
 }
 
 // Clamp a number into [lo, hi].
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 // True when `id` is one of our RVC predictions that failed (or was canceled)
 // in the last 15 minutes — the only case where a retry preview is free.
@@ -136,52 +135,8 @@ export async function POST(req: NextRequest) {
     // voiceModelUrl as a last resort for backwards compatibility.
     let effectiveModelUrl = voiceModelUrl ?? ''
     if (voiceId && user) {
-      let { data: clone } = await supabaseAdmin
-        .from('voice_clones')
-        .select('model_path, model_url')
-        .eq('id', voiceId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (!clone) {
-        // Voice Library: not the caller's own voice — allow it only if its
-        // owner published it (free community use, owner consent recorded at
-        // publish time). Errors here (incl. a missing published column
-        // pre-migration) read as not found, keeping private voices private.
-        const { data: pub } = await supabaseAdmin
-          .from('voice_clones')
-          .select('model_path, model_url')
-          .eq('id', voiceId)
-          .eq('published', true)
-          .maybeSingle()
-        clone = pub
-        if (pub) console.log('[voice-convert] using published Library voice', voiceId)
-      }
-
-      if (clone?.model_path) {
-        // Route Replicate through our proxy so the model URL never expires
-        // (the proxy signs fresh on every fetch) and the last URL segment is a
-        // clean, short filename. Both engines need this, for different reasons:
-        //
-        // cover cog: derives its local filename from url.split('/')[-1] WITHOUT
-        // stripping query strings — a signed Supabase URL produces
-        // "uuid.zip?token=<JWT>" (300+ chars), hitting Errno 36. The filename
-        // also doubles as its MODEL CACHE KEY (it skips the download when the
-        // folder exists on a warm instance), so the name must be unique per
-        // voice AND per model file — hash of model_path, so a retrain that
-        // writes a new path also busts the cache. Never a constant name.
-        //
-        // bare cog: parses the filename safely (urlparse + query strip) and
-        // re-downloads every run (overwrite=True) — no cache-key hazard; the
-        // proxy's fresh signing is what it needs.
-        const modelTag = createHash('sha1').update(clone.model_path).digest('hex').slice(0, 8)
-        const origin = new URL(req.url).origin
-        effectiveModelUrl = `${origin}/api/voice-model/${voiceId}/${voiceId}-${modelTag}.zip`
-        console.log('[voice-convert] using model proxy for', voiceId, `(cache key ${voiceId}-${modelTag})`)
-      } else if (clone?.model_url) {
-        effectiveModelUrl = clone.model_url
-        console.log('[voice-convert] model_path null, using model_url from DB for', voiceId)
-      }
+      const resolved = await resolveVoiceModelUrl(voiceId, user.id, new URL(req.url).origin, 'voice-convert')
+      if (resolved) effectiveModelUrl = resolved
       // else: clone not found or both null — keep client-supplied voiceModelUrl
     }
 
@@ -266,89 +221,10 @@ export async function POST(req: NextRequest) {
 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
-    // Index strength, consonant guard, loudness envelope and smoothing are fixed
-    // server-side (VOICE_SWAP_* in rvc-engine.ts) — there are no user controls:
-    // none of them was audible to the founder across its full range (2026-10-04),
-    // so values sent by older clients are ignored.
-    const indexRate = VOICE_SWAP_INDEX_RATE
-    const protectVal = VOICE_SWAP_PROTECT
-    const filterRadiusVal = VOICE_SWAP_FILTER_RADIUS
-    const rmsMixRateVal = VOICE_SWAP_RMS_MIX_RATE
-
-    // Final pitch shift (semitones) for the converted vocal. The client folds its
-    // auto key-match (octave snap) and the manual Pitch Shift control into this
-    // value; we round + clamp defensively to a sane range here. Default 0 = no
-    // shift, identical to the prior behaviour.
-    const pitchChangeAll = Math.round(clamp(pitchShift, -24, 24))
-    // Auto-tune (Configure step): 0 = natural pitch, 1 = every note snapped to
-    // the nearest semitone inside the engine. Only our indexed engine has it;
-    // sent only when on, so a rollback engine never sees an unknown input.
-    const autotuneAmount = Math.round(clamp(Number(autotune) || 0, 0, 1) * 100) / 100
-
-    // WAV output on both engines so the converted vocal isn't re-compressed:
-    // the vocal already took one lossy encode at Demucs separation, and an mp3
-    // here would be a SECOND lossy generation the instrumental never suffers.
-    // Downstream (mixStems, Fine-tune preview) decodes WAV identically.
-    // Tradeoff: WAV is ~10x larger → slower vocal fetch in the browser mix.
-    //
-    // bare (default): pseudoram/rvc-v2 runs ONLY the RVC conversion (~20-40s vs
-    // the cover cog's ~140-220s spent re-separating our already-isolated vocal;
-    // A/B'd for quality, PROJECT_STATUS §6). Param mapping is 1:1 for the four
-    // Fine-tune knobs; pitch is plain semitones; no reverb stage exists (the
-    // Polish layer owns reverb now); mono output (mixStems upmixes fine). The
-    // cog has no seed param — fine, because effectiveVocalsUrl is re-signed per
-    // request, so identical resubmits (Regenerate) never dedup on Replicate.
-    // The cog re-downloads the model zip every run (overwrite=True), so the
-    // proxy URL's fresh signing is what matters; its filename parsing strips
-    // query strings correctly (no Errno-36 class bug there).
+    // Engine inputs (fixed server-side settings + this take's pitch and
+    // auto-tune) — shared with Compare keys, lib/rvc-convert.ts.
     const engine = rvcEngine()
-    const input = engine === 'indexed'
-      ? {
-          // Our engine: same 1:1 Fine-tune mapping as bare, but the voice's
-          // index is really applied (index_rate = Style Intensity) and pitch is
-          // tracked with crepe (fewer breaks on faint high notes).
-          input_audio: effectiveVocalsUrl,
-          custom_rvc_model_download_url: effectiveModelUrl,
-          pitch_change: pitchChangeAll,
-          index_rate: indexRate,
-          filter_radius: filterRadiusVal,
-          rms_mix_rate: rmsMixRateVal,
-          f0_method: INDEXED_F0_METHOD,
-          crepe_hop_length: INDEXED_CREPE_HOP,
-          protect: protectVal,
-          output_format: 'wav',
-          ...(autotuneAmount > 0 ? { autotune: autotuneAmount } : {}),
-        }
-      : engine === 'bare'
-      ? {
-          input_audio: effectiveVocalsUrl,
-          custom_rvc_model_download_url: effectiveModelUrl,
-          pitch_change: pitchChangeAll,
-          index_rate: indexRate,
-          filter_radius: filterRadiusVal,
-          rms_mix_rate: rmsMixRateVal,
-          f0_method: 'rmvpe',
-          crepe_hop_length: 128,
-          protect: protectVal,
-          output_format: 'wav',
-        }
-      : {
-          song_input: effectiveVocalsUrl,
-          rvc_model: 'CUSTOM',
-          custom_rvc_model_download_url: effectiveModelUrl,
-          pitch_change: 'no-change',
-          pitch_change_all: pitchChangeAll,
-          index_rate: indexRate,
-          filter_radius: filterRadiusVal,
-          rms_mix_rate: rmsMixRateVal,
-          pitch_detection_algorithm: 'rmvpe',
-          crepe_hop_length: 128,
-          protect: protectVal,
-          output_format: 'wav',
-          // Random seed so Replicate can't return a cached prediction when the
-          // same vocalsUrl + model are resubmitted (Regenerate).
-          seed: Math.floor(Math.random() * 2147483647),
-        }
+    const input = rvcInput(engine, effectiveVocalsUrl, effectiveModelUrl, pitchShift, autotune)
 
     let prediction
     try {
