@@ -6,6 +6,26 @@ _Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-10 — Compare keys (`a16ec30`) — ⚠️ founder live test pending
+
+- **Where:** Configure → Song Key box only. Hint line "Doesn't sound like you? Try a different key — Compare keys ›" → panel with 3 × 15 s chorus previews (Auto, Auto −2, Auto +2 within ±4; e.g. Auto −3 → −4 / −3 / −1). Tap to play, "Use this key" applies it (the Auto card keeps Auto on).
+  - While working: "Making 3 previews… about 1 minute"; clear "Try again" on failure, and a limit message with minutes left.
+  - Phone: stacked full-width cards (48 px), full-width button, no sideways scroll.
+- **Not shown** for duet swaps, or before the lead split / a voice is ready (the hint says why).
+- **How:**
+  - the browser picks the chorus (strongest lead + backing 15 s), uploads the lead excerpt (`<ts>-keycmp-<songTag>.wav`);
+  - `/api/key-compare` (sign-in, own song/voice) starts 3 conversions with the swap's exact inputs — `lib/rvc-convert.ts`, extracted unchanged from `/api/voice-convert`;
+  - the browser waits (`lib/poll`), then mixes each with the same 15 s of music in its key through the Result defaults (`DEFAULT_MIX_PARAMS`) + mastering, all three at equal loudness.
+- **Limit / cost:**
+  - free; 3 per song per hour, counted from the song's excerpt files (no DB);
+  - a refused try deletes its excerpt (doesn't extend the wait); excerpts older than 1 h are tidied;
+  - per-user in-memory backstop of 12/h.
+  - **Measured:** 49.7–62.5 s of T4 engine time per comparison = **$0.011–0.014**.
+  - Wait: ~1 min warm, ~2.5 min cold (Configure warm pings keep it warm live).
+- **Tested locally** on Pehla Pyaar with real conversions (signed-in routes via a local stand-in using the same shared code):
+  - cards, playback, Use this key → Song Key −4, the limit (4th try refused, no file left), phone layout;
+  - found and fixed: storage search only matches name starts; refused tries extended the wait.
+
 ## ❌ 2026-10-10 — founder's verdict: M3 (500 epochs) REJECTED — keep M0; the identity score is NOT reliable
 
 - **Founder listened:** M3 "sounds totally different from me and can't pronounce words properly" — although it scored best.
