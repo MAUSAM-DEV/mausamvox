@@ -6,6 +6,11 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ↩️ 2026-10-10 (late night, 6) — blend-in + high-note assist REVERTED (`6fd55d1`); mixing frozen
+
+- Founder: "Smooth test" was worse → `0bc2f84` (blend-in match) and `a6f0774` (high-note assist) undone in one commit. App code = `f6ea805` exactly (Auto Key 0 + loudness fix kept; F1/F2/F3 sound fixes kept).
+- **No more mixing changes** unless the founder asks.
+
 ## ✅ 2026-10-10 (late night, 5) — Auto Key 0, loudness, blend-in, high-note assist (`0c82002`, `f6ea805`, `0bc2f84`, `a6f0774`) — ⚠️ founder live test pending
 
 - Founder preferred "Key test 0".

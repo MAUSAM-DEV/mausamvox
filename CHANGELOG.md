@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Reverted** blend-in match (`0bc2f84`) and high-note assist (`a6f0774`) — founder preferred the sound before; Auto Key 0 and the loudness fix kept. `tsc --noEmit` clean; clean build passed. `6fd55d1`
 - **High-note assist** (20% original lead under the voice above its comfortable top; On/Off, default On). `tsc --noEmit` clean; clean build passed. `a6f0774`
 - **Voice blends in like the original** (matched space/tone by default, level match, sibilance target). `tsc --noEmit` clean; clean build passed. `0bc2f84`
 - **As loud as the original** (peak soft clip + 30 ms limiter release, live = saved). `tsc --noEmit` clean; clean build passed. `f6ea805`
