@@ -17,6 +17,7 @@ import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
 import { detectMedianF0, autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
 import { dspPitchStats } from './dspClient'
 import { clientTiming } from '@/lib/client-timing'
+import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -1698,7 +1699,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 keyAuto={keyAuto}
                 autoKeyPending={keyAuto && !(autoKey.id === autoKeyId && autoKey.value !== null)}
                 setKeyAuto={setKeyAuto}
-                keyCompare={keyCompareProps()}
+                keyCompare={KEY_COMPARE_ENABLED ? keyCompareProps() : undefined}
                 autotune={autotune}
                 setAutotune={setAutotune}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}

@@ -5,7 +5,7 @@ import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 import { rvcEngine, rvcVersion } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
-import { KEY_COMPARE_MAX, songTag } from '@/lib/key-compare-shared'
+import { KEY_COMPARE_ENABLED, KEY_COMPARE_MAX, songTag } from '@/lib/key-compare-shared'
 
 // Compare keys (Configure → Song Key): three short conversions of the same
 // ~15 s chorus excerpt in three keys, so the user can hear which sounds most
@@ -21,6 +21,8 @@ const WINDOW_MS = 60 * 60 * 1000
 const MAX_EXCERPT_BYTES = 8 * 1024 * 1024 // a 15 s 16-bit stereo WAV is ~2.6 MB
 
 export async function POST(req: NextRequest) {
+  // Feature switched off (KEY_COMPARE_ENABLED): nothing runs, nothing is spent.
+  if (!KEY_COMPARE_ENABLED) return NextResponse.json({ error: 'Compare keys is turned off' }, { status: 404 })
   try {
     if (!adminConfigured || !process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })

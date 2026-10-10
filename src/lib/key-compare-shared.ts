@@ -1,4 +1,9 @@
 // Shared by the Compare keys UI and /api/key-compare (browser + server).
+
+// Off switch (2026-10-10: hidden from Configure). false = no link, panel or
+// hint line on the Song Key box, and /api/key-compare refuses every request.
+// Set to true to bring the feature back exactly as it was.
+export const KEY_COMPARE_ENABLED = false
 export const KEY_COMPARE_MAX = 3 // comparisons per song per hour (free)
 export const KEY_COMPARE_SECONDS = 15 // excerpt length
 
