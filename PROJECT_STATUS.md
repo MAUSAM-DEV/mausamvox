@@ -6,6 +6,13 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🚨 2026-10-10 (late night, 3) — LIVE HANG "Finding the lead vocal" 17 min — hotfix `8347ff3`; full "no wait forever" plan AWAITING APPROVAL
+
+- **What happened (Vercel logs, 16:02–16:22 IST):** upload 16:02:33 · studio split done 16:03:43 · lead split done on the server 16:05:12 (the page's LAST status check) · Demucs 16:05:17 · page alive (warm pings to 16:19:39) but stayed on Configure, no conversion · after refresh (16:20:26) the lead split started again → the lead never reached the page.
+- **Root cause:** between that last check and saving the lead there were two awaits with no time limit — the status request and the lead-quality check (`assessLeadVocalQuality`, downloads + decodes ~120 MB on a live AudioContext). One never finished. Same session: every request stalled together for 56 s (16:03:53–16:04:49) with no page-stall logged → connection stalls, not a frozen page. F1/F3 were NOT involved (never reached Result), but F1's drum download has the same flaw.
+- **Hotfix `8347ff3`:** lead check capped at 45 s (→ assume healthy, as when it can't run); each lead-split status request aborted after 70 s (→ retried).
+- **Still unguarded (plan):** status polls in `lib/poll.ts` and the studio-split poll, every audio download/decode on Result (music, drums, song loudness/spectrum), Auto-key downloads, uploads.
+
 ## ✅ 2026-10-10 (late night, 2) — sound fixes F1 + F2 + F3 (`8a4847f`, `529b793`, `151811d`) — ⚠️ founder live test pending
 
 - Founder's ears: "C" (tone-matched) sounded best → build F1 + F2 + F3.
