@@ -801,7 +801,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (karaokeJobRef.current !== jobId) return 'superseded'
       let pollData: Record<string, unknown>
       try {
-        const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`)
+        const pollRes = await fetch(`/api/karaoke-split?id=${predictionId}`, typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(70_000) } : undefined) // never wait forever (2026-10-10 hang)
         pollData = await pollRes.json()
         if (!pollRes.ok) throw new Error(String(pollData.error ?? `HTTP ${pollRes.status}`))
       } catch (err) {
@@ -824,7 +824,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         // Lead quality: a lead that drops whole sung passages (2 s+ where
         // neither the lead nor the backing has the singing) isn't used — the
         // user decides what to do (same split again would give the same result).
-        const leadHealthy = await assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl, backingVocalsUrl)
+        const leadHealthy = await Promise.race([assessLeadVocalQuality(leadVocalsUrl, result.vocalsUrl, backingVocalsUrl), new Promise<boolean>((r) => setTimeout(() => r(true), 45_000))]) // 45 s cap → "can't assess — assume healthy" (2026-10-10: hung 17 min)
         if (karaokeJobRef.current !== jobId) return 'superseded'
         if (!leadHealthy) {
           console.log(`[karaoke-split] dropout detected for ${result.fileName}`)
