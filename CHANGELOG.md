@@ -4,6 +4,8 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Check job status on return to the tab** (`waitOrVisible` in all swap waits). `tsc --noEmit` clean; clean build passed. `22014b3`
+- **"New version — Reload" bar** (build version vs `/api/version`, every 5 min + on return). Live test read: the founder's tab ran pre-fix code; swap not saved (Result save stalled) → Fix C planned incl. "Not saved yet — Retry save". `tsc --noEmit` clean; clean build passed. `7112757`
 - **Compare keys hidden** behind `KEY_COMPARE_ENABLED = false` (no link/panel/hint; `/api/key-compare` → 404); Song Key "Original" button removed. `tsc --noEmit` clean; clean `rm -rf node_modules .next && npm ci && npm run build` passed. `dcfa8ce`
 - **Result-screen timing in Vercel logs** (`/api/timing`: mix, mastering search, MP3 encoding, upload, save row, upload-ready, convert) + **mastering search on a light copy** (slowest 5.54 s → 0.68 s, gain within 0.082 dB). `tsc --noEmit` clean; clean build passed. `1c3aef7`
 - **Engine kept warm** on Configure and Result (every 60 s; stops after 30 min idle, restarts on activity). `tsc --noEmit` clean; clean build passed. `cd9b3e1`

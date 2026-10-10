@@ -6,6 +6,18 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-10 (evening) — live test read; "New version — Reload" (`7112757`), check on return to tab (`22014b3`); Fix C planned — ⚠️ founder fresh-tab retest pending
+
+- **Live test 10:47–11:04 IST (Pehla Pyaar, Mausam (Singing)) — NOT saved.** Server = `018d1cb`, but the browser tab ran the pre-fix code (lead split started after Demucs; no `/api/timing`; no Result pings).
+  - Upload 8 s · MVSEP 73 s · waiting for Demucs 3 min 50 s (old code) · lead split 2 min 20 s (52 s cold — the 10:48:54 warm-up had idled out) · Configure 1 min 56 s (user) · conversion 2 min (0 s queue, 72 s compute, page noticed 45 s late) · Result voice + music 48 s · loudness/master/MP3/save never finished (nothing by 11:06; page activity 11:04:15).
+  - Upload → Result 11 min 33 s. The morning swap had the same gap (conversion 09:15 → save 09:28 IST).
+- **Fix A `7112757`:** build version (Vercel commit SHA → `NEXT_PUBLIC_APP_VERSION`) vs `GET /api/version`, checked every 5 min and on return to the tab → small "New version — Reload" bar (✕ dismisses; never auto-reloads). Tested locally on a production build (bar appears on mismatch, not on match; one line on a 375 px phone; ✕ works).
+- **Fix B `22014b3`:** `waitOrVisible()` in `lib/poll.ts` — status checks wake at once when the tab is visible again / regains focus (pollUntil, studio split, lead split, conversion). Node test: wakes at 201 ms on return vs 5 s timer.
+- **Fix C — PLANNED, not built (after the fresh-tab retest's `[timing] client` lines show the slow save step):**
+  - candidates: measure the upload's loudness on Configure instead of Result; MP3 encoding in the DSP worker (page never freezes); then the measured slowest step;
+  - **save visibility:** if the first save fails or takes too long, show "Not saved yet — Retry save" on the Result screen (never silence), with a Retry button that runs the save again.
+- **Live tests:** always start from a freshly opened/reloaded page after Vercel shows Ready.
+
 ## ✅ 2026-10-10 (later) — faster swap: no Demucs wait, warm engine, Result timing, Compare keys hidden (`7b89493`, `cd9b3e1`, `1c3aef7`, `dcfa8ce`) — ⚠️ founder live test pending
 
 - **Don't wait for Demucs (`7b89493`):** the upload continues the moment MVSEP's studio split is ready (measured 68 s; Demucs took 4 min 44 s on 2026-10-10) and the lead split starts on MVSEP's vocals at once.
