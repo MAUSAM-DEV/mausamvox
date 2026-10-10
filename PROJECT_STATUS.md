@@ -1,10 +1,26 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-10-03 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+_Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
 **✅ Migrations (checked 2026-10-03, read-only):** all 20 files in `supabase/migrations/` are applied in production — share links (`share_token` column exists), Voice Library (4 `voice_clones` columns exist), waitlist (table exists, 15 sign-ups), polish re-save grant (a swap was re-saved via UPDATE on 2026-08-13 14:55 UTC — that UPDATE fails without the grant). Older "⚠️ PENDING / NOT APPLIED" notes further down are historical. **✅ Replicate topped up** ($10, founder, 2026-10-03) — the under-$5 throttle note below is resolved.
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
+
+## ✅ 2026-10-10 (later) — faster swap: no Demucs wait, warm engine, Result timing, Compare keys hidden (`7b89493`, `cd9b3e1`, `1c3aef7`, `dcfa8ce`) — ⚠️ founder live test pending
+
+- **Don't wait for Demucs (`7b89493`):** the upload continues the moment MVSEP's studio split is ready (measured 68 s; Demucs took 4 min 44 s on 2026-10-10) and the lead split starts on MVSEP's vocals at once.
+  - Demucs keeps running in the background only to fill the Bass/Drums/Other stem cards (merged into the page and the stem cache).
+  - MVSEP fails → Demucs as before; MVSEP still running 90 s after Demucs finished → Demucs is used.
+- **Engine kept warm (`cd9b3e1`):** `/api/rvc-warm` every 60 s while Configure **or Result** is open (was Configure only, max 10).
+  - Stops after 30 min with no clicks / keys / scrolls / touches; the next activity pings at once and restarts. Arriving on the page counts as activity.
+  - Upload ping unchanged (server side in `/api/stem-split`, when the song lands).
+- **Result-screen timing + faster mastering search (`1c3aef7`):**
+  - `[timing] client …` lines now appear in **Vercel logs** via logs-only `POST /api/timing` (sign-in, 60/h, numbers only, no DB): `result-mix` (voice, music, render, target, search, limit, Original side, total), `result-save` (master, cached, wav, mp3, upload, inst*, total), `result-resave` (+ row), `result-save-row`, `upload-ready` (upload, total, studio), `convert-full`.
+  - Mastering gain search runs on a light copy (per 6 samples: K-weighted energy + peak). Measured on Pehla Pyaar stems (4 mixes × 6 targets, Mac): slowest search **5.54 s → 0.68 s**; gain within **0.082 dB** of the old search. Saved file still limited on the full audio.
+- **Compare keys hidden (`dcfa8ce`):** `KEY_COMPARE_ENABLED = false` in `src/lib/key-compare-shared.ts` — no link / panel / hint on Song Key; `/api/key-compare` → 404 without starting anything. Flip to `true` to restore. The Song Key "Original" button was removed (Auto + − / + remain; − / + still reach 0).
+- **Expected full swap (Likely, unverified — from 2026-10-10 stage times):** about 4½–6½ min of waiting from upload to saved track, plus the time spent choosing settings; up to ~8–9 min when the engines are cold.
+- **Re-record:** approved plan (lossless iPhone Voice Memos, retrain with M0's settings, compare by ear) — waiting for the founder's file; no training until then.
+- **Ops note:** the "MK SSD Work" drive disconnected twice on 2026-10-10; health checks after each (git fsck, local = GitHub, files byte-identical) found no damage.
 
 ## ✅ 2026-10-10 — Compare keys (`a16ec30`) — ⚠️ founder live test pending
 

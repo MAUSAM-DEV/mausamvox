@@ -4,6 +4,10 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Compare keys hidden** behind `KEY_COMPARE_ENABLED = false` (no link/panel/hint; `/api/key-compare` → 404); Song Key "Original" button removed. `tsc --noEmit` clean; clean `rm -rf node_modules .next && npm ci && npm run build` passed. `dcfa8ce`
+- **Result-screen timing in Vercel logs** (`/api/timing`: mix, mastering search, MP3 encoding, upload, save row, upload-ready, convert) + **mastering search on a light copy** (slowest 5.54 s → 0.68 s, gain within 0.082 dB). `tsc --noEmit` clean; clean build passed. `1c3aef7`
+- **Engine kept warm** on Configure and Result (every 60 s; stops after 30 min idle, restarts on activity). `tsc --noEmit` clean; clean build passed. `cd9b3e1`
+- **Don't wait for Demucs** — continue as soon as MVSEP's studio split is ready; Demucs only fills the stem cards in the background. `tsc --noEmit` clean; clean build passed. `7b89493`
 - **Compare keys** in the Song Key box: 3 × 15 s chorus previews (Auto, ±2), free, 3 per song per hour (no DB), phone layout; measured $0.011–0.014 per comparison. `tsc --noEmit` clean; clean `rm -rf node_modules .next && npm ci && npm run build` passed. `a16ec30`
 - **M3 rejected by the founder's ears** (different voice, poor pronunciation) despite the best identity score → the score is recorded as unreliable; the founder's listening decides. M0 stays live; training default unchanged; M1–M3 kept. Leftover test processes stopped; 3 stuck Replicate karaoke jobs cancelled. No code change.
 - **Retrain test (no app change):** 500 epochs on the full 3:48 recording beats the current model on Pehla Pyaar (+0.235 vs +0.163) and Señorita (+0.138 vs +0.065), pitch unchanged; 18 "Model test" clips; ≈ $2.55. Live model not switched.
