@@ -6,6 +6,15 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✅ 2026-10-10 (late night, 2) — sound fixes F1 + F2 + F3 (`8a4847f`, `529b793`, `151811d`) — ⚠️ founder live test pending
+
+- Founder's ears: "C" (tone-matched) sounded best → build F1 + F2 + F3.
+- **F1 `8a4847f`:** on a key change the drums stay at the original key — Demucs's drum stem is lined up with the studio instrumental (cross-correlation; MP3 delay 1105 samples), subtracted, the rest shifted, drums added back (identical at key 0); then the music's 20–45 Hz is cut back to the original music's share (45 Hz low shelf; −2 dB here). Without Demucs drums yet (fast clickers) → old whole-instrumental shift + the sub cut. `lib/audio-dsp/tone-match.ts` + worker ops spectrum/filters/align.
+- **F2 `529b793`:** glue −24 dB/1.8:1 → −18 dB/1.3:1 knee 12; 250 Hz low cut on every reverb return; voice level default 0 dB (was −2). Same take: sub +1.8 → +0.9, presence −3.4 → −2.4, loudness range 3.9 → 6.0 LU.
+- **F3 `151811d`:** per-take 10-band tone match to the uploaded song (±6 dB), computed from the first render + the song's spectrum (taken with its loudness), applied offline to that render (no second render) and as the graph's last stage (graph vs offline −137.7 dB). Off for vocals-only, Lo-fi, Radio.
+- **Result (Pehla Pyaar, F1+F2+F3):** every band within ±0.9 dB of the original (before: up to −3.6), 32–45 Hz −20.8 dB share (original −20.6, before −12.1), loudness range 5.7 LU (before 3.9, original 7.7). Loudness still −9.5 LUFS (1 dB limiter cap; original −7.8).
+- **Clips:** Saved Tracks voice "Sound fix" — 0 original, 1 before, 2 fixed (chorus 3:42–4:12, all −11 LUFS).
+
 ## 🔍 2026-10-10 (late night) — sound-quality study (no app change) — fix plan AWAITING APPROVAL; 5 "Sound test" clips for the founder's ears
 
 - **Founder (live):** speed + saving work (~6 min). #1 problem = sound: swap sounds lower quality than the original, too much bass / muddy.

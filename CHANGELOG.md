@@ -4,6 +4,9 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-10
 
+- **Tone match to the original** on every swap (10-band, ±6 dB, no extra render). `tsc --noEmit` clean; clean build passed. `151811d`
+- **Cleaner mix:** gentler glue, 250 Hz low cut on reverbs, voice level 0 dB. `tsc --noEmit` clean; clean build passed. `529b793`
+- **Key change keeps drums in place + deep-sub cut** (Demucs drums aligned and subtracted; 20–45 Hz back to the original's). `tsc --noEmit` clean; clean build passed. `8a4847f`
 - **Sound-quality study (no app change):** muddy/bassy = key shift moving the kick/bass into 20–45 Hz (+8–11 dB) + mix chain (glue, Level −2, reverb without low cut: +2 dB bass, −2.5 dB presence, half the dynamics) + duller converted voice; separation not a cause. 5 "Sound test" clips (O/A/B/C/D, chorus 3:42–4:12). 1 conversion $0.017.
 - **Faster Result screen** (music built during the conversion, Original side on demand, loudness from the start), engine warm from the Upload step, 15 s status-check timeout, page-pause diagnostics. `tsc --noEmit` clean; clean build passed. `4d86344`
 - **"Recent — not saved"** — latest unsaved single-voice swap recoverable 24 h (`/api/unsaved`, private storage, no DB). `tsc --noEmit` clean; clean build passed. `dfbf103`
