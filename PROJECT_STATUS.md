@@ -6,6 +6,18 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-10 (late night) — sound-quality study (no app change) — fix plan AWAITING APPROVAL; 5 "Sound test" clips for the founder's ears
+
+- **Founder (live):** speed + saving work (~6 min). #1 problem = sound: swap sounds lower quality than the original, too much bass / muddy.
+- **Measured (latest saved swap 338f9f4a vs the original Pehla Pyaar):** tone tilted to bass — sub +2.0, bass +0.9, mids −2.4, presence −3.6, brilliance −3.8, air −2.7 dB (band shares); deep sub 32–45 Hz **+8.7 dB**, 20–32 Hz +10.8 dB; loudness −9.4 vs −7.8 LUFS; loudness range 3.9 vs 7.7 LU. Width and top-end cutoff ≈ the original.
+- **Controlled renders through the app's own chain** (`src/app/dsp-test/q3`, git-excluded; files in `seedvc-local/work/q3`; render A reproduces the saved swap within 0.4 dB per band):
+  1. **Key shift of the whole instrumental (drums too) −3 st** puts the kick/bass into 20–45 Hz (+8–11 dB vs the original; no shift: +1–1.5). Biggest "too much bass" cause; also eats limiter headroom.
+  2. **Mix chain** (glue on music, Level −2, reverb/bed room without low cut): even with the ORIGINAL singer it adds ~+2 dB bass and −2.5 dB presence/brilliance and halves dynamics (LRA 8.0 → 4.2). Glue alone ≈ 1 dB of tilt and 2 LU; reverb ≈ 0.6 dB. Warmth +4 dB: negligible.
+  3. **Converted voice duller** than the original singer: nothing above ~16 kHz, raw air −7 dB, brilliance −3.5 dB; studio voice restores ~3.4 dB air. (Re-record + retrain planned.)
+  4. Separation (MVSEP stems) is NOT a cause: stems re-mixed with no chain match the original (slightly brighter).
+- **Tone-match EQ** (10 octave bands, iterated, ±6 dB) brings every band within ±0.7 dB of the original (C, D).
+- **Clips (Saved Tracks, voice "Sound test", chorus 3:42–4:12, all at −11 LUFS):** O original · A current · B no key change (voice converted at key 0, music unshifted) · C current + tone match · D no key change + tone match. Cost: 1 conversion $0.017.
+
 ## ✅ 2026-10-10 (night) — manual save, fast save, "Recent — not saved", faster Result (`48af1fa`, `f89912c`, `dfbf103`, `4d86344`) — ⚠️ founder live test pending
 
 - **Retest 11:19–11:32 IST (fresh tab, Mac, Preview):** upload 6.4 s · studio split 86 s · lead split 71 s (warm, started instantly) · conversion 2 min 54 s (58 s cold engine + 73 s + 32 s page paused + 9 s) · Result 68 s (music 25 s, Original 19 s, mix 19 s, search 0.8 s) · save 78.5 s (MP3 ~25 s, uploads 21.6 s, backing 10 s, library entry 20.8 s). Upload → saved 13 min 16 s (app 6 min 53 s + founder 6 min 23 s). No auto-save because it was a Preview.
