@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { StemResult } from './UploadStep'
-import { encodeWav, encodeMp3, encodeMp3FromWav, SAVED_MP3_KBPS } from './audioClip'
+import { encodeWav, encodeMp3, SAVED_MP3_KBPS } from './audioClip'
+import { encodeMp3Background } from './mp3Client'
+import { fetchRetry } from '@/lib/poll'
 import {
   LivePlayer, renderMix, NEUTRAL_PARAMS, BED_ROOM, type MixInputs, type MixParams, type PolishStyle,
   WARMTH_MAX_DB, BASS_MAX_DB, TREBLE_MAX_DB, REVERB_MAX_WET, ECHO_MAX_WET, LEVEL_MAX_DB, BLEND_MAX,
@@ -42,6 +44,8 @@ interface ResultStepProps {
   // only" backing) — best-effort, null whenever its render/upload fails.
   persistMix?: boolean
   onFullMixReady?: (mixedPath: string | null, instrumentalPath?: string | null) => Promise<boolean> | void
+  // The music-only backing, uploaded AFTER the first save (Saved ✓ doesn't wait for it).
+  onInstrumentalReady?: (instrumentalPath: string) => Promise<boolean> | void
   // Re-save the saved track's audio when polish changes AFTER the first save
   // (UPDATE the same row — no re-conversion, no credits). Returns success.
   onPolishResave?: (mixedPath: string) => Promise<boolean> | void
@@ -87,22 +91,14 @@ const PLAY_MODES: { id: PlayMode; label: string }[] = [
   { id: 'vocals', label: 'Vocals only' },
 ]
 
-// Encode a mix to WAV → MP3 (320 kbps) and upload it to audio-uploads via the
-// presign → PUT flow (bypasses Vercel's body limit — a full-song mix is
-// large). Returns the storage path, or null on any failure. Adds each step's
-// time (ms) to `t` for the [timing] save line.
-type SaveMs = { wav: number; mp3: number; upload: number }
-async function uploadMixMp3(buf: AudioBuffer, t: SaveMs, filename = 'swap-full-mix.mp3'): Promise<string | null> {
+// Upload an encoded MP3 to audio-uploads via the presign → PUT flow (bypasses
+// Vercel's body limit — a full-song mix is large). Returns the storage path,
+// or null on any failure. Adds the time (ms) to `t.upload`.
+type SaveMs = { upload: number }
+async function uploadMp3(mp3: Blob, t: SaveMs, filename = 'swap-full-mix.mp3'): Promise<string | null> {
+  const t0 = performance.now()
   try {
-    let t0 = performance.now()
-    const wav = encodeWav(buf)
-    const wavBytes = await wav.arrayBuffer()
-    t.wav += performance.now() - t0
-    t0 = performance.now()
-    const mp3 = encodeMp3FromWav(wavBytes, SAVED_MP3_KBPS)
-    t.mp3 += performance.now() - t0
-    t0 = performance.now()
-    const presignRes = await fetch('/api/upload-stem/presign', {
+    const presignRes = await fetchRetry('/api/upload-stem/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename, contentType: 'audio/mpeg' }),
@@ -115,10 +111,11 @@ async function uploadMixMp3(buf: AudioBuffer, t: SaveMs, filename = 'swap-full-m
       headers: { 'Content-Type': 'audio/mpeg', 'x-upsert': 'false' },
     })
     if (!putRes.ok) return null
-    t.upload += performance.now() - t0
     return presign.path as string
   } catch {
     return null
+  } finally {
+    t.upload += performance.now() - t0
   }
 }
 
@@ -425,7 +422,7 @@ function PolishKnob({
 export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
+  persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
   keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
 }: ResultStepProps) {
   const [ab, setAb] = useState<AbSide>('Swapped')
@@ -834,16 +831,31 @@ export function ResultStep({
   const settledParams = (): MixParams => liveParams.vocalsOnly ? { ...liveParams, vocalsOnly: false } : liveParams
   const settledSigRef = useRef(settledSig)
   settledSigRef.current = settledSig
-  // Build, encode and upload the mix for settings `sig`, then save the row.
-  // Resolves true only when the library has it.
+  // The saved MP3 of a mastered mix, encoded in a background thread and kept
+  // per mix: made while the user listens (below), so pressing Save usually
+  // only uploads. `ms` = how long the encode took.
+  const mp3CacheRef = useRef(new WeakMap<AudioBuffer, Promise<{ blob: Blob; ms: number }>>())
+  function mp3Of(buf: AudioBuffer): Promise<{ blob: Blob; ms: number }> {
+    let p = mp3CacheRef.current.get(buf)
+    if (!p) {
+      const t0 = performance.now()
+      p = encodeMp3Background(channelsOf(buf), buf.sampleRate, SAVED_MP3_KBPS).then((blob) => ({ blob, ms: performance.now() - t0 }))
+      p.catch(() => mp3CacheRef.current.delete(buf))
+      mp3CacheRef.current.set(buf, p)
+    }
+    return p
+  }
+  // Upload the mix for the settled settings, then save the library entry.
+  // Resolves true only when the library has it. The first save's music-only
+  // backing follows in the background (saveBacking).
   async function saveMix(firstSave: boolean): Promise<boolean> {
     let saved = false
     const saveStart = performance.now()
     // Where the save's time goes (ms): master = getting the mastered mix (≈0
-    // when the player already made it for these settings), wav/mp3 = encoding,
-    // upload = presign + PUT; inst* = the music-only backing (first save only);
-    // row = saving the library entry.
-    const mixMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }, instMs: SaveMs = { wav: 0, mp3: 0, upload: 0 }
+    // when the player already made it), mp3Wait = waiting for its MP3 (≈0 when
+    // it was encoded while listening; mp3 = the encode itself), upload =
+    // presign + PUT, row = saving the library entry.
+    const up: SaveMs = { upload: 0 }
     const extra: Record<string, number> = {}
     try {
       let t0 = performance.now()
@@ -851,38 +863,46 @@ export function ResultStep({
       extra.master = performance.now() - t0
       extra.cached = cached ? 1 : 0
       if (!cached) { extra.render = ms.render; extra.search = ms.search; extra.limit = ms.limit }
-      const mixPath = await uploadMixMp3(mix, mixMs)
-      if (!mixPath) {
-        saved = false
-      } else if (firstSave) {
-        // Music-only backing (Perform Live / Sing along), in the take's key —
-        // built + uploaded with the first save. Strictly best-effort.
-        let instrumentalPath: string | null | undefined
-        try {
-          t0 = performance.now()
-          const music = await buildBed({ musicOnly: true })
-          if (music) {
-            const inst = await masterWithGain(await renderMix({ voices: [], harmony: [], partner: null, originals: [], bed: music }, NEUTRAL_PARAMS), gain)
-            extra.instMix = performance.now() - t0
-            instrumentalPath = await uploadMixMp3(inst, instMs, 'swap-instrumental.mp3')
-          }
-        } catch { /* row just won't offer the music-only backing */ }
-        saved = (await onFullMixReady?.(mixPath, instrumentalPath)) === true
-      } else {
+      t0 = performance.now()
+      const enc = await mp3Of(mix)
+      extra.mp3Wait = performance.now() - t0
+      extra.mp3 = enc.ms
+      const mixPath = await uploadMp3(enc.blob, up)
+      if (mixPath) {
         t0 = performance.now()
-        const ok = await onPolishResave?.(mixPath)
+        saved = firstSave ? (await onFullMixReady?.(mixPath)) === true : (await onPolishResave?.(mixPath)) !== false
         extra.row = performance.now() - t0
-        saved = ok !== false
+        if (saved && firstSave) void saveBacking(gain)
       }
     } catch {
       saved = false
     }
-    clientTiming(firstSave ? 'result-save' : 'result-resave', {
-      ...extra, wav: mixMs.wav, mp3: mixMs.mp3, upload: mixMs.upload,
-      ...(firstSave ? { instWav: instMs.wav, instMp3: instMs.mp3, instUpload: instMs.upload } : {}),
-      ok: saved ? 1 : 0, total: performance.now() - saveStart,
-    })
+    clientTiming(firstSave ? 'result-save' : 'result-resave', { ...extra, upload: up.upload, ok: saved ? 1 : 0, total: performance.now() - saveStart })
     return saved
+  }
+  // Music-only backing (Perform Live / Sing along), in the take's key — after
+  // the first save, in the background. Strictly best-effort.
+  async function saveBacking(gain: number) {
+    const start = performance.now()
+    const up: SaveMs = { upload: 0 }
+    const f: Record<string, number> = {}
+    let ok = false
+    try {
+      const music = await buildBed({ musicOnly: true })
+      if (music) {
+        const inst = await masterWithGain(await renderMix({ voices: [], harmony: [], partner: null, originals: [], bed: music }, NEUTRAL_PARAMS), gain)
+        f.build = performance.now() - start
+        const enc = await mp3Of(inst)
+        f.mp3 = enc.ms
+        const path = await uploadMp3(enc.blob, up, 'swap-instrumental.mp3')
+        if (path) {
+          const t0 = performance.now()
+          ok = (await onInstrumentalReady?.(path)) === true
+          f.row = performance.now() - t0
+        }
+      }
+    } catch { /* the row just won't offer the music-only backing */ }
+    clientTiming('result-save-backing', { ...f, upload: up.upload, ok: ok ? 1 : 0, total: performance.now() - start })
   }
   // One save attempt, shown as Saving… → Saved ✓ / Not saved — Retry. A try
   // still running after SAVE_STALL_MS is shown as not saved (Retry starts a
@@ -919,6 +939,15 @@ export function ResultStep({
   useEffect(() => {
     if (saveInfo && saveInfo.changed !== changedSinceSave) onSaveUpdate?.({ changed: changedSinceSave })
   }, [changedSinceSave, saveInfo?.changed]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Make the MP3 for the current settings in the background while the user
+  // listens (unsaved, or changed since the save), so Save only has to upload.
+  const savable = !!saveInfo && (persistMix || previewSaveCost != null)
+  useEffect(() => {
+    if (!savable || !saveReady || fullMixState !== 'ready' || !inputsRef.current?.bed) return
+    if (saveInfo?.state === 'saving' || (saveInfo?.state === 'saved' && !changedSinceSave)) return
+    const t = setTimeout(() => { masteredMix(settledParams()).then((m) => mp3Of(m.buf)).catch(() => {}) }, 1500)
+    return () => clearTimeout(t)
+  }, [savable, saveReady, fullMixState, settledSig, saveInfo?.state, changedSinceSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Player controls ─────────────────────────────────────────────────────────
   const fullReady = fullMixState === 'ready'

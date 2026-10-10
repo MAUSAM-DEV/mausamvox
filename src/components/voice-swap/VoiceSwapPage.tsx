@@ -692,6 +692,14 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       .then((ok) => { clientTiming('result-save-row', { row: performance.now() - t0, ok: ok ? 1 : 0 }); return ok })
   }
 
+  // The music-only backing, uploaded by ResultStep after the first save landed:
+  // add it to the same row (silent, best-effort — the swap is already saved).
+  function handleInstrumentalReady(instrumentalPath: string): Promise<boolean> {
+    const ctx = persistContextRef.current
+    if (!ctx) return Promise.resolve(false)
+    return persistSwap(ctx.predictionId, ctx.songName, ctx.voiceUsed, undefined, instrumentalPath, { silent: true })
+  }
+
   // Called by ResultStep when polish settles to a NEW value after the first
   // save. Re-uploads the freshly-built mix and UPDATEs the SAME voice_swaps row
   // (route keys on the prediction id) — no re-conversion, no credits. Silent +
@@ -1752,6 +1760,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 duetUntouchedVocalsUrl={duetTarget()?.untouchedUrl ?? null}
                 persistMix={armMixUpload}
                 onFullMixReady={handleFullMixReady}
+                onInstrumentalReady={handleInstrumentalReady}
                 onPolishResave={handlePolishResave}
                 voiceName={[
                   voices.find((v) => v.id === selectedVoiceId)?.name,

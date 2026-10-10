@@ -3,16 +3,23 @@ import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 
-// Allow up to 60 s: we download ~5 MB from Replicate then re-upload to Supabase.
+// Allow up to 60 s: normally a storage-side copy (~2 s); the fallback downloads
+// and re-uploads the file.
 export const maxDuration = 60
 
 const VOICE_SWAPS_BUCKET = 'voice-swaps'
 
-// Sign a source file in audio-uploads, download it, and upload it to the
-// voice-swaps bucket at destPath. Used by the re-save path (polish changed) to
-// refresh a stored swap's audio without any Replicate/credit involvement.
-// Best-effort: returns false on any failure (caller keeps the previous file).
+// Put a file the browser uploaded to audio-uploads into the voice-swaps
+// bucket at destPath. A storage-side copy first (2026-10-10: 1.7 s for a
+// 10.9 MB mix — the old download + re-upload took ~10 s per file); if that
+// fails, the old way. Best-effort: false on failure (caller keeps the
+// previous file / stores without it).
 async function copyToVoiceSwaps(srcAudioUploadsPath: string, destPath: string): Promise<boolean> {
+  const { error: copyErr } = await supabaseAdmin.storage
+    .from('audio-uploads')
+    .copy(srcAudioUploadsPath, destPath, { destinationBucket: VOICE_SWAPS_BUCKET })
+  if (!copyErr) return true
+  console.warn('[voice-swaps/persist] storage copy failed, downloading instead:', copyErr.message)
   try {
     const { data: signed, error: signErr } = await supabaseAdmin.storage
       .from('audio-uploads')
@@ -97,7 +104,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { predictionId, songName, voiceUsed, mixedPath, instrumentalPath, vocalStemPath } = body
+  const { predictionId, songName, voiceUsed, vocalStemPath } = body
+  // Only the caller's own uploads (presign writes <user id>/<ts>-<name>).
+  const ownUpload = (p?: string) => (p && !p.includes('..') && p.startsWith(`${user.id}/`) ? p : undefined)
+  const mixedPath = ownUpload(body.mixedPath)
+  const instrumentalPath = ownUpload(body.instrumentalPath)
   if (!predictionId) return NextResponse.json({ error: 'predictionId is required' }, { status: 400 })
   if (!songName)     return NextResponse.json({ error: 'songName is required' }, { status: 400 })
   if (!voiceUsed)    return NextResponse.json({ error: 'voiceUsed is required' }, { status: 400 })
@@ -180,44 +191,33 @@ export async function POST(req: NextRequest) {
   const swapId = crypto.randomUUID()
   const swapPath = `${user.id}/${swapId}.mp3`
 
-  // ── Pick what to store durably ───────────────────────────────────────────
-  // Prefer the client-built full mix (signed from audio-uploads); fall back to
-  // the Replicate vocal URL when no mix was supplied or it can't be signed.
-  let downloadUrl = resultUrl
+  // ── Store durably: the client-built full mix (copied inside storage), or —
+  // when no mix was supplied or the copy failed — the Replicate vocal.
+  let resultPath: string | null = null
   if (mixedPath && !mixedPath.includes('..')) {
-    const { data: signed, error: signErr } = await supabaseAdmin.storage
-      .from('audio-uploads')
-      .createSignedUrl(mixedPath, 600) // 10 min — fetched immediately below
-    if (signErr || !signed?.signedUrl) {
-      console.error('[voice-swaps/persist] mixed path sign failed, using vocal:', signErr?.message)
+    if (await copyToVoiceSwaps(mixedPath, swapPath)) {
+      resultPath = swapPath
+      console.log('[voice-swaps/persist] stored FULL mix from', mixedPath, '→', swapPath)
     } else {
-      downloadUrl = signed.signedUrl
-      console.log('[voice-swaps/persist] storing FULL mix from', mixedPath)
+      console.error('[voice-swaps/persist] mix copy failed, storing the vocal instead')
     }
   }
-
-  // ── Best-effort: download + upload to durable storage ────────────────────
-  let resultPath: string | null = null
-  try {
-    const res = await fetch(downloadUrl)
-    if (!res.ok) {
-      console.error(`[voice-swaps/persist] download failed HTTP ${res.status}`)
-    } else {
-      const mp3Buffer = Buffer.from(await res.arrayBuffer())
-      console.log('[voice-swaps/persist] downloaded', mp3Buffer.length, 'bytes for swap', swapId)
-
-      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-        .from(VOICE_SWAPS_BUCKET)
-        .upload(swapPath, mp3Buffer, { contentType: 'audio/mpeg', upsert: false })
-      if (uploadError) {
-        console.error('[voice-swaps/persist] upload failed:', uploadError.message)
+  if (!resultPath && resultUrl) {
+    try {
+      const res = await fetch(resultUrl)
+      if (!res.ok) {
+        console.error(`[voice-swaps/persist] download failed HTTP ${res.status}`)
       } else {
-        resultPath = swapPath
-        console.log('[voice-swaps/persist] uploaded — local path:', swapPath, '| supabase fullPath:', uploadData?.fullPath ?? '(no fullPath returned)')
+        const mp3Buffer = Buffer.from(await res.arrayBuffer())
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from(VOICE_SWAPS_BUCKET)
+          .upload(swapPath, mp3Buffer, { contentType: 'audio/mpeg', upsert: false })
+        if (uploadError) console.error('[voice-swaps/persist] upload failed:', uploadError.message)
+        else resultPath = swapPath
       }
+    } catch (err) {
+      console.error('[voice-swaps/persist] storage step threw:', err instanceof Error ? err.message : String(err))
     }
-  } catch (err) {
-    console.error('[voice-swaps/persist] storage step threw:', err instanceof Error ? err.message : String(err))
   }
 
   // Nothing playable to store (no durable copy and no Replicate URL left) →
@@ -227,37 +227,15 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Best-effort: persist the MUSIC-ONLY instrumental alongside ─────────────
-  // Same sign → download → upload dance as the mix above. Any failure leaves
+  // (Usually sent later, as a re-save, once the first save landed.) Any failure leaves
   // instrPath null: the swap still saves fully, /swaps just won't offer the
   // "Music only" Performance Mode backing for this row.
   let instrPath: string | null = null
   if (instrumentalPath && !instrumentalPath.includes('..')) {
-    try {
-      const { data: signed, error: signErr } = await supabaseAdmin.storage
-        .from('audio-uploads')
-        .createSignedUrl(instrumentalPath, 600)
-      if (signErr || !signed?.signedUrl) {
-        console.error('[voice-swaps/persist] instrumental sign failed:', signErr?.message)
-      } else {
-        const res = await fetch(signed.signedUrl)
-        if (!res.ok) {
-          console.error(`[voice-swaps/persist] instrumental download failed HTTP ${res.status}`)
-        } else {
-          const buf = Buffer.from(await res.arrayBuffer())
-          const path = `${user.id}/${swapId}-instrumental.mp3`
-          const { error: upErr } = await supabaseAdmin.storage
-            .from(VOICE_SWAPS_BUCKET)
-            .upload(path, buf, { contentType: 'audio/mpeg', upsert: false })
-          if (upErr) {
-            console.error('[voice-swaps/persist] instrumental upload failed:', upErr.message)
-          } else {
-            instrPath = path
-            console.log('[voice-swaps/persist] instrumental stored:', path)
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[voice-swaps/persist] instrumental step threw:', err instanceof Error ? err.message : String(err))
+    const path = `${user.id}/${swapId}-instrumental.mp3`
+    if (await copyToVoiceSwaps(instrumentalPath, path)) {
+      instrPath = path
+      console.log('[voice-swaps/persist] instrumental stored:', path)
     }
   }
 
