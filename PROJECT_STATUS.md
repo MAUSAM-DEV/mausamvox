@@ -6,6 +6,19 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (6) — gaps fixed + first English test (no app change) — founder to compare 2 clip pairs
+
+- Founder: "fixed HD" ≈ 70% "like me", but the voice drops out (≈0:04–0:08, 0:14–0:15, 0:21–0:23, 0:40…).
+- **Gap cause = the enhancer** (Resemble Enhance). Level of each stage vs the original lead, per 50 ms: lead split and Seed-VC chunk joins lose no loud singing (only short soft phrase-ends, 5%, same before and after); the enhancer drops 27% of sung frames by 30–55 dB, including all the founder's times (3.8–7.3, 13.9–14.8, 20.0–22.6, 39.7–41.2 s …). Its built-in denoiser alone drops 33% → it treats sustained singing as noise (not pitch- or level-related).
+- **Fix (enhancer stage only):** `seedvc-local/work/lossless/fill.py` — keep the enhanced voice; wherever it's quieter than the un-enhanced voice, add back exactly the missing power from it (20 ms envelopes, 30 ms smoothing). Dropouts back to the pre-enhancer level (4.5% soft edges, loud singing lost 0.1%); fill active on 38% of singing; clarity 20.1 dB (enhanced 21.6, before 18.2).
+- **English song:** "Saigon_Kick_-_Love_is_on_the_way.mp3" (upload 2026-10-12 10:40 UTC; MVSEP stems `hq-0NyQB4fHx9c1D80w`, lead/backing `k0p91npvsdrmy0d15ysr6ykem4`, Demucs drums `wqhzbfedd1rge0d15ys9js3f20`). Solo male (Matt Kramer; lead pitch median D#4, 90% F#4; male backing vocals).
+- **"Mausam English 4"** not found anywhere (Downloads, voice library, storage) → used the "Mausam English" recording (item 4 of round 5): reference = clearest 10 s (3:30–3:40).
+- **Key −3:** song median D#4 vs founder C4; −3 puts the medians together, 79% inside F3–F4 (73% at 0), G#4+ notes 4.4% → 0.5%; very low notes ≤E3 16% → 18%.
+- **New engine HD:** Seed-VC fine-tune 1500 steps on 48 clips (24 Hindi + 24 English, `voice-samples/<uid>/seedvc-test/dataset_hi_en.zip`; loss 0.66 → 0.55), English reference, key −3, cfg 0.3, 60 ms smoothing, 100 steps, pitch lock 80% → enhancer → gap fill (enhancer had lost 6.4% loud singing → 0%) → app studio polish. Music = original instrumental + backing (doubles removed), Rubber Band R3 −3 (`--ignore-clipping`), no glue/tone match/room.
+- **Current engine:** live RVC (`rvc-v2-index`, live settings) with "Mausam (Singing)" at the same key −3 (the app's Auto Key would leave 0), full app chain (F1 drums, F2, F3 tone match, master).
+- **Clips** (voice "Engine compare v5", 90 s, all −17 LUFS so HD needs no limiter): "Pehla Pyaar — fixed HD" / "… fixed HD no gaps" (2:42–4:12); "Saigon Kick - Love is on the way — current engine" / "… new engine HD" (0:00–1:30, verse 1 + chorus).
+- Cost (Likely, unverified): Seed-VC 548 s L40S ≈ $0.53 + RVC ≈ $0.02 + enhancer ≈ $0.08 → ≈ $0.65. Files: `seedvc-local/work/q4/`, test page `src/app/dsp-test/q4c` (git-ignored).
+
 ## 🔬 2026-10-12 (5) — "fixed HD": original music + clearer voice (no app change) — founder to compare "fixed" vs "fixed HD"
 
 - Founder: "fixed" ≈ 50% "like me". Goal: replace only the vocals; music as close to the original as possible.

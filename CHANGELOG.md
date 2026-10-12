@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-12
 
+- **Gaps + English test (no app change):** voice dropouts in "fixed HD" = the enhancer's denoiser erasing sustained singing (27% of sung frames); fixed by filling from the un-enhanced voice (`fill.py`). Saigon Kick "Love is on the way" (solo male) at key −3: new engine HD (fine-tune on Hindi + English clips, English reference) vs current engine; 4 clips at −17 LUFS ("Engine compare v5").
 - **"fixed HD" test (no app change):** low quality = converted voice dull above 5 kHz and hiss-like (HNR 18.2 vs real 21.4); Resemble Enhance (MIT) brings it to 21.6; music = original stems key −1 via Rubber Band R3 (`--ignore-clipping`), no glue/tone match/room; English recording checked lossless and stored; "fixed" / "fixed HD" clips at −16 LUFS ("Engine compare v4").
 - **Seed-VC round 4 (no app change):** Señorita issues = very low male notes (not the duet); no English in the recording; key −1 for Pehla Pyaar on this engine; 1500-step fine-tune; "last" / "fixed" clips.
 - **Seed-VC improved (no app change):** fine-tuning added to the private engine (branch `seed-vc-finetune`), clear-diction reference, cfg 0.3, Praat pitch lock; Pehla Pyaar + Señorita 90 s clips saved ("Engine compare v2").
