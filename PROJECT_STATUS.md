@@ -6,6 +6,17 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-12 (9) — "last improved": tone, wobble, 0:50 fix on top of "last" (no app change) — founder to compare
+
+- Founder: "last" sounds like him; "fixed" became a different voice → base = "last" for both songs; keep the same enhancer + brightness (synthetic air ON, key −3 for Love).
+- **Tone jumps — cause (proven):** "last" switched between enhanced and plain voice 62× (Pehla, 59 mid-phrase) / 24× (Love, 21 mid-phrase); plain is deeper/fizzier (+2.5 dB @125 Hz, +3.4 dB @8 kHz); 2nd-take splices up to +3.3 dB @250 Hz. **Fix:** every patch (plain voice, 2nd take) is EQ'd to the enhanced voice's tone (1/3-octave, measured at the same moments → within ~1 dB). Whole-phrase switching tested and dropped (no clarity gain).
+- **Wobble — cause (proven):** "last"'s pitch lock copied the original lead's whole contour → jitter 15 → 25 c (Pehla) / 15 → 33 c (Love), + glitch swoops. **Fix (`q4/vfinal4.py`, gentle):** keep the voice's own vibrato; halve jitter > 10 Hz (on Praat's own pitch points); re-centre whole notes 15 c–2 st off (trustworthy frames). Tried and rejected (made it worse): slow-melody smoothing across notes, in-note drift correction.
+- **Love 0:50 — cause (proven):** at 0:50 the backing singers enter and the lead stem fills with other voices (backing stem −36.8 → −13.6 dB vs lead; other-voice share 52 → 64 %) → engine cracks ×3 (5.5 → 15.6 % of singing), lock-copied swoops 9 → 28, jitter 20 → 34 c. Not range (0.4 % above E4), not key. **Fix:** from the pause at 0:49.92 a new conversion of the MVSEP-Karaoke lead (same key −3, cfg 0.7, smoothing 60, same fine-tune data/reference, same enhancer) + MVSEP backing in the music (chorus backing −35.8 → −27.6 dB); 0:00–0:49.9 is exactly "last".
+- **Mumbling — cause:** the engine's own output (unclear spots already unclear before any processing: Pehla 13/28 windows, Love 0:17–0:32); the enhancer blurs a few; no change tested made words measurably clearer without changing the voice → not changed.
+- **Measured last → last improved:** Pehla jitter 26.6 → 15.3 c, wobble 74 → 65 c, swoops 5 → 3, cracks 19 → 22 (≈), slow pitch > 25 c off 8.0 → 10.8 % (≈ raw engine), clarity 0.55 → 0.56. Love after 0:50: cracks 37 → 19, swoops 13 → 4, jitter 33.6 → 25.4 c, wobble 81 → 61 c, identity hint 0.73 → 0.78, clarity 0.10 → 0.16 (slightly worse).
+- **Clips** (voice "Engine compare v8", 90 s, −17 LUFS): "Pehla Pyaar — last / last improved" (3:02–4:32), "Love is on the way — last / last improved" (0:00–1:30).
+- Cost (Likely, unverified): 1 Seed-VC run ≈ $0.55 + 1 enhancer ≈ $0.08. Tools `q4/`: `switches.py`, `wobble2.py`, `slowpitch.py`, `mumble.py`, `vfinal4.py`, `gapfill3.py`.
+
 ## 🔍 2026-10-12 (8) — systematic debugging: "not fixed" — causes found by evidence (no app change) — founder to compare "last" vs "fixed"
 
 - Founder: HD (final) sounded the same — Love is on the way "only LOW" + backing "very low"; Pehla breaks/cracks/up-down, worse near the ending.
