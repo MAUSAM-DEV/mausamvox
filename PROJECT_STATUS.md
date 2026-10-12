@@ -6,6 +6,14 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (11) — "polish 2": calm fast shakes on long notes only (no app change) — founder to compare
+
+- Founder: "last polish 1" sounds like him and is smoother → new base. Add ONLY a gentle wobble fix.
+- **Evidence:** fast shake (> 10 Hz) on long notes (voice holds within ±0.7 st ≥ 400 ms): Love polish 1 8.9 c vs his own English singing 4.6 c (copied from the original singer, 9.8 c); Pehla 6.1 c vs his Hindi 9.9 c.
+- **Change (`q4/calm.py`):** inside long notes only, halve the pitch movement faster than 11 Hz (sharp 6th-order filter so vibrato ≤ 8 Hz passes); Praat PSOLA audio used only inside long notes (30 ms crossfades), everything else = polish 1.
+- **Measured polish 1 → 2:** fast shake Love 8.9 → 6.0 c, Pehla 6.1 → 5.7 c; vibrato depth Love 35.5 → 34.1 c (−4 %; a Praat pass with no change alone gives −2.5 %), Pehla 25.2 → 25.4 c; vibrato speed 5.3 → 5.5 / 5.9 → 5.9 per s; slow melody unchanged; pitch outside long notes identical.
+- **Clips** (voice "Engine compare v10", 90 s, −17 LUFS): "Pehla Pyaar — polish 1 / polish 2", "Love is on the way — polish 1 / polish 2". No paid runs.
+
 ## 🔬 2026-10-12 (10) — "last polish 1": two changes on top of "last" only (no app change) — founder to compare
 
 - Founder: "last improved" did NOT sound like him; only "last" does. Rule from now: start from "last" exactly, ONE kind of change at a time, voice identical; no pitch/vibrato/note changes.
