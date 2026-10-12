@@ -6,6 +6,19 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-12 (8) — systematic debugging: "not fixed" — causes found by evidence (no app change) — founder to compare "last" vs "fixed"
+
+- Founder: HD (final) sounded the same — Love is on the way "only LOW" + backing "very low"; Pehla breaks/cracks/up-down, worse near the ending.
+- **Lesson:** my earlier "fixed" numbers compared the voice against the lead stem's OWN melody track, so copied glitches looked correct. Detectors are now calibrated against the live engine (RVC): "tone jump" and "sudden pitch jump" flag normal singing equally → discarded. Kept: subharmonic cracks (energy at half the pitch the original lacks), copied melody glitches, dropouts, note-by-note pitch.
+- **Love is on the way — causes (proven):** (1) key −3 moves voice (139/140 notes exactly −3), music and backing (−2.99 st) down; your recordings cover key 0 (song's 99 % note G4; your Hindi 99 % F#4–G4). (2) Chorus harmonies were inside the LEAD stem (UVR KARA_2): backing stem −15 dB vs all vocals in the chorus, visible second voice lines → your single voice replaced them. (3) My "final" pitch lock copied 16 melody-track glitches (noisy spots) as swoops. NOT a cause: no octave drops, no quiet high notes (RMVPE + pYIN).
+- **Pehla Pyaar — causes (proven):** my pitch lock copied 5 glitches; the app's synthetic "air" adds noise-like fizz (rough spots 3 → 8; 9–16 kHz noisiness 0.27 vs original 0.18); the enhancer adds subharmonic cracks (raw 22 → 49; 9 survive the switch). The rest of the cracks come from the NEW ENGINE itself at fast pitch slides (crack time 9 % on slides vs 3 % elsewhere; same in the English song), more near the ending; 18 of 22 at the same moment in two takes. Rejected (tested): better split (no change for Pehla), echo/reverb, the 60 ms melody smoothing (off: 23 vs 22 cracks), training data (your recordings have as many fast slides), note height.
+- **Range:** your recordings: Hindi 99 % F#4–G4, English 99 % D#4–E4. English at key 0: cracks rise on E4+ (12 %) and F#4+ (27 %) vs 3–5 % mid — a real limit, ~7 s of the clip. Pehla: no rise with height.
+- **Fixes (only proven):** Love → key 0 (music untouched), lead/back split by MVSEP Karaoke BS Roformer 124 bands (sep_type 49, add_opt1 8; chorus backing −34 → −27 dB after doubles removal), fresh conversion. Both → pitch lock only where the original melody is trustworthy (HNR ≥ 8 dB, no excursion; no big "crack" corrections) — `q4/vfinal3.py`; switch to the plain voice where the enhancer breaks / clicks / cracks; render with the synthetic air OFF (`?air=off`).
+- **Measured last → fixed:** Love: swoops 16 → 5, cracks 43 → 19, notes followed 129/129 (26 high); Pehla: swoops 5 → 2, cracks 19 → 18 (engine), dropouts 0.4 → 0.1 %.
+- **Clips** (voice "Engine compare v7", 90 s, −17 LUFS): "Pehla Pyaar — last/fixed" (3:02–4:32), "Love is on the way — last/fixed" (0:00–1:30).
+- Cost (Likely, unverified): 2 Seed-VC runs ≈ $1.07 + enhancer ≈ $0.08 + 2 MVSEP jobs. Tools `q4/`: `notes.py`, `subh.py`, `glitch.py`, `range.py`, `kara.mts`, `vfinal3.py`.
+- **Open (needs founder decision, not attempted):** the engine's own cracks on fast slides — 3 hypotheses failed → engine limitation; options: compare live engine on those spots, a different engine, or accept.
+
 ## 🔬 2026-10-12 (7) — "HD (final)": volume, pitch/vibrato, cracks, dropouts, clearer words (no app change) — founder to compare
 
 - Founder: both "fixed HD no gaps" and English "new engine HD" sound like him. Last fixes asked: volume, pitch/vibrato, cracks (Pehla ending), dropouts, pronunciation.
