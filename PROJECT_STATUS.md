@@ -6,6 +6,15 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (3) — Seed-VC improved: fine-tune + clear reference + pitch lock (no app change)
+
+- **Engine:** private `mausam-dev/seed-vc` version `69165b7c…` (repo MAUSAM-DEV/mausamvox-models, branch `seed-vc-finetune`, not merged): optional `finetune_zip`/`finetune_steps` (upstream train.py Trainer unchanged; hub lookups → baked cache; OpenVoice V2 converter MIT + se_db.pt baked), `f0_smoothing_ms`, `audio2`, `cfg_rates` (bundle zip). Defaults = old behaviour; base weights restored after each fine-tuned run.
+- **Run:** fine-tune 600 steps on the 24 lossless clips (loss 0.641 → 0.559), reference 0:20–0:30 of the lossless recording (Whisper: clearest varied Hindi words), 100 diffusion steps, f0 smoothing 60 ms, cfg 0.3 & 0.5 — 287 s L40S.
+- **Pronunciation (Whisper-small CER vs the original singer, lower = clearer):** Hindi current RVC 0.474 · new cfg 0.3 0.395 · 0.5 0.405; English current 0.643 · new 0.3 0.405 · 0.5 0.510 → cfg 0.3.
+- **Pitch lock (Praat PSOLA, 80% toward the smoothed source melody, only within 2 st, no semitone snapping):** off-melody median Pehla 10 → 7 c (current 12), Señorita 12 → 6 c (current 6); wobble Señorita 9 → 5 c. Costs some clarity: CER Hindi 0.416, English 0.552 (still below current).
+- **Clips** (voice "Engine compare v2", 90 s, −11 LUFS, same app chain, level-matched): "Pehla Pyaar — current engine 90s" / "… new engine improved 90s" (2:42–4:12, key 0); "Señorita — current engine 90s" / "… new engine improved 90s" (0:55–2:25, 83% male section; duet). Current = RVC "Mausam (Lossless)".
+- **Licence:** Seed-VC code + weights GPL-3.0, fine-tuned weights GPL-3.0, trainer GPL-3.0, OpenVoice V2 MIT, Praat/parselmouth GPL-3.0 — commercial use allowed (server-side).
+
 ## 🔬 2026-10-12 (2) — Seed-VC re-test, 90 s clips (no app change)
 
 - Founder heard on the 30 s Seed-VC clip: higher pitch, a second voice, wobbly vibrato. Measured: pitch within 2 cents of the source (RVC 3 c), steadier than RVC frame-to-frame (6 vs 11 c) and at vibrato speed (3 vs 4 c) — the engine has no auto pitch adjust (key 0 kept).
