@@ -6,6 +6,15 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (12) — "polish 1B": fewer plain-voice patches (no app change) — founder to compare; "polish 2" REJECTED
+
+- Founder: "polish 2" (calming fast shakes) sounds less like him → base stays "polish 1"; no pitch/vibrato changes. Asked for #1 only: make the enhancer erase less so fewer spots need patching.
+- **Tested and rejected (the enhancer still erases the same):** shorter pieces (~6 s, 20.3 → 19.7 %), prior temperature 0/1, 128 steps, RK4 solver, +6 dB input (28.5–45 % vs 31.6 % on the densest 20 s), and the denoiser fully off (`lambd` 0 vs Replicate's fixed 0.1, run locally with the MIT code + HF weights in `seedvc-local/venv_enh`: 29.9 vs 30.9 %). ~80 % of patched spots are truly gone (> 20 dB down), not just quieter.
+- **Found:** a second enhancer run erases mostly the same spots (17.7 % in both), but the clean-lead conversion's enhanced take erases far less in Love (6.3 % vs 18 % before 0:50).
+- **Change (`q4/vfinal_tm3.py`):** same patch spots and decisions as polish 1; inside them, fill from other ENHANCED takes where they're not erased (tone-matched, and loudness-following the old patch at 200 ms), plain voice only where every take is erased. Love after 0:50 unchanged (bit-identical).
+- **Plain-voice patches, polish 1 → 1B:** Pehla 20.3 → 17.1 % of singing (3.2 % now enhanced takes); Love 0:00–0:50 18.0 → 4.7 % (13.3 % now the clean-lead enhanced take); Love 0:50–1:30 1.5 % (unchanged). Main voice bit-identical on 91 % (Pehla) / 93 % (Love) of sung time; pitch median 0 c; level within 0.05 dB.
+- **Clips** (voice "Engine compare v11", 90 s, −17 LUFS): "Pehla Pyaar — polish 1 / polish 1B", "Love is on the way — polish 1 / polish 1B". Cost (Likely, unverified): ~150 s of enhancer GPU ≈ $0.2.
+
 ## 🔬 2026-10-12 (11) — "polish 2": calm fast shakes on long notes only (no app change) — founder to compare
 
 - Founder: "last polish 1" sounds like him and is smoother → new base. Add ONLY a gentle wobble fix.
