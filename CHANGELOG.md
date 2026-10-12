@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-12
 
+- **Seed-VC round 4 (no app change):** Señorita issues = very low male notes (not the duet); no English in the recording; key −1 for Pehla Pyaar on this engine; 1500-step fine-tune; "last" / "fixed" clips.
 - **Seed-VC improved (no app change):** fine-tuning added to the private engine (branch `seed-vc-finetune`), clear-diction reference, cfg 0.3, Praat pitch lock; Pehla Pyaar + Señorita 90 s clips saved ("Engine compare v2").
 - **Seed-VC re-test (no app change):** "second voice"/wobble traced to ~5 s chunk cross-fades (25 s reference in a 30 s window); 10 s reference + 100 steps; 90 s clips "Current engine 90s" / "New engine tuned 90s".
 - **Engine research (no app change):** only Seed-VC qualifies on licence (code + weights GPL-3.0); Vevo1.5 / Serenade / DDSP-SVC vocoder non-commercial, HQ-SVC unlicensed. "Current engine" / "New engine" clips saved.

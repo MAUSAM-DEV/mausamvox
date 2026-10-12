@@ -6,6 +6,15 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (4) — Seed-VC: Señorita cause, language reference, key, longer fine-tune (no app change)
+
+- Founder: new engine ≈30–45% "like me" vs 20–30% old → focus on Seed-VC.
+- **Señorita:** problems unique to the new engine (vs RVC on the same frames) at 1:00, 1:04–1:05, 1:15, 2:12 — all MALE-only passages on very low notes (D3–E3, ~9–11 st below the founder's median); none in female or overlapping parts (most other flags appear for RVC too = pitch-tracker misreads of the duet stem). Cause = notes far below the voice's range, not the duet.
+- **Same-language reference:** the lossless recording has no English singing (Whisper language ID: 16/23 windows Hindi; the 2 "English" windows are wordless vocalise) → needs ~30 s of English singing; not tested.
+- **Key (Pehla Pyaar, new engine):** founder's range from the lossless recording F3–F4 (10–90%), median C4. New-engine errors ~10% up to ~3 st above F4, 28% from G#4 up; key 0 puts 9.4% of the singing there → **key −1** (top G#4 → G4; 0.2% left), the smallest change.
+- **One quality change:** fine-tune 600 → 1500 steps (loss still falling: 0.580 @600 → 0.540 @1490); 481 s L40S ≈ $0.47. Result: errors 13.6% vs 13.3%, off-melody 8 c both; Whisper CER 0.600 vs 0.416 (noisy; first lines read closer).
+- **Clips** (voice "Engine compare v3", 2:42–4:12, −11 LUFS): "Pehla Pyaar — new engine (last)" (key 0, 600 steps) / "Pehla Pyaar — new engine (fixed)" (key −1, 1500 steps; both cfg 0.3, Hindi reference, 60 ms smoothing, pitch lock 80%).
+
 ## 🔬 2026-10-12 (3) — Seed-VC improved: fine-tune + clear reference + pitch lock (no app change)
 
 - **Engine:** private `mausam-dev/seed-vc` version `69165b7c…` (repo MAUSAM-DEV/mausamvox-models, branch `seed-vc-finetune`, not merged): optional `finetune_zip`/`finetune_steps` (upstream train.py Trainer unchanged; hub lookups → baked cache; OpenVoice V2 converter MIT + se_db.pt baked), `f0_smoothing_ms`, `audio2`, `cfg_rates` (bundle zip). Defaults = old behaviour; base weights restored after each fine-tuned run.
