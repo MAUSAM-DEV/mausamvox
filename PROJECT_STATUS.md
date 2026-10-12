@@ -6,6 +6,13 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎙️ 2026-10-12 — new voice "Mausam (Lossless)" trained (no app change) — founder to compare by ear
+
+- 1st file "Mausam lossless.m4a" was AAC 62.8 kbps (not lossless) → stopped. 2nd "Mausam lossless 2.m4a": ALAC 16-bit 48 kHz mono, 3:54, content past 19.5 kHz, peak −0.7 dB, noise floor −67 dB → OK.
+- Trained with M0's settings: cleanup `highpass=80, afftdn nr=12 nf=-50 tn=1` → mono 44.1k s16, 24 × 10 s clips (full recording), RVC v2 48k rmvpe_gpu batch 7, 50 epochs; 176 s ≈ $0.17.
+- NEW voice_clones row `be2075cf-1f2f-4177-b89e-9f1ba2b72126` "Mausam (Lossless)" (model `voice-models/<uid>/be2075cf….zip`, sample mp3 in voice-samples). "Mausam (Singing)" (M0) unchanged (verified).
+- Clips in Saved Tracks (voice "Voice compare"): "Old voice" (M0) / "New voice" (Lossless) — Pehla Pyaar chorus 3:42–4:12, key 0, current app chain, both −11 LUFS. 1 conversion $0.017.
+
 ## ↩️ 2026-10-10 (late night, 6) — blend-in + high-note assist REVERTED (`6fd55d1`); mixing frozen
 
 - Founder: "Smooth test" was worse → `0bc2f84` (blend-in match) and `a6f0774` (high-note assist) undone in one commit. App code = `f6ea805` exactly (Auto Key 0 + loudness fix kept; F1/F2/F3 sound fixes kept).

@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-12
+
+- **New voice "Mausam (Lossless)"** trained from the lossless re-record with M0's settings (≈ $0.17); "Old voice" / "New voice" clips saved. "Mausam (Singing)" unchanged. No app change.
+
 ## 2026-10-10
 
 - **Reverted** blend-in match (`0bc2f84`) and high-note assist (`a6f0774`) — founder preferred the sound before; Auto Key 0 and the loudness fix kept. `tsc --noEmit` clean; clean build passed. `6fd55d1`
