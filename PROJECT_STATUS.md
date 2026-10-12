@@ -1,10 +1,21 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+_Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
 **✅ Migrations (checked 2026-10-03, read-only):** all 20 files in `supabase/migrations/` are applied in production — share links (`share_token` column exists), Voice Library (4 `voice_clones` columns exist), waitlist (table exists, 15 sign-ups), polish re-save grant (a swap was re-saved via UPDATE on 2026-08-13 14:55 UTC — that UPDATE fails without the grant). Older "⚠️ PENDING / NOT APPLIED" notes further down are historical. **✅ Replicate topped up** ($10, founder, 2026-10-03) — the under-$5 throttle note below is resolved.
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
+
+## 🔬 2026-10-12 (5) — "fixed HD": original music + clearer voice (no app change) — founder to compare "fixed" vs "fixed HD"
+
+- Founder: "fixed" ≈ 50% "like me". Goal: replace only the vocals; music as close to the original as possible.
+- **Why the voice sounds low quality at 320 kbps (measured, voice alone vs the founder's real lossless voice):** the converted voice is 4–9 dB short above 5 kHz, and the top it has is hiss-like, not clear harmonics — clarity (HNR) 18.2 vs 21.4 dB, noise-likeness 4–8 kHz 0.138 vs 0.054, harmonic peaks 10.9 vs 12.6 dB. The app's "air" polish already refills the level above 10 kHz (synthetic), so an EQ can't fix it (tried: EQ toward the real voice — dropped). 320 kbps only keeps what's there.
+- **Clarity fix (one):** Resemble Enhance (code MIT, HF weights MIT) via public Replicate `resemble-ai/resemble-enhance` (version `93266a7e…`; enhanced output, denoise off, 64 steps, temp 0.5, Midpoint), 50 s compute for 100 s of voice. After: clarity 21.6 dB, noise-likeness 0.088, harmonic peaks 12.5 (≈ the real voice); timing within 3 ms. Same app studio polish + level as "fixed" afterwards.
+- **HD music:** original instrumental + backing (same-note doubles removed), key −1 with Rubber Band 4.0.0 R3 (`-3 --centre-focus`, backing also `-F` formants; licence GPL-2.0-or-later). ⚠️ Rubber Band's CLI silently turns the whole file down (here 1.7 dB) if the output would clip → use `--ignore-clipping` with float files. No drums re-alignment, no sub cut, no glue, no shared room, no tone match. Music sits 1.2 dB lower next to the voice than in "fixed" (that's "fixed"'s glue/tone match).
+- **Loudness:** without a limiter, "fixed HD" would peak +3.4 dB over full scale at −11 LUFS → both clips at **−16 LUFS** (HD peak −1.9 dBFS, no limiter). Turn the volume up.
+- **Clips** (voice "Engine compare v4", Pehla Pyaar 2:42–4:12, key −1): "fixed" (current best, app chain) / "fixed HD".
+- **English recording ready (not tested):** `Mausam English.m4a` = ALAC 48 kHz 16-bit mono 3:56 (lossless). Cleaned (80 Hz high-pass, light denoise) → `voice-samples/<uid>/seedvc-test/english/clean_en.wav`; clearest 10 s (3:30–3:40, Whisper) → `…/english/reference_en10.wav`. (The bucket refuses FLAC → 16-bit WAV.)
+- Cost: 1 Resemble Enhance run (Likely, unverified: < $0.10). Files: `seedvc-local/work/lossless/` (`clarity.py`, `polcmp.mts`, `enhance.mjs`, `enh_1.wav`, `inst_rb.wav`, `backing_rb.wav`), `seedvc-local/work/english/`, test page `src/app/dsp-test/q3hd` (git-ignored).
 
 ## 🔬 2026-10-12 (4) — Seed-VC: Señorita cause, language reference, key, longer fine-tune (no app change)
 

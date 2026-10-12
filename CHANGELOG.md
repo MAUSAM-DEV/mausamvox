@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-12
 
+- **"fixed HD" test (no app change):** low quality = converted voice dull above 5 kHz and hiss-like (HNR 18.2 vs real 21.4); Resemble Enhance (MIT) brings it to 21.6; music = original stems key −1 via Rubber Band R3 (`--ignore-clipping`), no glue/tone match/room; English recording checked lossless and stored; "fixed" / "fixed HD" clips at −16 LUFS ("Engine compare v4").
 - **Seed-VC round 4 (no app change):** Señorita issues = very low male notes (not the duet); no English in the recording; key −1 for Pehla Pyaar on this engine; 1500-step fine-tune; "last" / "fixed" clips.
 - **Seed-VC improved (no app change):** fine-tuning added to the private engine (branch `seed-vc-finetune`), clear-diction reference, cfg 0.3, Praat pitch lock; Pehla Pyaar + Señorita 90 s clips saved ("Engine compare v2").
 - **Seed-VC re-test (no app change):** "second voice"/wobble traced to ~5 s chunk cross-fades (25 s reference in a 30 s window); 10 s reference + 100 steps; 90 s clips "Current engine 90s" / "New engine tuned 90s".
