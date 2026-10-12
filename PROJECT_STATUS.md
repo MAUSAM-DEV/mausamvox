@@ -6,6 +6,14 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (10) — "last polish 1": two changes on top of "last" only (no app change) — founder to compare
+
+- Founder: "last improved" did NOT sound like him; only "last" does. Rule from now: start from "last" exactly, ONE kind of change at a time, voice identical; no pitch/vibrato/note changes.
+- **Change 1 — tone-matched patches:** the plain-voice patches (enhancer gaps) and 2nd-take splices are EQ'd to the main voice's tone; the main enhanced voice gets no EQ. All decisions (where to patch, pitch-lock targets, volume gains, splice spots, fills, output scaling) are computed on "last" itself (`q4/vfinal_tm2.py`, `q4/gapfill_tm2.py`); outside the patch spots the audio is "last"'s own. Rebuild of "last" verified bit-identical (−300 dB).
+- **Check:** Pehla 76 % of sung time bit-identical to last (the rest = patch spots ≈ 20 % + splices 2.3 % + crossfades); Love before 0:50 88 % identical; pitch vs last median 0 c, > 10 c on 0.5–0.7 % of frames.
+- **Change 2 — Love from 0:49.92:** the MVSEP-Karaoke lead (backing singers removed), key −3, same engine settings + enhancer, processed with last's exact chain (+ tone-matched patches); voice level matched to last over 0:50–1:30; music after 0:50 has the MVSEP backing (harmonies back). After 0:50: cracks 37 → 19, copied swoops 13 → 9, identity hint 0.73 → 0.76, clarity 0.10 → 0.16 (slightly lower). Note: after 0:50 is a separate engine run (same settings).
+- **Clips** (voice "Engine compare v9", 90 s, −17 LUFS): "Pehla Pyaar — last / last polish 1", "Love is on the way — last / last polish 1". No new paid runs this round (reused the key −3 clean-lead run).
+
 ## 🔍 2026-10-12 (9) — "last improved": tone, wobble, 0:50 fix on top of "last" (no app change) — founder to compare
 
 - Founder: "last" sounds like him; "fixed" became a different voice → base = "last" for both songs; keep the same enhancer + brightness (synthetic air ON, key −3 for Love).
