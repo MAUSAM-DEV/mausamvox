@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-12
 
+- **Seed-VC re-test (no app change):** "second voice"/wobble traced to ~5 s chunk cross-fades (25 s reference in a 30 s window); 10 s reference + 100 steps; 90 s clips "Current engine 90s" / "New engine tuned 90s".
 - **Engine research (no app change):** only Seed-VC qualifies on licence (code + weights GPL-3.0); Vevo1.5 / Serenade / DDSP-SVC vocoder non-commercial, HQ-SVC unlicensed. "Current engine" / "New engine" clips saved.
 - **New voice "Mausam (Lossless)"** trained from the lossless re-record with M0's settings (≈ $0.17); "Old voice" / "New voice" clips saved. "Mausam (Singing)" unchanged. No app change.
 

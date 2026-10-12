@@ -6,6 +6,13 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (2) — Seed-VC re-test, 90 s clips (no app change)
+
+- Founder heard on the 30 s Seed-VC clip: higher pitch, a second voice, wobbly vibrato. Measured: pitch within 2 cents of the source (RVC 3 c), steadier than RVC frame-to-frame (6 vs 11 c) and at vibrato speed (3 vs 4 c) — the engine has no auto pitch adjust (key 0 kept).
+- **Cause found:** the private Seed-VC engine's context window is 30 s INCLUDING the reference; a 25 s reference left ~5 s chunks, each generated separately and cross-faded over 0.19 s → a brief doubled voice / unsteadiness every ~5 s.
+- **Re-test:** 10 s reference (lossless recording 1:29–1:39) → ~20 s chunks; diffusion steps 40 → 100; pitch 0. Lead 2:37–4:17 → 25 s compute.
+- Clips (voice "Engine compare 90s", 2:42–4:12, verse + chorus, −11 LUFS, same app chain, voices level-matched): "Current engine 90s" (RVC "Mausam (Lossless)") / "New engine tuned 90s" (Seed-VC).
+
 ## 🔬 2026-10-12 — engine research (no app change) — founder to compare "Current engine" vs "New engine"
 
 - Founder: Old/New voice sound the same → "Mausam (Singing)" stays default; "Mausam (Lossless)" stored, unused.
