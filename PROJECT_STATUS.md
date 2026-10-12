@@ -6,6 +6,30 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🏁 2026-10-13 — final engine shootout: SoulX-Singer SVC vs Seed-VC last (no app change) — founder to compare
+
+- Founder: stop polishing; one shootout, test only, max $3.
+- **Licences (actual files):**
+  - FreeSVC: code MIT, weights CC BY-NC-SA (training data) ✗.
+  - HQ-SVC: still no LICENSE file for code or weights ✗.
+  - **SoulX-Singer:** code Apache-2.0 (LICENSE), weights incl. `model-svc.pt` Apache-2.0 (HF metadata) ✓. Training data: in-house ~42k h built from songs (sources not named, no licence file); the paper says no open-source datasets were used for training; SVC fine-tune data unnamed. Its usage disclaimer forbids impersonation and deceptive audio.
+  - ⚠️ **Seed-VC (current test engine):** its paper says the base model was trained on **Emilia-101k = CC BY-NC 4.0 (non-commercial)**; the singing model's data is unnamed. Under the training-data rule Seed-VC itself is doubtful.
+- **Test (SoulX-Singer SVC, zero-shot, no fine-tune):**
+  - Prompt = your clear 10 s (Hindi / English).
+  - Keys −1 / −3; Love from the cleaner MVSEP lead; their F0 extractor with our RMVPE (MIT) + Whisper-base (MIT); their preprocessing bundle not used.
+  - Ran locally on the Mac GPU (`seedvc-local/soulx`, `venv_soulx`, `q4/soulx_run.py`; one resampling step on CPU): 34 / 21 min per 95 s.
+  - Then the same finishing as Seed-VC last except its pitch lock (enhancer, tone-matched fill, volume contour, air polish, HD music; Love uses the cleaner-lead backing).
+- **Measured (SoulX vs Seed-VC last):**
+  - Notes followed 227/227 & 128/129 (no octave drops).
+  - Subharmonic cracks Pehla 20 vs 19, Love 23 vs 43.
+  - Raw dropouts 2.3 / 1.3 % (vs < 0.5 % after Seed-VC processing).
+  - Like-you hint 0.63 vs 0.62 / 0.74 vs 0.71.
+  - Clarity HNR 21.0 vs 20.4 (real voice 21.4).
+  - Words: Hindi worse (Whisper error 0.76 vs 0.55; SoulX has no Hindi in training), English similar (0.25 vs 0.22).
+  - Output 24 kHz (the enhancer brings it to 44.1 kHz).
+- **Clips** (voice "Engine shootout", 90 s, −17 LUFS): "Pehla Pyaar — Seed-VC last / SoulX-Singer", "Love is on the way — Seed-VC last / SoulX-Singer".
+- **Cost:** engine $0 (run locally) + 2 enhancer runs ≈ $0.12 (Likely, unverified). Cloud cost per song unknown until deployed on a GPU (no Replicate model exists; needs our own deployment). No fine-tune needed (Seed-VC spends ≈ $0.5 per run on fine-tuning).
+
 ## 🔬 2026-10-12 (13) — "polish 1C": clearer take per phrase (no app change) — founder to compare
 
 - Founder: "polish 1B" is good and sounds like him → new base. Asked for #2 only: per unclear phrase, use whichever of the engine's two takes (guidance 0.7 main / 0.3 other) has clearer words; tone-matched; switch only at phrase pauses.

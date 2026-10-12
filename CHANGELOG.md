@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-13
+
+- **Engine shootout (no app change):** FreeSVC (weights non-commercial) and HQ-SVC (no licence) skipped; SoulX-Singer SVC (Apache-2.0 code + weights, in-house data) tested zero-shot vs Seed-VC last; Seed-VC's base training data (Emilia) found CC BY-NC. 4 clips ("Engine shootout").
+
 ## 2026-10-12
 
 - **"polish 1C" (no app change):** per-phrase clearer-take choice (robust 9-window Whisper check): Pehla no phrase clearly clearer in the other take (1C = 1B); Love one phrase swapped (0:20–0:22). 4 clips ("Engine compare v12").
