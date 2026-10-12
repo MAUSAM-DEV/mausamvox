@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-12
 
+- **"polish 1C" (no app change):** per-phrase clearer-take choice (robust 9-window Whisper check): Pehla no phrase clearly clearer in the other take (1C = 1B); Love one phrase swapped (0:20–0:22). 4 clips ("Engine compare v12").
 - **"polish 1B" (no app change):** polish 2 rejected; enhancer erasure not fixable by settings/piece length/denoiser off (tested); patches now filled from other enhanced takes where possible — plain-voice patches Pehla 20.3 → 17.1 %, Love 0–0:50 18.0 → 4.7 %. 4 clips ("Engine compare v11").
 - **"polish 2" (no app change):** on top of polish 1, only fast shakes (> 11 Hz) halved inside long notes; vibrato, bends and the rest unchanged. 4 clips ("Engine compare v10").
 - **"last polish 1" (no app change):** from "last" exactly — only tone-matched patches (decisions computed on last; main voice untouched, pitch identical) + Love from 0:49.9 on the cleaner lead at key −3. 4 clips ("Engine compare v9").

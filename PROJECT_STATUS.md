@@ -6,6 +6,13 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (13) — "polish 1C": clearer take per phrase (no app change) — founder to compare
+
+- Founder: "polish 1B" is good and sounds like him → new base. Asked for #2 only: per unclear phrase, use whichever of the engine's two takes (guidance 0.7 main / 0.3 other) has clearer words; tone-matched; switch only at phrase pauses.
+- **Method (`q4/takepick2.py`):** phrases = original's sung runs split at pauses ≥ 200 ms; Whisper character error vs the original lead, **median of 9 shifted windows** per phrase (a single window was fooled once: one phrase scored 3.57 from a Whisper loop; re-checked 18 ways the main take was clearer). Swap only if main ≥ 0.3 and the other take ≥ 0.25 better; other take = the same-processed 0.3 take ("last"'s alt), EQ'd to the main voice, level-matched, 40 ms crossfades in the pause.
+- **Result:** Pehla — 12 of 14 phrases somewhat unclear, but the other take is not clearly clearer in any (best 0.50 vs 0.33 at 0:44, below the margin) → **no swap; polish 1C = polish 1B**. Love — 1 swap, 0:20.0–0:22.5 (0.40 → 0.00); changed audio 0:19.4–0:23.0 only, pitch median 4 c, level 0.0 dB; after 0:50 there is only one take (clean-lead run).
+- **Clips** (voice "Engine compare v12", 90 s, −17 LUFS): "Pehla Pyaar — polish 1B / polish 1C" (identical), "Love is on the way — polish 1B / polish 1C". No paid runs.
+
 ## 🔬 2026-10-12 (12) — "polish 1B": fewer plain-voice patches (no app change) — founder to compare; "polish 2" REJECTED
 
 - Founder: "polish 2" (calming fast shakes) sounds less like him → base stays "polish 1"; no pitch/vibrato changes. Asked for #1 only: make the enhancer erase less so fewer spots need patching.
