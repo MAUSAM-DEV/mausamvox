@@ -6,6 +6,18 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 (7) — "HD (final)": volume, pitch/vibrato, cracks, dropouts, clearer words (no app change) — founder to compare
+
+- Founder: both "fixed HD no gaps" and English "new engine HD" sound like him. Last fixes asked: volume, pitch/vibrato, cracks (Pehla ending), dropouts, pronunciation.
+- **New Pehla section 3:02–4:32** (to the song's end; singing ends ≈4:25): fresh Seed-VC run (Hindi dataset, clear Hindi reference, key −1, 1500 steps). English: fresh run (Hindi+English dataset, English reference, key −3). Both at guidance 0.3 and 0.7 in one run each (`cfg_rates`).
+- **Pronunciation (one setting): guidance 0.7** — Whisper CER Pehla 0.402 → 0.270, English 0.024 = 0.024; identity hint not lower (lead +0.303 → +0.321, +0.314 → +0.325). Used for "final".
+- **Cracks:** measured with RMVPE (Praat/pYIN misread the lead stem's harmony bleed as an octave lower → false "cracks"). Most of last round's cracks came from the gap fill BLENDING two unaligned versions (enhanced + plain) and from the enhancer shifting pitch: Pehla 44 → final 3, English 32 → 3 (remaining ≤ 40 ms).
+- **`seedvc-local/work/q4/vfinal.py`:** (1) switch-fill instead of blend (40 ms crossfades) where the enhancer erased singing; (2) Praat PSOLA pitch lock to the original melody incl. vibrato (RMVPE, 30 ms de-jitter, no note grid): held notes 100 %, else 80 % within 2 st, short cracks up to 13 st 100 %; (3) volume contour = original singer's loud/soft shape (150 ms, ±10 dB).
+- **`q4/gapfill.py`:** splice the other take (0.3, same processing) where it's clean; lift soft sung dips (≤ +12 dB); restore engine-dropped breaths/consonants from the original recording — unvoiced only, above 500 Hz, missing amount only (0.05–0.11 % of the voice energy; like RVC's "protect").
+- **Measured (last → final):** held notes off > 25 c Pehla 5.2 → 1.1 %, English 11.5 → 0.3 %; wobble 2.9/3.5 → 1.4/1.5 c per 10 ms; vibrato depth Pehla 18 → 28 c (original 27), English 24 = 24 (original 24); loud/soft vs original typical diff 2.7/3.1 → 0.4 dB (correlation 0.83/0.79 → 0.97/0.98); dropouts > 12 dB 6.1 %/6.7 % → 0.4 %/0.1 % (gaps ≥ 150 ms 19/12 → 1/0).
+- **Clips** (voice "Engine compare v6", 90 s, all −17 LUFS, no limiter): "Pehla Pyaar — HD (last)" / "… HD (final)" (3:02–4:32, incl. ending); "Love is on the way — HD (last)" / "… HD (final)" (0:00–1:30).
+- Cost (Likely, unverified): Seed-VC 1192 s L40S ≈ $1.16 + 3 enhancer runs ≈ $0.24 → ≈ $1.40. Tools: `q4/f0r.py` (RMVPE), `pitchdiag_r.py`, `spots.py`, `ident.py` (CAM++ hint), `gapcheck.py`.
+
 ## 🔬 2026-10-12 (6) — gaps fixed + first English test (no app change) — founder to compare 2 clip pairs
 
 - Founder: "fixed HD" ≈ 70% "like me", but the voice drops out (≈0:04–0:08, 0:14–0:15, 0:21–0:23, 0:40…).
