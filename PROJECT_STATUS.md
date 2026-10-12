@@ -6,6 +6,14 @@ _Last updated: 2026-10-10 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-12 — engine research (no app change) — founder to compare "Current engine" vs "New engine"
+
+- Founder: Old/New voice sound the same → "Mausam (Singing)" stays default; "Mausam (Lossless)" stored, unused.
+- **SVCC 2025** (arXiv 2509.15629): top systems built on Vevo1.5 (S6/S7), Seed-VC (S5), Serenade (S1–S3); top naturalness ≈3.7 MOS vs 3.9 ground truth; S5B-T2 and S6 had singer identity not significantly different from ground truth.
+- **Licences (actual files):** Vevo1.5 weights CC-BY-NC-ND ✗ · Vevo CC-BY-NC ✗ · Serenade CC-BY-NC-SA ✗ · HQ-SVC no licence ✗ · DDSP-SVC code MIT but needs openvpi NSF-HiFiGAN weights CC-BY-NC-SA ✗ · so-vits-svc AGPL ✗ · **Seed-VC code + weights GPL-3.0 ✓** (deps BigVGAN MIT, Whisper-small Apache-2.0, CAM++ Apache-2.0, RMVPE MIT). Paid APIs with custom voices (Kits.ai, Voice-Swap, Audimee, Revocalize): no published quality evidence; need a paid account — not tested.
+- **Test:** Seed-VC SVC f0 44k (our private `mausam-dev/seed-vc`, L40S), zero-shot, reference = 25 s of the lossless recording (1:26–1:51), Pehla Pyaar lead 3:37–4:17 at key 0 → 15.8 s compute + 45 s boot for 40 s. Current engine = RVC "Mausam (Lossless)". Both level-matched (±0.6 LU), same app chain, clips "Current engine" / "New engine" (voice "Engine compare", chorus 3:42–4:12, −11 LUFS).
+- Seed-VC cost/song (Likely, unverified): ~110 s L40S ≈ $0.11 + cold boot on a private model (vs RVC ≈ $0.017).
+
 ## 🎙️ 2026-10-12 — new voice "Mausam (Lossless)" trained (no app change) — founder to compare by ear
 
 - 1st file "Mausam lossless.m4a" was AAC 62.8 kbps (not lossless) → stopped. 2nd "Mausam lossless 2.m4a": ALAC 16-bit 48 kHz mono, 3:54, content past 19.5 kHz, peak −0.7 dB, noise floor −67 dB → OK.
