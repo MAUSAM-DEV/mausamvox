@@ -6,6 +6,24 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧪 2026-10-14 — SoulX: no fine-tuning; longer reference + SoulX→my RVC (no app change) — founder to compare
+
+- **2026-10-13 check (founder: SoulX clear and bright but "not me"):** SoulX-Singer has **no fine-tuning support**: the repo (commit 81aeb3a, 2026-05-29) is inference-only (no train scripts, loss or data loader), the README calls it zero-shot "without per-speaker fine-tuning", the roadmap has no training item, and there are no GitHub issues about it → stopped, $0. Cloud: no Replicate model exists; needs our own deployment (Apache-2.0 allows it); speed/cost unknown until deployed (Mac: 21–34 min per 95 s).
+- **A — 30 s reference** (clearest 30 s by Whisper confidence: Hindi 2:35–3:05 of `clean.wav`, English 2:35–3:05 of `clean_en.wav`):
+  - Same keys, cleaner lead for Love, same finishing (enhancer, tone-matched fill on 23 % / 15 %, volume contour, air polish, HD music).
+  - Like-you hint (CAM++, hint only): Pehla 0.63 (10 s ref) → **0.66** (Seed-VC last 0.62); Love 0.74 → **0.79** (Seed-VC last 0.71).
+  - Notes followed 220/221 & 128/129.
+- **B — SoulX → live RVC "Mausam (Singing)"** (pitch 0, live settings), on SoulX's 10 s-reference output:
+  - Pehla OK (224/224 notes; mangio-crepe).
+  - Love: the live crepe tracker put 13 notes an octave up → the same model with the RMVPE tracker (127/129, no octave errors) for the whole song.
+  - Hint: Pehla 0.61, Love 0.61 (lower than SoulX alone).
+- **Mac limits (8 GB RAM):** a 30 s prompt + SoulX's own ≤ 30 s segments swapped heavily (segments 15–70 min, one run froze in disk wait while the Mac idled on battery, one was killed with no error). Fixes:
+  - `caffeinate -dims`.
+  - One song at a time.
+  - **`q4/soulx_pieces.py`:** cut the target at pauses into ≤ 12 s pieces → Love in 10.4 min (~70 s per piece) instead of hours. fp16 on the Mac GPU worked but was not faster (785 s for 20 s).
+- **Clips** (voice "SoulX tests", 90 s, −17 LUFS): "Pehla Pyaar / Love is on the way — SoulX long reference" and "— SoulX + my RVC".
+- **Cost (Likely, unverified):** 3 RVC runs ≈ $0.06 + 2 enhancer runs ≈ $0.12 → ≈ $0.18.
+
 ## 🏁 2026-10-13 — final engine shootout: SoulX-Singer SVC vs Seed-VC last (no app change) — founder to compare
 
 - Founder: stop polishing; one shootout, test only, max $3.

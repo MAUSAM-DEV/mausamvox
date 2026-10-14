@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-14
+
+- **SoulX tests (no app change):** fine-tuning not supported (inference-only code, checked 2026-10-13); 30 s reference raises the like-you hint (Pehla 0.63 → 0.66, Love 0.74 → 0.79); SoulX → live RVC (Love needed the RMVPE tracker: crepe put 13 notes an octave up); Mac 8 GB fix = ≤ 12 s pieces (`soulx_pieces.py`). 4 clips ("SoulX tests").
+
 ## 2026-10-13
 
 - **Engine shootout (no app change):** FreeSVC (weights non-commercial) and HQ-SVC (no licence) skipped; SoulX-Singer SVC (Apache-2.0 code + weights, in-house data) tested zero-shot vs Seed-VC last; Seed-VC's base training data (Emilia) found CC BY-NC. 4 clips ("Engine shootout").
