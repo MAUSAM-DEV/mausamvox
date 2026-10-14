@@ -6,6 +6,36 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧊 2026-10-14 (2) — FROZEN recipes + validation on two new songs (no app change) — founder to compare
+
+- Founder: Pehla sounds like him on Engine compare v5 "fixed HD no gaps"; Love on "SoulX + my RVC". **Both recipes frozen exactly; no new polishing.**
+- **"v5 recipe"** (Seed-VC):
+  1. KARA_2 lead (app split), 95 s excerpt (5 s pre-roll).
+  2. `run5.mjs` with CFG=0.3 SMOOTH=60: fine-tune 1500 steps on Hindi `research-seedvc-ft-dataset.zip` (Hindi song) or `dataset_hi_en.zip` (English song), reference `reference_clear10` (Hindi) / `english/reference_en10` (English), 100 steps, key.
+  3. `lossless/pitchlock.py` 0.8 + key.
+  4. Resemble Enhance (Replicate) on the locked voice.
+  5. `lossless/fill.py` (additive fill).
+  6. Voice level = KARA_2 lead LUFS −5.2 dB over the clip.
+  7. Music = MVSEP-HQ instrumental + KARA_2 backing (same-note doubles removed), Rubber Band R3 only if key ≠ 0 (`--ignore-clipping`).
+  8. Render `q3hd` (air ON, glue off, no room, no tone EQ). Clip 90 s, −17 LUFS, no limiter.
+- **"SoulX + RVC recipe":**
+  1. MVSEP Karaoke (49/8) lead, 95 s excerpt.
+  2. SoulX-Singer SVC zero-shot, 10 s reference (same two refs), key, run with `q4/soulx_pieces.py` (≤ 12 s pieces, long stretches split at gaps ≥ 40 ms).
+  3. Live RVC "Mausam (Singing)" with live settings except the **RMVPE** tracker, pitch 0.
+  4. `q4/contour.py`.
+  5. Voice level = KARA_2 lead −1.8 dB.
+  6. Music = MVSEP-HQ instrumental + MVSEP backing (doubles removed), Rubber Band only if key ≠ 0.
+  7. Same render and clip.
+- **Validation songs** (uploads 2026-10-14):
+  - Othoms "Sukoon" (Hindi, 5:05): clip 3:03–4:33.
+  - Ed Sheeran "Thinking out loud" (4:57): clip 1:31–3:01.
+  - Windows = the 90 s with the most singing.
+  - **Auto Key = 0 for both** (song median vs M0 sample 59.0: Sukoon +2.0, Ed +3.5/+3.6 st; within the ±4 comfort band) → music fully untouched.
+  - Sukoon needed its KARA_2 split (run here with the app's exact inputs).
+- **Checks:** SoulX+RVC notes followed 248/250 (Sukoon) and 190/193 (Ed; 3 quiet low notes); v5 fill on 31 % / 27 % of singing.
+- **Clips** (voice "Recipe validation", 90 s, −17 LUFS, peaks ≤ −1.2 dBFS): "Sukoon — v5 recipe / SoulX + RVC recipe", "Thinking out loud — v5 recipe / SoulX + RVC recipe".
+- **Cost (Likely, unverified):** 2 Seed-VC runs ≈ $1.12 + 2 enhancer ≈ $0.12 + 2 RVC ≈ $0.04 + 1 KARA_2 ≈ $0.02 + 2 MVSEP jobs (credits) → ≈ $1.30. ⚠️ Replicate credit is under $5 (rate limit 1 job at a time).
+
 ## 🧪 2026-10-14 — SoulX: no fine-tuning; longer reference + SoulX→my RVC (no app change) — founder to compare
 
 - **2026-10-13 check (founder: SoulX clear and bright but "not me"):** SoulX-Singer has **no fine-tuning support**: the repo (commit 81aeb3a, 2026-05-29) is inference-only (no train scripts, loss or data loader), the README calls it zero-shot "without per-speaker fine-tuning", the roadmap has no training item, and there are no GitHub issues about it → stopped, $0. Cloud: no Replicate model exists; needs our own deployment (Apache-2.0 allows it); speed/cost unknown until deployed (Mac: 21–34 min per 95 s).
