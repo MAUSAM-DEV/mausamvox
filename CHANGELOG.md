@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-21
+
+- **Clear words round 1 (no app change):** SoulX + RVC chosen as engine, Seed-VC stopped; RVC protect 0.2 → 0.1 makes English words clearer (Whisper error 0.33 → 0.26, unclear windows 7 → 3) with the same like-you hint; Hindi unchanged. 4 clips ("Clear words test").
+
 ## 2026-10-14
 
 - **Frozen recipes validated (no app change):** "v5 recipe" (Seed-VC) and "SoulX + RVC recipe" documented exactly; run on Othoms "Sukoon" and Ed Sheeran "Thinking out loud" at Auto Key 0; 4 clips ("Recipe validation").

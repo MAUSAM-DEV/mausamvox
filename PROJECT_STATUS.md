@@ -6,6 +6,23 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🗣️ 2026-10-21 — "SoulX + RVC" is the engine; clear-words round 1 (RVC protect) (no app change) — founder to compare
+
+- **Founder decision (2026-10-14):** "SoulX + RVC recipe" is our engine (most like him on Sukoon, Thinking Out Loud, Love). **Seed-VC stopped**; no more engine tests.
+- **Round 1, pronunciation only:** changed only the RVC step. Recipe RVC = live settings (index 0.3, protect 0.2, rms mix 0.25) + RMVPE tracker.
+- **Tested (Whisper 5 s windows vs the original lead; CAM++ hint):**
+
+  | Variant | English (Ed) error | Ed unclear windows | Ed hint | Hindi (Sukoon) error | Hindi unclear windows | Sukoon hint |
+  |---|---|---|---|---|---|---|
+  | recipe | 0.33 | 7 | 0.599 | 0.60 | 18 | 0.630 |
+  | **protect 0.1** | **0.26** | **3** | 0.604 | 0.63 | 20 | 0.620 |
+  | protect 0.1 + index 0.15 | 0.25 | 5 | 0.611 | 0.60 | 21 | 0.625 |
+  | index 0.15 only | 0.27 | 5 | 0.604 | 0.63 | 20 | 0.625 |
+
+- **Chosen change: protect 0.2 → 0.1 only** (lower = more consonant/breath protection in RVC); index stays 0.3. English clearly clearer with the same hint; Hindi no measurable change (Whisper unreliable on Hindi singing).
+- **Clips** (voice "Clear words test", 90 s, −17 LUFS): "Sukoon — recipe / recipe clear words", "Thinking out loud — recipe / recipe clear words". Everything else identical (SoulX output, volume shape, level, music, render).
+- **Cost (Likely, unverified):** 6 RVC runs ≈ $0.12. Script `q5/convert_p.mjs` (PROTECT / INDEX / F0M env).
+
 ## 🧊 2026-10-14 (2) — FROZEN recipes + validation on two new songs (no app change) — founder to compare
 
 - Founder: Pehla sounds like him on Engine compare v5 "fixed HD no gaps"; Love on "SoulX + my RVC". **Both recipes frozen exactly; no new polishing.**
