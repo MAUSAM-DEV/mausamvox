@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **`eb64827` HD engine step 2 (admin only):** lead/backing split by MVSEP Karaoke (49/8, FLAC) instead of KARA_2 for admin accounts; client unchanged; MVSEP start failure → KARA_2; everyone else unchanged. Clean build ✓. Step-8 note: "Unlimited …" plan claims are pricing-page text only.
 - **Decision (no app change):** "crisp words" dropped (founder hears no difference; null test −24 / −25 dB overall, loudest moments −10 to −13 dB); pronunciation work closed until a better engine or SoulX training code appears; recipe stays "balanced".
 - **Crisp words try (no app change):** SoulX aligned to the RVC voice (Ed had an ~11 ms jump after 60 s), its consonant / top-band sound blended in (RVC body below 2 kHz untouched), frozen recipe otherwise; English word error 0.19 → 0.15, Hindi 0.31 → 0.33 (no gain); 4 clips ("Crisp words test"), $0.
 - **Step 1 — SoulX cloud model (models repo `cd94291`, no app change):** private `mausam-dev/soulx-svc` + scale-to-zero deployments `soulx-l40s` / `soulx-t4`; full Sukoon: L40S 92 s warm / 168 s cold ($0.087 / $0.22–0.28), T4 564 / 708 s ($0.13 / $0.17–0.19); cloud output matches the Mac (−12.5 LUFS both, pitch 3.7 cents, tone ±0.3 dB); clips "Cloud check".

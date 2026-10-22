@@ -6,6 +6,26 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧪 2026-10-22 (12) — STEP 2 shipped (`eb64827`): MVSEP Karaoke lead/backing split, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Founder:** recipe frozen as "balanced"; use L40S; build step 2 only.
+- **Change (`src/app/api/karaoke-split/route.ts` only, no browser change):**
+  - For admin sessions (`ADMIN_EMAILS`), POST starts MVSEP Karaoke (sep_type 49, add_opt1 8, add_opt2 0, FLAC 16, same as the tests) on the studio-split vocals.
+  - It returns `predictionId = mvsep_<hash>_<start ms>`; the client polls it unchanged.
+  - GET (admin only) stores the "Vocals lead" / "Vocals back" FLACs as `audio-uploads/stems/kmv-<hash>-lead|backing.flac`, the durable path, signed fresh.
+  - If MVSEP can't start, the admin falls back to KARA_2. Everyone else gets KARA_2 exactly as before.
+  - The existing doubles removal (`doubles.ts`), lead health check and group-vocals check run on the new stems unchanged.
+- **Checks:**
+  - A real MVSEP job with the route's settings (30 s clip, 35 s) returned "Vocals lead", "Vocals back", "Instrum only", "Back instrum"; the matcher picks lead and back correctly.
+  - In a fresh copy of the repo (HEAD + this change): `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+  - The local working copy's tsc errors are only in git-ignored research pages (`src/app/dsp-test/`), never deployed.
+- **Cost:** ≈ 4 MVSEP credits per full song (admin only); 1 MVSEP credit used for the check.
+- **Live test:** see the CHANGELOG entry / chat. Vercel log lines `[karaoke-split] admin: MVSEP karaoke job … started` / `… done in Ns (stored: lead true, backing true)`.
+- **Note for step 8 (pricing):**
+  - Plan two tiers: "Standard" (current engine, 200 credits) and "HD Voice" (new engine, ~400 credits).
+  - Checked: "Unlimited credits" (Studio), "Unlimited voice swaps" (Starter) and "Unlimited HD swaps" (Pro) exist only as text in `src/components/landing/Pricing.tsx`. No code grants them (`deduct_credits` has no plan logic; billing isn't wired).
+  - Fix that wording, or add a cap, in step 8.
+
 ## 🛑 2026-10-22 (11) — "crisp words" DROPPED; pronunciation work CLOSED (no app change)
 
 - **Founder:** hears no difference between "balanced" and "balanced crisp words" on either song → drop crisp words. The recipe stays "balanced" (frozen).
