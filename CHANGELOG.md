@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **`bddb0e8` HD engine step 3 (admin only):** single-voice previews + full swaps → cloud SoulX (L40S, reference picked from the voice's Voice Lab recording) → the user's RVC voice (rmvpe); automatic fallback to today's engine (3 min start / 8 min run / failure / quick check); signed tickets, no DB change; `[hd-voice]` logs; kill switch `HD_VOICE=off`. Cloud model `soulx-svc` 7c89f89e (models `813a1de`).
 - **`eb64827` HD engine step 2 (admin only):** lead/backing split by MVSEP Karaoke (49/8, FLAC) instead of KARA_2 for admin accounts; client unchanged; MVSEP start failure → KARA_2; everyone else unchanged. Clean build ✓. Step-8 note: "Unlimited …" plan claims are pricing-page text only.
 - **Decision (no app change):** "crisp words" dropped (founder hears no difference; null test −24 / −25 dB overall, loudest moments −10 to −13 dB); pronunciation work closed until a better engine or SoulX training code appears; recipe stays "balanced".
 - **Crisp words try (no app change):** SoulX aligned to the RVC voice (Ed had an ~11 ms jump after 60 s), its consonant / top-band sound blended in (RVC body below 2 kHz untouched), frozen recipe otherwise; English word error 0.19 → 0.15, Hindi 0.31 → 0.33 (no gain); 4 clips ("Crisp words test"), $0.

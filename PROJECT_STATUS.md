@@ -6,6 +6,35 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎤 2026-10-22 (13) — STEP 3 shipped (`bddb0e8`): HD voice (cloud SoulX → your RVC voice), ADMIN ONLY — ⚠️ founder live test pending
+
+- **Founder:** step 2 passed live (karaoke job 21:17:09 → 21:18:22, no warnings, swap saved).
+- **Flow (single-voice previews + full swaps of admin accounts; duets and everyone else unchanged):**
+  1. The lead goes to SoulX on the `mausam-dev/soulx-l40s` deployment, with the take's key.
+  2. Reference: picked IN the model from the voice's own Voice Lab recording.
+     - Cleanup as in training, then Whisper-small: clearest 10 s with ≥ 6 Hindi / 12 English words and ≥ 90 % different words.
+     - The rule reproduces both test picks (Hindi 0:20, English 3:30).
+     - For "Mausam (Singing)" it picks 3:20 of that voice's recording. ⚠️ That's a different recording from the lossless one used in the tests.
+  3. Then the user's RVC voice: indexed engine, protect 0.2, index 0.3, **rmvpe**, pitch 0.
+- **Fallback to today's engine** (constants in `src/lib/hd-voice.ts`):
+  - `HD_START_TIMEOUT_MS` 3 min not started; `HD_RUN_TIMEOUT_MS` 8 min not finished after starting.
+  - SoulX failed, or the quick check failed (in the model: > 5 % of the lead's sung moments silent; app side: no file or < 50 KB).
+  - The RVC step after SoulX failed.
+  - Key beyond ±12, or no stored recording, or not the user's own voice → today's engine from the start.
+- **No DB / storage change:** a signed ticket (`hd.<payload>.<mac>`, HMAC with the service key) is the job id; each poll advances it (`nextId`).
+  - Save / "Recent — not saved" use the delivered Replicate prediction (`predictionId` in the answer).
+  - Progress messages: "HD voice — getting the singing engine ready…", "— shaping the singing (about 2–3 min)…", "— adding your voice…", fallback "Finishing your swap…".
+- **Credits:** full swap charged once, only after a voice is delivered (unchanged client rule; fallback costs the same).
+  - Paid preview: charged at start as today, refunded if every path fails (a lost poll answer could refund twice — rare).
+  - Admins are never charged.
+- **Kill switch:** Vercel env `HD_VOICE=off` + redeploy.
+- **Cloud model:** `soulx-svc` v`7c89f89e` (models repo `813a1de`: `pick_ref.py`, `prompt_source` / `prompt_language`, quick check, REFERENCE / CHECK log lines); `soulx-l40s` release 2.
+- **Tests before shipping** (server code against the real services, `seedvc-local/work/cloud/hd_test.mts`):
+  - HD path, full Sukoon (5:05): SoulX waited 114 s (cold), ran 100 s (reference pick 14 s); check 2.8 % silent; RVC waited 157 s (cold), ran 33 s → **delivered in 7 min**, −17.3 LUFS, full length.
+  - Fallback (silent input → quick check 100 % silent at 94 s) → today's engine waited 294 s (cold), ran 79 s → **delivered in 7 min 50 s**.
+  - Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓ (first try failed downloading the Inter Google font; re-run passed, unrelated).
+- **Not tested before shipping:** the 3 min / 8 min timeouts (needs a stuck job); the preview refund (admin is never charged).
+
 ## 🧪 2026-10-22 (12) — STEP 2 shipped (`eb64827`): MVSEP Karaoke lead/backing split, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Founder:** recipe frozen as "balanced"; use L40S; build step 2 only.
