@@ -6,6 +6,19 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ⚖️ 2026-10-22 (4) — balance to the original + up/down check (no app change) — founder to compare
+
+- **Founder:** smooth is good (kept). Voice too loud / music too quiet vs the original → remove the +1.5 dB and match the original's lead-to-music balance per section; check whether "up/down" is volume or pitch.
+- **Method (`q5/balance.py`):**
+  - Rendered the voice alone and the music alone through the same mix (`q3hd`, silent stand-ins; they add up to the full mix exactly, −147 dB).
+  - Original = MVSEP lead vs MVSEP-HQ instrumental + MVSEP backing (the first run wrongly used "Back_instrum" of the vocals-only split = backing only).
+  - Sections = 5 parts of the original mix (librosa agglomerative on chroma + MFCC); EBU R128 loudness per section (pyloudnorm).
+- **Found:**
+  - The voice sat **+5.4 dB** louder vs the music than the original singer in both songs, uniform across sections (spread 0.9 / 0.4 dB). The +1.5 dB was on top of +3.9 dB from the recipe's level rule (−1.8 dB vs the KARA_2 lead) and the mix.
+  - **Up/down: neither phrase volume nor pitch differs from the original singer.** Phrase level vs his: std 0.2 / 0.4 dB (max 0.4 / 1.3 dB). Phrase pitch: median 1 / 2 cents (max 3 / 5). → Nothing changed for it.
+- **Change (`q5/balance_apply.py`):** voice gain per section = the measured difference (Sukoon −5.1…−6.0 dB, Ed −5.1…−5.5 dB), 0.5 s ramps. After: balance minus original per section within 0.4 dB.
+- **Clips** (voice "Balance test", 90 s, −17 LUFS overall): "Sukoon — smooth / smooth balanced", "Thinking out loud — smooth / smooth balanced". Cost $0.
+
 ## 🪶 2026-10-22 (3) — smoothness round (last polish round): gentle de-ess + evening-out (no app change) — founder to compare
 
 - **Founder:** "recipe voice up" is better → **+1.5 dB voice is now part of the SoulX + RVC recipe.**

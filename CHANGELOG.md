@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **Balance round (no app change):** voice was +5.4 dB vs the original lead-to-music balance → matched per section (−5.1…−6.0 dB); "up/down" is not phrase volume or pitch (both follow the original within 0.4 dB / 2 cents); 4 clips ("Balance test").
 - **Smoothness round (no app change):** voice +1.5 dB adopted into the recipe; gentle de-ess (only s-sounds sharper than the original singer's, max 4 dB) + evening-out of short spikes/dips (±3 dB max); 4 clips ("Smooth test").
 - **Clear words #1 (no app change):** recipe voice +1.5 dB against the music (verified +1.5), everything else identical; 4 clips ("Voice up test").
 - **Clear words #2 (no app change):** MVSEP de-reverb (MVSep Team BSRoformer) on the recipe's lead removes only −48 dB of echo — the lead is already dry, so no clips; mumbling is not caused by reverb.
