@@ -1458,16 +1458,20 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     try {
       const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
 
-      // Shared poll helper: resolves with the convertedVocalsUrl on success,
-      // throws on failure / timeout. Used by both single-job and dual-job paths.
-      const pollJob = async (predictionId: string): Promise<string> => {
+      // Shared poll helper: resolves with the convertedVocalsUrl (and the id of
+      // the prediction that delivered it) on success, throws on failure / timeout.
+      // Used by both single-job and dual-job paths. An HD voice job (admin only,
+      // lib/hd-voice.ts) moves through stages: the server hands back `nextId` to
+      // poll from then on, and a `note` to show while it works.
+      const pollJob = async (firstId: string): Promise<{ url: string; id: string }> => {
+        let predictionId = firstId
         const POLL_INTERVAL_MS = 5000
         const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
         const started = Date.now()
         let pollErrors = 0
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await waitOrVisible(POLL_INTERVAL_MS)
-          let data: { status?: string; error?: string; convertedVocalsUrl?: string }
+          let data: { status?: string; error?: string; convertedVocalsUrl?: string; nextId?: string; note?: string; predictionId?: string }
           const t0 = Date.now()
           try {
             // A status check answers in well under a second; one that hangs is
@@ -1484,12 +1488,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           }
           pollErrors = 0
           if (Date.now() - t0 > 8000) clientTiming('poll-slow', { ms: Date.now() - t0, failed: 0 })
-          if (data.status === 'succeeded') return data.convertedVocalsUrl as string
+          if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId }
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
             throw new EngineJobFailed(data.error ?? 'Voice conversion failed')
           }
-          setOverlayNote(data.status === 'starting' && Date.now() - started > WARMING_NOTE_AFTER_MS ? WARMING_NOTE : null)
+          if (data.nextId) predictionId = data.nextId
+          setOverlayNote(data.note ?? (data.status === 'starting' && Date.now() - started > WARMING_NOTE_AFTER_MS ? WARMING_NOTE : null))
         }
         throw new Error('Voice conversion timed out')
       }
@@ -1567,7 +1572,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [remoteA, remoteB] = await Promise.all([
+        const [{ url: remoteA }, { url: remoteB }] = await Promise.all([
           pollJob(dataA.data.predictionId as string),
           pollJob(dataB.data.predictionId as string),
         ])
@@ -1666,6 +1671,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             isPreview: type === 'preview',
             trackKey: stemResult.storagePath || '',
             retryOf,
+            // HD voice: single-voice swaps only (the server decides who gets it).
+            hd: !target,
           }),
         })
         const data = await startRes.json()
@@ -1680,15 +1687,18 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // What THIS take's preview cost (an automatic retry below is free).
       const previewCost = typeof startData.previewCharged === 'number' ? startData.previewCharged : 0
       let remoteUrl: string
+      // The prediction whose voice was delivered (an HD voice job ends on a
+      // different one than it started with) — save and "Recent — not saved" use it.
+      let deliveredId: string
       try {
-        remoteUrl = await pollJob(startData.predictionId as string)
+        ({ url: remoteUrl, id: deliveredId } = await pollJob(startData.predictionId as string))
       } catch (err) {
         if (!(err instanceof EngineJobFailed)) throw err
         // The engine itself failed: retry once, quietly and for free.
         console.warn('[voice-swap] engine failed — retrying once:', err.message)
         setOverlayNote('The voice engine hiccuped — trying once more…')
         startData = await startConversion(startData.predictionId as string)
-        remoteUrl = await pollJob(startData.predictionId as string)
+        ;({ url: remoteUrl, id: deliveredId } = await pollJob(startData.predictionId as string))
       }
       setOverlayNote(null)
 
@@ -1710,7 +1720,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setStep(3)
       if (type === 'preview') {
         const charged = previewCost
-        lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: startData.predictionId as string, charged, at: Date.now(), saved: false, local: kept.local }
+        lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: deliveredId, charged, at: Date.now(), saved: false, local: kept.local }
         setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
       } else {
         lastPreviewRef.current = null
@@ -1728,7 +1738,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           voiceId: voice.id, voiceName: voice.name, pitchShift, keyShift: takeKeyShift, autotune, duetSinger,
           stemResult, at: Date.now(),
         }
-        void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: startData.predictionId, take }) }).catch(() => {})
+        void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: deliveredId, take }) }).catch(() => {})
         setRecentUnsaved(null)
       }
 
@@ -1738,7 +1748,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (charge && !isAdmin && FULL_SWAP_CREDITS - discount > 0) deductCredits(FULL_SWAP_CREDITS - discount, 'voice_swap_full')
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
-          predictionId: startData.predictionId as string,
+          predictionId: deliveredId,
           songName: stemResult?.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voiceUsed: voice?.name ?? 'Unknown Voice',
         }

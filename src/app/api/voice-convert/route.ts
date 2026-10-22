@@ -6,6 +6,7 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { rvcEngine, rvcVersion } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
+import { hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice } from '@/lib/hd-voice'
 
 export const maxDuration = 30
 
@@ -85,6 +86,9 @@ export async function POST(req: NextRequest) {
       // the id of that failed prediction. A preview retry is then free (the
       // failed attempt already used the preview), so nobody pays twice.
       retryOf?: string
+      // HD voice (SoulX → the user's RVC voice) for this take — single-voice
+      // swaps only; used only for accounts hdVoiceAllowed() lets through.
+      hd?: boolean
     }
     try {
       body = await req.json()
@@ -92,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -219,6 +223,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── HD voice (admin accounts only, lib/hd-voice.ts). Anything that stops
+    // it from starting falls through to today's engine below.
+    if (hd && user && voiceId && hdVoiceAllowed(user.email)) {
+      try {
+        const ticket = await startHdVoice({
+          userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
+          pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '',
+        })
+        return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
+      } catch (hdErr) {
+        console.warn(`[hd-voice] FALLBACK to today's engine: SoulX didn't start (${hdErr instanceof Error ? hdErr.message : String(hdErr)})`)
+      }
+    }
+
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
     // Engine inputs (fixed server-side settings + this take's pitch and
@@ -264,6 +282,15 @@ export async function GET(req: NextRequest) {
 
     if (!process.env.REPLICATE_API_TOKEN) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
+    }
+
+    // HD voice ticket (lib/hd-voice.ts): each poll may advance it to the next stage.
+    if (isHdTicket(id)) {
+      const sessionClient = await createClient()
+      const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+      if (!sessionUser) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+      const r = await pollHdVoice(id, sessionUser.id, new URL(req.url).origin)
+      return NextResponse.json(r.body, { status: r.status })
     }
 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
