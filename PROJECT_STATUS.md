@@ -6,6 +6,27 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔤 2026-10-22 (10) — last pronunciation try: crisp consonants from "SoulX alone" blended into the RVC voice (no app change) — founder to compare
+
+- **Alignment first** (`q5/align_env.py`, 1 ms voice envelopes, match 0.87–0.99):
+  - Sukoon: RVC a steady 1–2 ms early.
+  - Thinking Out Loud: within 2 ms until ~60 s, then ~11 ms early (an RVC jump).
+  - Waveform correlation is useless here: different voices, match 0.10–0.27.
+  - Fix: SoulX is time-shifted to follow the RVC voice (2 s windows, median-smoothed). After: median 0.0 ms, 5–95 % within ±3–5 ms.
+- **Blend (`q5/crisp.py`), RVC voice = body:**
+  - Below 2 kHz and above 11.5 kHz: RVC only.
+  - Consonant moments (SoulX unpitched and above its noise floor, ±20 ms around pitch on/offsets; 8.6 % / 10.5 % of the clip): 2–11.5 kHz = 60 % SoulX.
+  - Sung moments: 5–11.5 kHz = 25 % SoulX.
+  - SoulX is level-matched overall; zero-phase crossovers.
+  - Change vs the RVC voice: −26 / −25 dB.
+- **Then the frozen recipe unchanged** (contour, level rule, offline polish, smooth, per-section balance re-measured: within 0.4 dB). Change in the mix vs "balanced": −24 / −25 dB.
+- **Measured (background; ears decide):**
+  - Word error (Whisper, lower = clearer):
+    - Sukoon: SoulX 0.24 · balanced 0.31 · crisp 0.33 (crisp better on 3 / worse on 4 / equal on 7 of 14 phrases).
+    - Thinking Out Loud: SoulX 0.11 · balanced 0.19 · crisp **0.15** (better on 5 / worse on 0 / equal on 11 of 16).
+  - Like-you hint: 0.590 → 0.602, 0.577 → 0.582 (unchanged).
+- **Clips** (voice "Crisp words test", 90 s, −17.0 LUFS): "Sukoon — balanced / balanced crisp words", "Thinking out loud — balanced / balanced crisp words". Cost $0.
+
 ## ☁️ 2026-10-22 (9) — STEP 1 done: SoulX on a cloud GPU (private model), speed + cost measured (no app change)
 
 - **Model:** private Replicate model `mausam-dev/soulx-svc`, version `6e16ea1decf9178eb25cf61068b66755e8d0ee69fd96cd3100c0b482807702e0`.
