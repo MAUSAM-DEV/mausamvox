@@ -6,6 +6,12 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔊 2026-10-22 (2) — clear words #1: voice 1.5 dB louder vs the music (no app change) — founder to compare
+
+- Only change: the recipe's placed voice +1.5 dB (`su/ed_vup_voice.wav`), same SoulX + RVC (protect 0.2) voice, same untouched music, same render; both clips normalised to −17 LUFS overall.
+- Verified from the mixes: voice vs music Sukoon +2.2 → +3.7 dB, Thinking Out Loud +3.1 → +4.6 dB (exactly +1.5).
+- Clips (voice "Voice up test", 90 s, −17 LUFS): "Sukoon — recipe / recipe voice up", "Thinking out loud — recipe / recipe voice up". Cost $0.
+
 ## 🔇 2026-10-22 — clear words #2: de-reverb the lead before SoulX → nothing to remove (no app change, no clips)
 
 - Tool: MVSEP "Reverb Removal" (sep_type 22), model **MVSep Team 2026.07 BSRoformer** (add_opt1 9), "use as is" (add_opt2 1), on the recipe's MVSEP-karaoke leads (whole songs). MVSEP terms §7: outputs may be used commercially (except models marked non-commercial, which are not offered through the API).

@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **Clear words #1 (no app change):** recipe voice +1.5 dB against the music (verified +1.5), everything else identical; 4 clips ("Voice up test").
 - **Clear words #2 (no app change):** MVSEP de-reverb (MVSep Team BSRoformer) on the recipe's lead removes only −48 dB of echo — the lead is already dry, so no clips; mumbling is not caused by reverb.
 - **Clear words round 1 rejected:** protect 0.1 sounded less like the founder → recipe stays at protect 0.2. No code change.
 
