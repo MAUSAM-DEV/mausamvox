@@ -6,6 +6,23 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧊 2026-10-22 (8) — FINAL FREEZE of the voice recipe; plan to make it the main Voice Swap engine (plan only — AWAITING the founder's OK)
+
+- **Founder:** "Mausam (All)" doesn't sound like him → keep "Mausam (Singing)". The `fbb2b743…` row stays in the DB, unused.
+- **Frozen (no more tests or polish rounds):**
+  - SoulX-Singer SVC (zero-shot, 10 s reference, Auto Key, pieces ≤ 12 s).
+  - "Mausam (Singing)" RVC (protect 0.2, index 0.3, RMVPE, pitch 0).
+  - Volume contour + the app's polish (air ON), both part of the approved clips.
+  - Gentle de-ess / evening-out (`q5/smooth.py`).
+  - Voice level matched per section to the original's lead-to-music balance (`q5/balance.py` / `balance_apply.py`).
+  - Music untouched except the key shift. No consonants step.
+- **Engine plan** (SoulX on a private cloud GPU, RVC-only fallback, admin-only first, 9 small live-testable steps) was sent in chat; nothing is built yet.
+- **Facts behind the plan:**
+  - Replicate prices checked live 2026-10-22: L40S $0.000975/s, T4 $0.000225/s, A100 80GB $0.0014/s.
+  - Private models bill setup + idle + active time; the idle shutdown time is not published ("a few minutes").
+  - SoulX on this Mac: 345 s per 95 s of song (MPS, fp32, 32 steps, cfg 3); weights `model-svc.pt` 2.8 GB.
+  - GPU speed is unknown until deployed.
+
 ## 🎙️ 2026-10-22 (7) — new voice "Mausam (All)" (Hindi + English lossless) + recipe clips (no app change) — founder to compare
 
 - **Founder:** can't record more → train a NEW RVC voice from the existing lossless Hindi + lossless English recordings; existing voices untouched.
