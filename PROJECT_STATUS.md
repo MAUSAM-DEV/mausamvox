@@ -6,6 +6,18 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🛑 2026-10-22 (11) — "crisp words" DROPPED; pronunciation work CLOSED (no app change)
+
+- **Founder:** hears no difference between "balanced" and "balanced crisp words" on either song → drop crisp words. The recipe stays "balanced" (frozen).
+- **Null test of the saved MP3 clips** (different files, md5 differs):
+  - Sukoon: difference −24.0 dB below the clip (−36.2 LUFS vs −17.1).
+  - Thinking Out Loud: −25.2 dB (−35.7 vs −17.0 LUFS).
+  - By band: below 2 kHz −44 dB; 2–5 kHz −21 / −19 dB; 5–11.5 kHz −4.9 dB and above 11.5 kHz −8.5 / −5.2 dB, relative to the clip's own (small) energy in those bands. The top band moved via the knock-on effects of polish air and de-ess.
+  - Loudest 0.5 s moments: Sukoon 0:22 (−10.0 dB), 1:16 (−10.8 dB); Ed 0:36 (−11.8 dB), 0:57 (−12.5 dB). Median moment −29 / −33 dB.
+  - For scale: MP3 encoding alone changes the clips by −38 / −44 dB.
+- **Pronunciation work is CLOSED** until a better engine or SoulX training code appears (the founder's monthly scout watches for it).
+  - Closed tries: RVC protect 0.1, de-reverb, consonant restore from the original, Lossless and All voices, crisp words from SoulX.
+
 ## 🔤 2026-10-22 (10) — last pronunciation try: crisp consonants from "SoulX alone" blended into the RVC voice (no app change) — founder to compare
 
 - **Alignment first** (`q5/align_env.py`, 1 ms voice envelopes, match 0.87–0.99):
