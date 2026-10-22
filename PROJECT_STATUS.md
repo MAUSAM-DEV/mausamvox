@@ -6,6 +6,21 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔤 2026-10-22 (5) — last pronunciation try: light unvoiced consonants from the original (no app change) — founder to compare
+
+- **Founder:** "smooth balanced" is right → **the original-matched per-section balance is now part of the recipe** (replaces the +1.5 dB).
+- **Change (`q5/consonants.py` + `q5/cons_clean.py`), on the balanced voice:**
+  - Only moments where the original singer has no pitch (RMVPE), kept 40 ms away from any pitched frame, above his noise floor.
+  - Only his sound above 1.5 kHz (s/t/k/breath range).
+  - Only where the voice's 1.5 kHz+ level is > 3 dB below his (after the overall level offset); 60 % of the missing amount, at most −6 dB of his level.
+  - Then any piece of the added sound showing pitch (RMVPE) or harmonicity > 5 dB is removed (±30 ms): 16 % (Sukoon) / 5 % (Ed) of the added energy.
+- **Measured:**
+  - Restored at 5.7 % (Sukoon) / 16 % (Ed) of the singing.
+  - Added energy 0.12 / 0.19 % of the voice; change in the mix −41 / −36 dB.
+  - The added sound is hiss-like: pitched readings 0.4 % / 0.0 %, median harmonicity 2.9 / −2.1 dB.
+  - Like-you hint unchanged (0.590 → 0.592, 0.577 → 0.579).
+- **Clips** (voice "Consonants test", 90 s, −17 LUFS): "Sukoon — balanced / balanced consonants", "Thinking out loud — balanced / balanced consonants". Cost $0.
+
 ## ⚖️ 2026-10-22 (4) — balance to the original + up/down check (no app change) — founder to compare
 
 - **Founder:** smooth is good (kept). Voice too loud / music too quiet vs the original → remove the +1.5 dB and match the original's lead-to-music balance per section; check whether "up/down" is volume or pitch.
