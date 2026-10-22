@@ -6,6 +6,21 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🪶 2026-10-22 (3) — smoothness round (last polish round): gentle de-ess + evening-out (no app change) — founder to compare
+
+- **Founder:** "recipe voice up" is better → **+1.5 dB voice is now part of the SoulX + RVC recipe.**
+- **Evidence** (90 s windows, after the app's polish, vs the original singer):
+  - Sharp "s": Sukoon is no sharper than the original (+20.8 vs +21.5 dB of 5–11 kHz over the mids); Thinking out loud is sharper (+24.8 vs +22.6).
+  - Sudden ≥ 6 dB jumps within 60 ms: 15.0 vs 9.6 % (Sukoon), 19.2 vs 14.7 % (Ed).
+- **Change (`q5/smooth.py`), on the polished voice only:**
+  1. De-ess: only s-frames sharper than the original singer's 90th-percentile s-sharpness, only 5–11 kHz, cut = the excess, max 4 dB, 30 ms smoothing → cut 0.1–0.3 % of the clip by ~1–1.5 dB.
+  2. Evening-out: inside sung non-s stretches, 30 ms level vs its own 150 ms median; deviations beyond 2 dB moved half-way back, max ±3 dB, 20 ms smoothing → ~3 % of the song.
+
+  Pitch, tone, phrase loudness, music, mix unchanged.
+- **After:** s-sharpness Ed +22.9 (original +22.6), Sukoon +20.7; jumps 13.9 % / 18.0 %. Change in the mix −31 / −28 dB.
+- **Render:** the polish is applied offline with the app's exact function (`lossless/polish_q5.mts`, same air target), page `q3hd?polish=off`. The "voice up" baseline rendered this way is bit-identical to the approved one.
+- **Clips** (voice "Smooth test", 90 s, −17 LUFS): "Sukoon — voice up / voice up smooth", "Thinking out loud — voice up / voice up smooth". Cost $0.
+
 ## 🔊 2026-10-22 (2) — clear words #1: voice 1.5 dB louder vs the music (no app change) — founder to compare
 
 - Only change: the recipe's placed voice +1.5 dB (`su/ed_vup_voice.wav`), same SoulX + RVC (protect 0.2) voice, same untouched music, same render; both clips normalised to −17 LUFS overall.
