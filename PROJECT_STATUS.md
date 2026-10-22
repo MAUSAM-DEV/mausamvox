@@ -6,6 +6,25 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-22 (14) — debugging the step 3 live test ("HD worst so far, words wrong") + thin ending (evidence only, no app change)
+
+- **Live HD job:** SoulX `44wkjyf6…`, RVC `55ytqt8f…`.
+  - Same as the tests: lead (app lead vs test lead −54 dB, i.e. identical), key 0, language hi, the same 40 pieces, SoulX settings, RVC settings (rmvpe, protect 0.2, index 0.3, pitch 0, no auto-tune, Singing model).
+  - Different: the **reference** — 3:20 of the "Mausam (Singing)" recording (MP3 192k, content stops at 16 kHz, −11 dB less sound above 8 kHz than the lossless 0:20, 88 % held tones, 8 words, A3–E4) vs the tests' lossless 0:20 (D3–F♯3, 12 words).
+- **Proof runs** (`seedvc-local/work/dbg/`, same app path, only the reference changed; Whisper word error on the tests' 95 s window, lower = clearer):
+  - SoulX alone: app reference **0.35 / 0.32** (run A / live) vs lossless reference 0.28 (run B) and 0.25–0.29 over 6 runs.
+  - Silent sung moments: 3.2–3.4 % (app ref, 3 runs) vs 0.6 % (lossless, 5 runs).
+  - → The app reference measurably makes SoulX less clear.
+  - After RVC: A 0.39, B 0.39, live 0.37, tests 0.30. **The RVC step alone varies 0.30–0.39 between runs with identical input** (full song or excerpt, 24 or 44.1 kHz: 0.39 / 0.34 / 0.37 / 0.39) → after RVC the reference effect is inside RVC's run-to-run spread.
+- **Another difference found, not yet measured:** the live Result mix has glue, shared room, tone match and the automatic song-matched reverb (up to 25 % wet). The approved test clips (`q3hd`) had none of these (glue/room/tone match off by the founder's earlier choice); polish was the Studio default.
+- **Clips** (voice "HD reference check", 90 s, −17.0 LUFS, the test render chain): "Sukoon — app HD" (run A) / "Sukoon — app HD lossless ref" (run B).
+- **Thin ending (step 2 swap, 4:47–5:00):**
+  - The lead split has the singing (−20 to −34 dBFS).
+  - The saved mix has the voice, following the lead's level.
+  - The ORIGINAL song's ending vocal is itself soft and thin: lead 5–17 dB under the music, body-vs-presence −13 dB vs +6.5 dB in the main part.
+  - → Not lost in split, conversion or mix; the song's own outro. The swap is actually louder against the music (+4 to −3 dB).
+- **Cost:** ≈ $0.35 (2 SoulX + 5 RVC runs).
+
 ## 🎤 2026-10-22 (13) — STEP 3 shipped (`bddb0e8`): HD voice (cloud SoulX → your RVC voice), ADMIN ONLY — ⚠️ founder live test pending
 
 - **Founder:** step 2 passed live (karaoke job 21:17:09 → 21:18:22, no warnings, swap saved).

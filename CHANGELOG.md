@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **Debug (no app change):** live HD worse because of the reference (app's MP3 pick makes SoulX less clear: 0.32–0.35 vs 0.25–0.29) — after RVC the difference is inside RVC's own run-to-run spread (0.30–0.39); live mix also adds glue / room / tone match / auto reverb the test clips never had (not yet measured). Thin ending = the original song's outro. Clips "HD reference check".
 - **`bddb0e8` HD engine step 3 (admin only):** single-voice previews + full swaps → cloud SoulX (L40S, reference picked from the voice's Voice Lab recording) → the user's RVC voice (rmvpe); automatic fallback to today's engine (3 min start / 8 min run / failure / quick check); signed tickets, no DB change; `[hd-voice]` logs; kill switch `HD_VOICE=off`. Cloud model `soulx-svc` 7c89f89e (models `813a1de`).
 - **`eb64827` HD engine step 2 (admin only):** lead/backing split by MVSEP Karaoke (49/8, FLAC) instead of KARA_2 for admin accounts; client unchanged; MVSEP start failure → KARA_2; everyone else unchanged. Clean build ✓. Step-8 note: "Unlimited …" plan claims are pricing-page text only.
 - **Decision (no app change):** "crisp words" dropped (founder hears no difference; null test −24 / −25 dB overall, loudest moments −10 to −13 dB); pronunciation work closed until a better engine or SoulX training code appears; recipe stays "balanced".
