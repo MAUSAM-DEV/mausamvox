@@ -6,6 +6,29 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-22 (6) — pronunciation deep-dive: which step breaks the words (evidence only, no app change)
+
+- **Founder:** consonants didn't help → dropped; **"balanced" is the recipe.**
+- **Method (`q5/pron.py`):**
+  - Phrases of the original lead (pause-split, 1.5–8 s, inside the clip).
+  - Whisper-small character error vs the original singer's words, median of 5 shifted windows per phrase.
+  - Stages scored: SoulX alone (`*_sx.wav`), + "Mausam (Singing)" RVC (`*_sxr.wav`), + "Mausam (Lossless)" RVC (same settings, `*_sxl.wav`), final recipe voice (`*_bal_voice.wav`).
+- **Mean error:**
+
+  | Stage | Sukoon (Hindi) | Thinking out loud (English) |
+  |---|---|---|
+  | SoulX alone | 0.25 | 0.11 |
+  | + Singing RVC | 0.30 | 0.18 |
+  | + Lossless RVC | 0.33 | 0.20 |
+  | final | 0.31 | 0.19 |
+
+- **Worst 3 phrases (by the final voice):**
+  - Sukoon 0:00–0:06 (SoulX 0.10 → RVC 0.45), 0:28–0:31 (0.18 → 0.45), 0:32–0:35 (SoulX already 0.67).
+  - Ed 0:06–0:09 (0.15 → 0.62), 1:08–1:11 (SoulX 0.45 → 0.55), 1:15–1:20 (0.00 → RVC 0.25 → final 0.60).
+  - → **the RVC step breaks most words** (4 of 6 worst phrases were clear after SoulX); in 2, SoulX itself was unclear; one Ed phrase got worse again after RVC in the finishing (one outlier).
+- **Lossless voice:** no better overall (0.33 / 0.20); mixed per phrase (better on 3 of the worst 6, worse on 1, equal on 2).
+- **Clips** (voice "Pronunciation check", vocals only, the 3 worst phrases joined, ~14 s, −18 LUFS): "Sukoon / Thinking out loud worst phrases — SoulX alone" and "— SoulX + my RVC". Cost ≈ $0.04 (2 RVC runs).
+
 ## 🔤 2026-10-22 (5) — last pronunciation try: light unvoiced consonants from the original (no app change) — founder to compare
 
 - **Founder:** "smooth balanced" is right → **the original-matched per-section balance is now part of the recipe** (replaces the +1.5 dB).

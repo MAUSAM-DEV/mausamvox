@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **Pronunciation deep-dive (no app change):** consonants dropped, "balanced" is the recipe; the RVC step blurs most of the worst words (SoulX alone clearer: 0.25→0.30 Hindi, 0.11→0.18 English); the Lossless voice doesn't help overall; vocals-only worst-phrase clips ("Pronunciation check").
 - **Consonants try (no app change):** balance adopted into the recipe; very light unvoiced s/t/k/breath sounds (>1.5 kHz, no pitch) borrowed from the original where the voice lacked them (0.1–0.2 % of voice energy); 4 clips ("Consonants test").
 - **Balance round (no app change):** voice was +5.4 dB vs the original lead-to-music balance → matched per section (−5.1…−6.0 dB); "up/down" is not phrase volume or pitch (both follow the original within 0.4 dB / 2 cents); 4 clips ("Balance test").
 - **Smoothness round (no app change):** voice +1.5 dB adopted into the recipe; gentle de-ess (only s-sounds sharper than the original singer's, max 4 dB) + evening-out of short spikes/dips (±3 dB max); 4 clips ("Smooth test").
