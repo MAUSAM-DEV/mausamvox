@@ -6,6 +6,37 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ☁️ 2026-10-22 (9) — STEP 1 done: SoulX on a cloud GPU (private model), speed + cost measured (no app change)
+
+- **Model:** private Replicate model `mausam-dev/soulx-svc`, version `6e16ea1decf9178eb25cf61068b66755e8d0ee69fd96cd3100c0b482807702e0`.
+  - Source: repo MAUSAM-DEV/mausamvox-models, `soulx-svc/`, commit `cd94291`, workflow "Push soulx-svc" (Cog 0.16.12).
+  - Upstream SoulX code at `81aeb3a`, unmodified (Apache-2.0); the local Mac edit only affects fp16, which isn't used.
+  - `predict.py` runs the tested method: pieces ≤ 12 s cut at pauses, 32 steps, cfg 3, fp32, RMVPE, given key.
+  - Weights baked into the image: model-svc.pt, rmvpe.pt, whisper-base.
+  - Inputs: `target`, `prompt`, `pitch_shift` → 24 kHz WAV.
+- **Deployments** (scale to zero, min 0 / max 1): `mausam-dev/soulx-l40s` (gpu-l40s), `mausam-dev/soulx-t4` (gpu-t4).
+- **Speed, full Sukoon lead (305 s, 40 pieces):**
+
+  | | queue + boot | run | total wait |
+  |---|---|---|---|
+  | L40S cold | 65 s | 98 s | **168 s** |
+  | L40S warm | 0 s | 89 s | **92 s** |
+  | T4 cold | 138 s | 565 s | 708 s |
+  | T4 warm | 0 s | 561 s | 564 s |
+
+  - Mac for comparison: ≈ 1,108 s (345 s per 95 s). L40S is ≈ 12× faster.
+- **Idle:** an instance shuts down 1–2 min after the last request (T4 probes: 1 min gap warm, 2 and 3 min gaps cold). Cold boots varied from 41 to 235 s on T4.
+- **Cost per song** (Replicate prices checked 2026-10-22; billed = setup + run + idle):
+  - L40S warm **$0.087**; L40S cold single song **$0.22–0.28**.
+  - T4 warm $0.126; T4 cold $0.17–0.19.
+  - T4 is slower (9–12 min) and is not cheaper warm → **L40S recommended**.
+- **Mac vs Cloud (same Sukoon window, SoulX alone):** loudness −12.5 vs −12.5 LUFS; pitch median difference 3.7 cents (voiced agreement 98 %); tone bands within 0.3 dB.
+  - Both went through the frozen recipe (cloud: "Mausam (Singing)" RVC, contour, polish, smooth, per-section balance within 0.4 dB).
+  - Clips (voice "Cloud check", 90 s, −17.0 LUFS): "Sukoon — Mac" / "Sukoon — Cloud".
+- **Step 4 note:** contour / de-ess / balance can run on the server (a Node function: the app's polish is TypeScript and already ran in Node offline; contour / smooth / balance need TypeScript ports). Phones keep doing only today's final mix.
+- **Spend this step:** ≈ $0.90 (estimate: 4 song runs, 5 probes + idle, 1 RVC; GitHub build free).
+- Live app unchanged (no app code commit).
+
 ## 🧊 2026-10-22 (8) — FINAL FREEZE of the voice recipe; plan to make it the main Voice Swap engine (plan only — AWAITING the founder's OK)
 
 - **Founder:** "Mausam (All)" doesn't sound like him → keep "Mausam (Singing)". The `fbb2b743…` row stays in the DB, unused.

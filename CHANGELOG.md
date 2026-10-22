@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **Step 1 — SoulX cloud model (models repo `cd94291`, no app change):** private `mausam-dev/soulx-svc` + scale-to-zero deployments `soulx-l40s` / `soulx-t4`; full Sukoon: L40S 92 s warm / 168 s cold ($0.087 / $0.22–0.28), T4 564 / 708 s ($0.13 / $0.17–0.19); cloud output matches the Mac (−12.5 LUFS both, pitch 3.7 cents, tone ±0.3 dB); clips "Cloud check".
 - **Final recipe freeze + engine plan (no app change):** "Mausam (All)" rejected by ear; SoulX + "Mausam (Singing)" RVC "balanced" recipe frozen for good; plan to make it the main Voice Swap engine (RVC-only fallback) proposed, awaiting OK.
 - **New voice "Mausam (All)" (no app change):** RVC trained (50 epochs, same settings) on the lossless Hindi + English recordings (470 s); existing voices unchanged; frozen "balanced" recipe rerun with it on Sukoon + Thinking Out Loud; 4 clips ("All voice test"), ≈ $0.35.
 - **Pronunciation deep-dive (no app change):** consonants dropped, "balanced" is the recipe; the RVC step blurs most of the worst words (SoulX alone clearer: 0.25→0.30 Hindi, 0.11→0.18 English); the Lossless voice doesn't help overall; vocals-only worst-phrase clips ("Pronunciation check").
