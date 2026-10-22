@@ -6,6 +6,16 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎙️ 2026-10-22 (7) — new voice "Mausam (All)" (Hindi + English lossless) + recipe clips (no app change) — founder to compare
+
+- **Founder:** can't record more → train a NEW RVC voice from the existing lossless Hindi + lossless English recordings; existing voices untouched.
+- **Data (`seedvc-local/work/all/`):** the 24 Hindi clips of "Mausam (Lossless)" reused byte-for-byte + the English recording (`english/source.m4a`, ALAC) with the same cleanup (`highpass=80, afftdn nr=12 nf=-50 tn=1`, mono 44.1k s16) cut into 24 × 10 s → 48 clips, 470.2 s (Hindi 233.9 + English 236.3).
+- **Old recording left out:** it is AAC 62.6 kbps (not lossless), and the founder heard Old and Lossless voices as the same → no evidence it adds anything.
+- **Training:** same as "Mausam (Singing)"/"Mausam (Lossless)" (`replicate/train-rvc-model` 0397d5e2, v2, 48k, rmvpe_gpu, batch 7, **50 epochs**); 304 s ≈ $0.30. NEW voice_clones row `fbb2b743-9a8b-455b-8cc9-25bb18337724` "Mausam (All)" (model `voice-models/<uid>/fbb2b743….zip`, 194.6 MB; index 2× larger from 2× data). "Mausam (Singing)" and "Mausam (Lossless)" rows verified unchanged.
+- **Recipe run ("balanced", frozen; only the RVC voice swapped):** same SoulX outputs (`*_sx.wav`), RVC with the new voice (RMVPE, protect 0.2, index 0.3, pitch 0; 30 + 24 s), contour, level rule, offline polish (air ON), smooth, per-section balance re-measured for the new voice (`q5/balance_all.py`; same 5 sections), render `q3hd?polish=off`. After: balance minus original within 0.3 dB in every section (old "balanced" within 0.4).
+- **Clips** (voice "All voice test", 90 s, −17.0 LUFS each, same windows): "Sukoon — balanced / balanced All voice", "Thinking out loud — balanced / balanced All voice".
+- **Cost:** training ≈ $0.30 + 2 conversions (54 s) ≈ $0.05 → ≈ $0.35.
+
 ## 🔍 2026-10-22 (6) — pronunciation deep-dive: which step breaks the words (evidence only, no app change)
 
 - **Founder:** consonants didn't help → dropped; **"balanced" is the recipe.**

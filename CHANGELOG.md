@@ -4,6 +4,7 @@ One dated line per completed step/session. Newest first. Each entry ends with th
 
 ## 2026-10-22
 
+- **New voice "Mausam (All)" (no app change):** RVC trained (50 epochs, same settings) on the lossless Hindi + English recordings (470 s); existing voices unchanged; frozen "balanced" recipe rerun with it on Sukoon + Thinking Out Loud; 4 clips ("All voice test"), ≈ $0.35.
 - **Pronunciation deep-dive (no app change):** consonants dropped, "balanced" is the recipe; the RVC step blurs most of the worst words (SoulX alone clearer: 0.25→0.30 Hindi, 0.11→0.18 English); the Lossless voice doesn't help overall; vocals-only worst-phrase clips ("Pronunciation check").
 - **Consonants try (no app change):** balance adopted into the recipe; very light unvoiced s/t/k/breath sounds (>1.5 kHz, no pitch) borrowed from the original where the voice lacked them (0.1–0.2 % of voice energy); 4 clips ("Consonants test").
 - **Balance round (no app change):** voice was +5.4 dB vs the original lead-to-music balance → matched per section (−5.1…−6.0 dB); "up/down" is not phrase volume or pitch (both follow the original within 0.4 dB / 2 cents); 4 clips ("Balance test").
