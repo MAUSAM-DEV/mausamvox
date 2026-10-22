@@ -19,6 +19,7 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
   | protect 0.1 + index 0.15 | 0.25 | 5 | 0.611 | 0.60 | 21 | 0.625 |
   | index 0.15 only | 0.27 | 5 | 0.604 | 0.63 | 20 | 0.625 |
 
+- **❌ Founder verdict (2026-10-22): "recipe clear words" sounds less like him → back to protect 0.2. Don't change RVC protect again.**
 - **Chosen change: protect 0.2 → 0.1 only** (lower = more consonant/breath protection in RVC); index stays 0.3. English clearly clearer with the same hint; Hindi no measurable change (Whisper unreliable on Hindi singing).
 - **Clips** (voice "Clear words test", 90 s, −17 LUFS): "Sukoon — recipe / recipe clear words", "Thinking out loud — recipe / recipe clear words". Everything else identical (SoulX output, volume shape, level, music, render).
 - **Cost (Likely, unverified):** 6 RVC runs ≈ $0.12. Script `q5/convert_p.mjs` (PROTECT / INDEX / F0M env).

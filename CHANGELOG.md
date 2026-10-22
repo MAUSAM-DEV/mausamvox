@@ -2,6 +2,10 @@
 
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
+## 2026-10-22
+
+- **Clear words round 1 rejected:** protect 0.1 sounded less like the founder → recipe stays at protect 0.2. No code change.
+
 ## 2026-10-21
 
 - **Clear words round 1 (no app change):** SoulX + RVC chosen as engine, Seed-VC stopped; RVC protect 0.2 → 0.1 makes English words clearer (Whisper error 0.33 → 0.26, unclear windows 7 → 3) with the same like-you hint; Hindi unchanged. 4 clips ("Clear words test").
