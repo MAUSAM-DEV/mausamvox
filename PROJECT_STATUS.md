@@ -6,6 +6,12 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔇 2026-10-22 — clear words #2: de-reverb the lead before SoulX → nothing to remove (no app change, no clips)
+
+- Tool: MVSEP "Reverb Removal" (sep_type 22), model **MVSep Team 2026.07 BSRoformer** (add_opt1 9), "use as is" (add_opt2 1), on the recipe's MVSEP-karaoke leads (whole songs). MVSEP terms §7: outputs may be used commercially (except models marked non-commercial, which are not offered through the API).
+- **Result:** the removed echo is −48 dB vs the lead (whole songs; during singing median −49 dB, max −26/−45 dB) and the dry lead = the original (correlation 1.00, same level). The karaoke split already leaves the reverb out of the lead → **de-reverb cannot make words clearer here**. SoulX runs stopped; no clips made (they would be identical).
+- Cost: 2 MVSEP jobs (credits); $0 Replicate. Script `q5/mvsep.mts` (SEP / OPT1 / OPT2 env).
+
 ## 🗣️ 2026-10-21 — "SoulX + RVC" is the engine; clear-words round 1 (RVC protect) (no app change) — founder to compare
 
 - **Founder decision (2026-10-14):** "SoulX + RVC recipe" is our engine (most like him on Sukoon, Thinking Out Loud, Love). **Seed-VC stopped**; no more engine tests.
