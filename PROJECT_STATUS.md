@@ -6,6 +6,17 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🌐 2026-10-23 (6) — STEP 2 shipped: song language from the lead, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Change:**
+  - `/api/song-language` (new) starts the finishing machine's **language task**: models repo `hd-finish/language.py`, deployment `hd-finish-cpu` release 3 (v`9c850aba`).
+    - Whisper-small on CPU on the lead's loudest 30 s; Urdu = Hindi; Whisper loads on the first language call only.
+    - The torch CPU wheel comes via `requirements.txt`.
+  - The page asks right after the lead split (admin only) and stores `songLanguage` on the stems / saved session. Also wakes the finishing machine. Never blocks a swap.
+- **Tests (cloud):** Sukoon → **hi** (64 s from cold incl. 41 s start-up); Thinking Out Loud → **en** (17 s warm). Finishing on the new image = the proven output (−100 dB).
+- **Not tested end to end:** the route itself (needs a signed-in admin browser) — it makes exactly the calls the test script made.
+- Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🛟 2026-10-23 (5) — STEP 1 shipped (`30cc06a`): fallback-wait fix, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Founder:** enhancer rejected (enhanced + plain switching = "two different voices"). The Standard path stays "Standard + balanced finishing". Do steps 1 → 5 one at a time.
