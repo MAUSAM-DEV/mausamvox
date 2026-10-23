@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-24
+
+- **Duet clean-up only test (no app change):** today's duet path + her stem cleaned: her jumps 12 → 6, slips 178 → 120; 2 clips ("Clean-up test").
+
 ## 2026-10-23
 
 - **`09743d1` Admin duet pipeline:** cleaned female stem (hd-finish `duetclean`, models `aadb06f`), engine by language + finishing per voice, finished-voice mix. "Wife (All)" trained (test); 2 clips ("Wife voice test").

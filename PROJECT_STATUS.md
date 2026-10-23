@@ -6,6 +6,14 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧹 2026-10-24 — duet: today's path + ONLY the clean-up (test only, no app change) — founder to compare
+
+- **Founder:** today's duet (first one) sounds most like both of them; the new pipeline (finishing) changed their voices → today's duet path is the base.
+- **Test:** today's path unchanged (his stem/conversion, browser polish, glue, room, tone match, today's master), only her stem cleaned of his leftovers before her conversion ("Wife (Hindi)"; male "Mausam (Singing)").
+- **Measured (pitch vs the original stems):** her jumps onto his note 12 → 6 (whole song, 2.4 → 1.2 s), her pitch slips > 1.5 semitones 178 → 120; both voices: jumps 14 → 8, slips 300 → 248. Clip section 1:48–3:18: jumps 1 → 0, slips 65 → 54.
+- **Clips** (voice "Clean-up test", 1:48–3:18, −14 LUFS; both through the same reproduction of today's mix, = the saved file to −34.7 dB): "duet — today's app" / "duet — today's app + clean-up".
+- The live admin duet pipeline (`09743d1`) still adds finishing per voice — revert / change after the founder's verdict.
+
 ## 👥 2026-10-23 (15) — Gender Lock hidden, finishing NaN fix live, warm-up cap, admin duet pipeline + "Wife (All)" test — ⚠️ founder live test pending
 
 - **Founder:** the new duet pipeline beat today's; still some cracks, and her voice isn't exactly like her.
