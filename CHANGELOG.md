@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **`c50c782` Duets (everyone, FROZEN):** today's path + clean-up + gentle master — today's master shaved duet peaks up to 5.1 dB in 205 spots (the distortion). **`493aa65`** "Duet (beta)" label + note.
 - **Duet clean-up only test (no app change):** today's duet path + her stem cleaned: her jumps 12 → 6, slips 178 → 120; 2 clips ("Clean-up test").
 
 ## 2026-10-23

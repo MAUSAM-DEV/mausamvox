@@ -6,6 +6,15 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧊 2026-10-24 (2) — DUET FROZEN: today's path + clean-up + gentle master, live for everyone (`c50c782`, `493aa65`) — ⚠️ founder live test pending
+
+- **Founder:** "today's app + clean-up" better and still sounds like both; distortion remains in places — suspected the old master.
+- **Confirmed (cause = today's loudness master):** on the saved duet the master raised the mix +6.4 dB, so peaks reached ≈ +5 dBFS and were squeezed back: > 1 dB shaved in 205 short spots (70 ms total), up to 5.1 dB (soft clip alone up to 4.6 dB) — worst 3:04–3:10, 4:35–4:52, 5:09–5:34. The saved MP3 shows the peaks pinned at the ceiling there (−0.6…−0.9 dBFS). Gentle master on the same mix: max 1.0 dB, 0 spots (today + clean-up: −17.6 LUFS, 5.7 dB under the original). Correction: on 2026-10-23 I said the master "barely worked" — that counted only the limiter, not the soft clip.
+- **`c50c782` (everyone):** 2-voice duets = today's duet path (both stems through today's engine, browser polish, glue, room, tone match) + ONLY the clean-up of her stem (`/api/duet-clean`, now any signed-in user, 6 per 10 min, gender-split paths only, clean-up jobs only) + the gentle master (`ResultStep` `gentleMaster` prop). Admin per-voice finishing removed.
+- **`493aa65`:** "Duet (beta)" on Configure + note "Works best when singers take turns; overlapping parts may sound less clean."; upload toggle "This is a duet (beta) — alternating male/female leads".
+- **FROZEN:** no more duet changes unless the founder asks.
+- Capacity: the clean-up runs on `hd-finish-cpu` (max 1 instance, ~1.5 min work, 2.2 min cold) — concurrent duets queue; after 5 min the page converts her original stem.
+
 ## 🧹 2026-10-24 — duet: today's path + ONLY the clean-up (test only, no app change) — founder to compare
 
 - **Founder:** today's duet (first one) sounds most like both of them; the new pipeline (finishing) changed their voices → today's duet path is the base.
