@@ -111,6 +111,9 @@ export interface StemResult {
   // Group/backing vocals as loud as the lead (src/lib/group-vocals.ts), set after
   // the lead/backing split ONLY when the warning applies. Seconds [start, end).
   groupVocals?: { ranges: Array<[number, number]>; flaggedShare: number }
+  // The song's language from its lead (/api/song-language, Whisper; 'hi', 'en', …), set
+  // after the lead/backing split for admin accounts (engine plan step 2). Absent = unknown.
+  songLanguage?: string
   // Male/female split of vocalsUrl, populated by /api/gender-split (premium).
   // Optional, same as lead/backing: empty until a gender split runs; consumers
   // fall back to vocalsUrl. Nothing populates these yet (Layer 1 Step 1 adds the

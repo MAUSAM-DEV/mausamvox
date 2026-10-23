@@ -768,6 +768,36 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setKaraokeStatus('failed')
   }
 
+  // The song's language from its lead (/api/song-language, admin only): stored on the
+  // stems (and the saved session) as songLanguage. Any failure = language unknown.
+  async function detectSongLanguage(storagePath: string | undefined, leadPath: string, jobId: number) {
+    try {
+      const start = await fetch('/api/song-language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadPath }) })
+      const id = start.ok ? ((await start.json()).id as string | undefined) : undefined
+      if (!id) return
+      for (let i = 0; i < 60; i++) { // up to ~4 min (a cold finishing machine + Whisper on CPU)
+        await new Promise((r) => setTimeout(r, 4000))
+        if (karaokeJobRef.current !== jobId) return
+        const res = await fetch(`/api/song-language?id=${id}`)
+        if (!res.ok) return
+        const d = await res.json() as { status?: string; language?: string }
+        if (d.status === 'failed' || d.status === 'canceled') return
+        if (d.status !== 'succeeded' || !d.language) continue
+        const songLanguage = d.language
+        console.log(`[engine] song language: ${songLanguage}`)
+        setStemResult((prev) => (prev && prev.storagePath === storagePath ? { ...prev, songLanguage } : prev))
+        try {
+          const raw = localStorage.getItem(STEM_CACHE_KEY)
+          const cached = raw ? JSON.parse(raw) : null
+          if (cached?.result?.storagePath === storagePath) localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, songLanguage } }))
+        } catch { /* ignore */ }
+        return
+      }
+    } catch (err) {
+      console.warn('[engine] song language unknown:', err instanceof Error ? err.message : err)
+    }
+  }
+
   // One lead/backing split: start it, wait for it, apply the result.
   async function karaokeOnce(result: StemResult, jobId: number): Promise<'done' | 'superseded' | { reason: string; retry: boolean }> {
     const POLL_INTERVAL_MS = 2500
@@ -846,6 +876,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: { ...base, ...patch }, savedAt: cached?.savedAt ?? Date.now() }))
         } catch { /* ignore */ }
         console.log(`[karaoke-split] lead/backing ready for ${result.fileName}`)
+        // Song language for the engine choice (admin only for now) — background, never blocks.
+        if (isAdmin && leadVocalsPath) void detectSongLanguage(result.storagePath, leadVocalsPath, jobId)
         // Group-vocals warning — after the stems are shown, so it never delays
         // or blocks the swap. Only stored (and shown) when the warning applies.
         void checkGroupVocals(leadVocalsUrl, backingVocalsUrl).then((groupVocals) => {
