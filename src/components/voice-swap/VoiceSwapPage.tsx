@@ -18,6 +18,7 @@ import { detectMedianF0, autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MI
 import { dspPitchStats } from './dspClient'
 import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
+import { titleLooksEnglish } from '@/lib/title-language'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -47,6 +48,10 @@ const MAX_POLL_ERRORS = 12
 // When a job has been waiting this long, say the engine is warming up.
 const WARMING_NOTE_AFTER_MS = 15000
 const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up to 2 minutes. Keep this page open.'
+// Auto voice engine (admin only for now): how long a swap waits for the song-language check
+// before judging the song's title instead.
+const LANGUAGE_WAIT_MS = 60_000
+const LANGUAGE_NOTE = 'Detecting the song\u2019s language…'
 // Engine warm pings on Configure/Result: every minute, stopping after 30 min with no activity.
 const WARM_PING_EVERY_MS = 60_000
 const WARM_IDLE_STOP_MS = 30 * 60_000
@@ -612,6 +617,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Token for the in-flight background karaoke (lead/backing) split. Each new
   // upload / New Swap bumps it so a stale poll can't apply to the wrong stems.
   const karaokeJobRef = useRef(0)
+  // The song-language check in flight (or done) for an upload — Auto waits for it before a swap.
+  const songLanguageRef = useRef<{ storagePath?: string; result: Promise<string | null> } | null>(null)
   // Same token-guard for the premium male/female (gender) split. Independent of
   // karaoke's — they can be in flight at once and must not invalidate each other.
   const genderSplitJobRef = useRef(0)
@@ -783,19 +790,25 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   }
 
   // The song's language from its lead (/api/song-language, admin only): stored on the
-  // stems (and the saved session) as songLanguage. Any failure = language unknown.
-  async function detectSongLanguage(storagePath: string | undefined, leadPath: string, jobId: number) {
+  // stems (and the saved session) as songLanguage. Any failure = language unknown (null).
+  // Kept in songLanguageRef so a swap can wait for it.
+  function detectSongLanguage(storagePath: string | undefined, leadPath: string, jobId: number): Promise<string | null> {
+    const result = runSongLanguage(storagePath, leadPath, jobId)
+    songLanguageRef.current = { storagePath, result }
+    return result
+  }
+  async function runSongLanguage(storagePath: string | undefined, leadPath: string, jobId: number): Promise<string | null> {
     try {
       const start = await fetch('/api/song-language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadPath }) })
       const id = start.ok ? ((await start.json()).id as string | undefined) : undefined
-      if (!id) return
+      if (!id) return null
       for (let i = 0; i < 60; i++) { // up to ~4 min (a cold finishing machine + Whisper on CPU)
         await new Promise((r) => setTimeout(r, 4000))
-        if (karaokeJobRef.current !== jobId) return
+        if (karaokeJobRef.current !== jobId) return null
         const res = await fetch(`/api/song-language?id=${id}`)
-        if (!res.ok) return
+        if (!res.ok) return null
         const d = await res.json() as { status?: string; language?: string }
-        if (d.status === 'failed' || d.status === 'canceled') return
+        if (d.status === 'failed' || d.status === 'canceled') return null
         if (d.status !== 'succeeded' || !d.language) continue
         const songLanguage = d.language
         console.log(`[engine] song language: ${songLanguage}`)
@@ -805,11 +818,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           const cached = raw ? JSON.parse(raw) : null
           if (cached?.result?.storagePath === storagePath) localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ ...cached, result: { ...cached.result, songLanguage } }))
         } catch { /* ignore */ }
-        return
+        return songLanguage
       }
     } catch (err) {
       console.warn('[engine] song language unknown:', err instanceof Error ? err.message : err)
     }
+    return null
   }
 
   // One lead/backing split: start it, wait for it, apply the result.
@@ -1719,7 +1733,26 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (!target) prewarmResultMusic(stemResult, takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
-      const takeVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
+      // Auto (admin, one voice): wait for the song-language check — up to LANGUAGE_WAIT_MS; still
+      // unknown → judge the song's title (English-looking → HD Voice, otherwise Standard).
+      let takeSongLanguage = stemResult.songLanguage
+      let languageSource: 'detected' | 'title-english' | 'title-other' | undefined = takeSongLanguage ? 'detected' : undefined
+      if (isAdmin && !target && voiceEngine === 'Auto' && !takeSongLanguage) {
+        const languageStart = performance.now()
+        setOverlayNote(LANGUAGE_NOTE)
+        const checkPath = stemResult.leadVocalsPath || stemResult.vocalsPath
+        const pending = songLanguageRef.current && songLanguageRef.current.storagePath === stemResult.storagePath
+          ? songLanguageRef.current.result
+          : checkPath ? detectSongLanguage(stemResult.storagePath, checkPath, karaokeJobRef.current) : Promise.resolve(null)
+        takeSongLanguage = (await Promise.race([pending, new Promise<null>((r) => setTimeout(() => r(null), LANGUAGE_WAIT_MS))])) ?? undefined
+        setOverlayNote(null)
+        languageSource = takeSongLanguage ? 'detected' : titleLooksEnglish(stemResult.fileName) ? 'title-english' : 'title-other'
+        console.log(`[engine] waited ${Math.round((performance.now() - languageStart) / 1000)} s for the song language: ${takeSongLanguage ?? `unknown → judged from the title (${languageSource})`}`)
+      }
+      const takeVoiceEngine: Exclude<VoiceEngineChoice, 'Auto'> = voiceEngine !== 'Auto' ? voiceEngine
+        : languageSource === 'title-english' ? 'HD Voice'
+        : languageSource === 'title-other' ? 'Standard'
+        : takeSongLanguage === 'en' ? 'HD Voice' : 'Standard'
       const startConversion = async (retryOf?: string) => {
         const startRes = await fetch('/api/voice-convert', {
           method: 'POST',
@@ -1748,7 +1781,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             // Auto = by the song's language (English → HD Voice, anything else → Standard).
             engine: takeVoiceEngine === 'Standard' ? 'standard' : 'hd',
             engineChoice: voiceEngine,
-            songLanguage: stemResult.songLanguage,
+            songLanguage: takeSongLanguage,
+            languageSource,
           }),
         })
         const data = await startRes.json()

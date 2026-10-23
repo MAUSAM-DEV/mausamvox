@@ -404,7 +404,9 @@ export function ConfigStep({
               <SegControl<VoiceEngineChoice> options={['Auto', 'HD Voice', 'Standard']} value={voiceEngine} onChange={setVoiceEngine} />
               <div className="vs-ctrl-hint">
                 {voiceEngine === 'Auto'
-                  ? <>Auto — {songLanguageName ? <>this song is in {songLanguageName}, so: </> : <>song language not known yet, so: </>}{VOICE_ENGINE_LABEL[autoVoiceEngine]}</>
+                  ? (songLanguageName
+                    ? <>Auto — this song is in {songLanguageName}, so: {VOICE_ENGINE_LABEL[autoVoiceEngine]}</>
+                    : <>Auto — still detecting the song&rsquo;s language; the swap waits for it (up to a minute)</>)
                   : VOICE_ENGINE_LABEL[voiceEngine]}
               </div>
             </div>

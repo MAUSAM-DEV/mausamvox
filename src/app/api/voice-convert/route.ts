@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
       engine?: string
       engineChoice?: string   // 'Auto' | 'HD Voice' | 'Standard' (logged)
       songLanguage?: string   // detected song language (logged)
+      languageSource?: string // 'detected' | 'title-english' | 'title-other' (Auto's last resort; logged)
     }
     try {
       body = await req.json()
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -244,7 +245,7 @@ export async function POST(req: NextRequest) {
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '', origin: new URL(req.url).origin,
         }
-        console.log(`[engine] choice: ${String(engineUiChoice ?? 'Auto').slice(0, 12)} → ${engineChoice === 'standard' ? 'Standard' : 'HD Voice'} (song language ${String(songLanguage ?? 'unknown').slice(0, 8)}, ${isPreview ? 'preview' : 'full swap'})`)
+        console.log(`[engine] choice: ${String(engineUiChoice ?? 'Auto').slice(0, 12)} → ${engineChoice === 'standard' ? 'Standard' : 'HD Voice'} (song language ${String(songLanguage ?? 'unknown').slice(0, 8)}${languageSource && languageSource !== 'detected' ? ` — not detected in time, judged from the title: ${String(languageSource).slice(0, 14)}` : ''}, ${isPreview ? 'preview' : 'full swap'})`)
         if (engineChoice === 'standard') {
           const ticket = await startStandardVoice(common)
           return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
