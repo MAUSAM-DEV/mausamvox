@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **Debug (no app change):** live TOL wasn't HD (swap started 16 s after the language check → Auto = Standard); the master's soft clip trims TOL voice+music peaks up to 5.6 dB at −10.2 LUFS; Sukoon's ending = thin original outro + the Standard engine losing pitch (same on T4). Clips "Master check".
 - **`4b525c4` Step 5 speed (admin only):** engine-warm (finishing + SoulX for HD, 5-min cap), 30 s admin pings, voice engine on L40S. Standard + finishing 90 s after start; HD 4.3–7 min (SoulX cold start 1–4.5 min).
 - **`cb74c1a` Step 4 engine by language (admin only):** Auto (English → HD Voice, else Standard) + Configure "Voice" control with the founder's wording; `[engine] choice` logs.
 - **`9ff769e` Step 3 Standard + balanced finishing (admin only):** today's engine → finishing → finished-voice mix; unfinished fallback; switch `?engine=standard`. Sukoon delivered in 4 min 30 s.

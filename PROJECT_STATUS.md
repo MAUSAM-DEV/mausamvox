@@ -6,6 +6,26 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-23 (10) — debugging the steps 1–5 live test (evidence only, no app change) — AWAITING the founder's OK before fixing
+
+- **Founder:** both swaps worked (~6 min each). Thinking Out Loud "HD" distorted and too loud; Sukoon (Standard) thin and breaking at 4:48–4:59.
+- **Reproduced:** my re-render of the live path (live finished voices, app bed with `doubles.ts`, the finished-voice mix, `master.ts`) = the saved files to −33 / −36 dB (MP3 delay 1105 samples).
+- **Thinking Out Loud was NOT HD:**
+  - The language check started 13:41:29; the swap started 13:41:45 (16 s later) → Auto with an unknown language = Standard.
+  - The finished voice came from today's engine (crepe) on the lead.
+- **Loudness master** (live; the approved clips were −17 LUFS with no master):
+  - Sukoon: upload −14.3 LUFS → +6.3 dB; soft clip max 0.9 dB on 0.004 % of samples. Negligible.
+  - Thinking Out Loud: upload −10.2 LUFS → +8.2 dB; voice + music peaks add up to +5.1 dBFS.
+    - The soft clip trims peaks by up to **5.6 dB** (> 1 dB on 0.11 % of the song, in clusters at 1:02, 1:08, 3:58, 4:15, 4:26).
+    - At −17 LUFS the saved file peaks at −7.1 dBFS vs −2.7 without the master.
+  - The voice-vs-music balance matches the original (±0.3 dB; −1.3 in a 3 s section). "Too loud" = the whole file is 7 dB louder than the clips.
+- **Sukoon 4:48–4:59:**
+  - The original lead is thin (body-vs-presence −12.8 dB) and fades (−21 → −34 dBFS) under loud music.
+  - The Standard voice engine keeps pitch on only 90–94 % where the lead has 100 % (4:52–4:55) → the breaks.
+  - The finishing and the master don't cause it. The same on the earlier T4 test run → not the GPU.
+- **Other differences checked:** GPU L40S vs T4 (no measurable difference); pitch tracker crepe (Standard) vs rmvpe (HD's RVC step); new upload's stems (equivalent); MP3 192 kbps; mix settings = finished-voice mix (confirmed by the reproduction).
+- **Clips** (voice "Master check", 90 s, −17 LUFS): "Sukoon / Thinking out loud — live as saved" and "— live without loudness master".
+
 ## ⚡ 2026-10-23 (9) — STEP 5 shipped (`4b525c4`): speed, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Change:**
