@@ -52,9 +52,11 @@ const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up
 // before judging the song's title instead.
 const LANGUAGE_WAIT_MS = 60_000
 const LANGUAGE_NOTE = 'Detecting the song\u2019s language…'
-// Engine warm pings on Configure/Result: every minute, stopping after 30 min with no activity.
+// Engine warm pings while a swap is being set up (Upload with a song in, Configure): every minute.
+// They stop once the swap is delivered (Result), while the tab is hidden or the page is left, and at
+// WARM_MAX_MS from the start at the latest (founder, 2026-10-23: after one swap the pings ran ~25 min).
 const WARM_PING_EVERY_MS = 60_000
-const WARM_IDLE_STOP_MS = 30 * 60_000
+const WARM_MAX_MS = 10 * 60_000
 // Speed (engine plan step 5, admin only): SoulX's L40S is warmed for at most this long per song
 // while HD Voice is the chosen engine (≈ $0.06 per minute it stays up).
 const SOULX_WARM_MAX_MS = 5 * 60_000
@@ -1248,15 +1250,15 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   function takeKey(key = keyShift): string {
     return [stemResult?.storagePath ?? '', selectedVoiceId ?? '', pitchShift, key, autotune, duetMode ?? '', duetMode === 'one' ? duetSinger : ''].join('|')
   }
-  // Keep the voice engine warm while Configure or Result is open: it went cold
+  // Keep the voice engine warm while a swap is being set up: it went cold
   // ~3 min after the upload's warm-up on 2026-10-09 and the next swap waited
   // 89 s to start. One ping on arrival, then every 60 s (~$0.001 each; the
-  // upload itself pings once in /api/stem-split). After 30 min with no clicks,
-  // keys, scrolls or touches the pings stop, so an idle tab doesn't keep
-  // spending; the next activity pings at once and restarts them.
-  const lastActivityRef = useRef(Date.now())
+  // upload itself pings once in /api/stem-split). Stops on delivery (Result),
+  // while the tab is hidden, on leaving the page, and after WARM_MAX_MS.
   const stepRef = useRef(step)
   stepRef.current = step
+  // When this warm-up started: per song, and again when the user comes back from Result for a new take
+  const warmRef = useRef({ song: '', since: 0, prevStep: step as number })
   // Also on the Upload step once a song is in (2026-10-10 retest: the engine
   // went cold in the 96 s between the upload's ping and Configure → the
   // conversion waited 58 s; 60 s pings gave 0 s waits everywhere else).
@@ -1267,9 +1269,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const engineWarmRef = useRef({ admin: false, engine: effectiveVoiceEngine as string, song: '', soulxSince: 0, soulxSong: '' })
   engineWarmRef.current = { ...engineWarmRef.current, admin: isAdmin, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
   useEffect(() => {
-    if (step !== 2 && step !== 3 && !(step === 1 && songIn)) return
-    lastActivityRef.current = Date.now() // arriving on the page counts as activity
-    const idle = () => Date.now() - lastActivityRef.current > WARM_IDLE_STOP_MS
+    const ws = warmRef.current, cameFromResult = ws.prevStep === 3
+    ws.prevStep = step
+    // Result = the swap is delivered: no more pings
+    if (step !== 2 && !(step === 1 && songIn)) return
+    const song = engineWarmRef.current.song
+    if (ws.song !== song || cameFromResult || !ws.since) { ws.song = song; ws.since = Date.now() }
+    const capped = () => Date.now() - ws.since > WARM_MAX_MS
     let tick = 0
     const ping = (now = false) => {
       const w = engineWarmRef.current
@@ -1284,18 +1290,21 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       }
       fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx }) }).catch(() => {})
     }
-    const onActivity = () => {
-      const wasIdle = idle()
-      lastActivityRef.current = Date.now()
-      if (wasIdle) ping(true)
-    }
-    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
-    events.forEach((e) => window.addEventListener(e, onActivity, { capture: true, passive: true }))
-    ping(true)
-    const id = setInterval(() => { if (!idle()) ping() }, ADMIN_WARM_PING_EVERY_MS)
+    // Hidden tab = the user left: no pings (back within the cap: one at once, then on schedule)
+    const onVisible = () => { if (document.visibilityState === 'visible' && !capped()) ping(true) }
+    document.addEventListener('visibilitychange', onVisible)
+    if (!capped()) ping(true)
+    let logged = false
+    const id = setInterval(() => {
+      if (capped()) {
+        if (!logged) { logged = true; console.log(`[warm] stopped: ${WARM_MAX_MS / 60_000}-minute cap`) }
+        return
+      }
+      if (document.visibilityState === 'visible') ping()
+    }, ADMIN_WARM_PING_EVERY_MS)
     return () => {
       clearInterval(id)
-      events.forEach((e) => window.removeEventListener(e, onActivity, { capture: true }))
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [step, songIn])
 
