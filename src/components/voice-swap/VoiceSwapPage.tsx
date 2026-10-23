@@ -52,8 +52,8 @@ const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up
 // before judging the song's title instead.
 const LANGUAGE_WAIT_MS = 60_000
 const LANGUAGE_NOTE = 'Detecting the song\u2019s language…'
-// 2-voice duets (admin only for now): the female stem is cleaned of the male singer's leftovers
-// (/api/duet-clean) before her voice is converted — waited for at most this long.
+// 2-voice duets: the female stem is cleaned of the male singer's leftovers (/api/duet-clean)
+// before her voice is converted — waited for at most this long.
 const DUET_CLEAN_WAIT_MS = 5 * 60_000
 const DUET_CLEAN_NOTE = 'Separating the two singers more cleanly…'
 // Engine warm pings while a swap is being set up (Upload with a song in, Configure): every minute.
@@ -574,7 +574,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Settings of the take on the Result screen (fixed once converted, even if
   // Configure is changed afterwards): its key change, auto-tune, and the
   // vocal stem(s) that were converted (Voice blend mixes these back in).
-  const [resultTake, setResultTake] = useState<{ keyShift: number; autotune: Autotune; sourceUrls: string[]; finishedVoice?: boolean } | null>(null)
+  const [resultTake, setResultTake] = useState<{ keyShift: number; autotune: Autotune; sourceUrls: string[]; finishedVoice?: boolean; gentleMaster?: boolean } | null>(null)
 
   // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
   // Gender Lock (Male lock → male singer, Female lock → female). Neutral leaves the
@@ -832,7 +832,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     return null
   }
 
-  // The female duet stem without the male singer's leftovers (/api/duet-clean, admin only): the
+  // The female duet stem without the male singer's leftovers (/api/duet-clean): the
   // cleaned stem's URL (Replicate's, used right away), or null = convert her original stem.
   async function cleanDuetFemale(femalePath: string, malePath: string): Promise<string | null> {
     const t0 = Date.now()
@@ -1676,16 +1676,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           showToast(`Auto key-match — male ${fmtSt(autoShiftA)}, female ${fmtSt(autoShiftB)}`, 4000)
         }
 
-        // Admin (2026-10-23): the new duet pipeline — her stem cleaned of his leftovers (/api/duet-clean),
-        // each voice through the engine for the song's language plus its own balanced finishing, then the
-        // finished-voice mix on Result. Everyone else: as before.
-        const duetFinish = isAdmin && !!stemResult.instrumentalPath && !!stemResult.maleVocalsPath && !!stemResult.femaleVocalsPath
-        const duetEngine = duetFinish ? await resolveEngine(true) : null
-        const pipeline = duetEngine ? {
-          hd: true, instrumentalPath: stemResult.instrumentalPath,
-          engine: duetEngine.engine === 'Standard' ? 'standard' : 'hd', engineChoice: `Duet ${voiceEngine}`,
-          songLanguage: duetEngine.language, languageSource: duetEngine.source,
-        } : {}
+        // Duet (beta, FROZEN 2026-10-24 — the founder's pick): today's duet path + ONLY the clean-up of her
+        // stem (/api/duet-clean: his leftovers out, so her voice stops jumping to his note) + the gentle
+        // master on Result. No per-voice finishing (it changed both voices). Everyone.
+        const cleanUp = !!stemResult.maleVocalsPath && !!stemResult.femaleVocalsPath
         const startJob = (vocalsUrl: string | undefined, vocalsPath: string | undefined, voiceId: string, pitch: number) =>
           fetch('/api/voice-convert', {
             method: 'POST',
@@ -1695,7 +1689,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               autotune: AUTOTUNE_AMOUNT[autotune],
               isPreview: false,
               trackKey: stemResult.storagePath || '',
-              ...pipeline,
             }),
           }).then(async (r) => ({ ok: r.ok, data: await r.json() }))
         // Fire both jobs (his at once; hers once her stem is cleaned), then poll both in parallel.
@@ -1705,7 +1698,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           startJob(stemResult.maleVocalsUrl, stemResult.maleVocalsPath || undefined, voice.id, effPitchA),
           (async () => {
             let url = stemResult.femaleVocalsUrl, path = stemResult.femaleVocalsPath || undefined
-            if (duetFinish) {
+            if (cleanUp) {
               setOverlayNote(DUET_CLEAN_NOTE)
               const cleaned = await cleanDuetFemale(stemResult.femaleVocalsPath!, stemResult.maleVocalsPath!)
               setOverlayNote(null)
@@ -1718,12 +1711,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [{ url: remoteA, finished: finishedA }, { url: remoteB, finished: finishedB }] = await Promise.all([
+        const [{ url: remoteA }, { url: remoteB }] = await Promise.all([
           pollJob(dataA.data.predictionId as string),
           pollJob(dataB.data.predictionId as string),
         ])
-        // The finished-voice mix only when BOTH voices were finished (else today's mix for both)
-        if (duetFinish && finishedA !== finishedB) console.warn(`[duet] only the ${finishedA ? 'male' : 'female'} voice was finished — today's mix for both`)
         const [keptA, keptB] = await Promise.all([keepLocal(remoteA), keepLocal(remoteB)])
         replaceLocalVocals([keptA, keptB])
         const urlA = keptA.url, urlB = keptB.url
@@ -1737,7 +1728,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setSaveInfo(NEW_TAKE_SAVE)
         setSaveRequested(false)
         setConvertedVocalsUrl(urlA)
-        setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!], finishedVoice: finishedA && finishedB })
+        setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!], gentleMaster: true })
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
@@ -2097,6 +2088,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 autotuneLabel={resultTake && resultTake.autotune !== 'Off' ? resultTake.autotune : null}
                 convertedSourceUrls={resultTake?.sourceUrls}
                 finishedVoice={resultTake?.finishedVoice}
+                gentleMaster={resultTake?.gentleMaster}
               />
             )}
           </div>

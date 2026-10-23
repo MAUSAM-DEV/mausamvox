@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { HD_FINISH_DEPLOYMENT, hdVoiceAllowed } from '@/lib/hd-voice'
+import { HD_FINISH_DEPLOYMENT } from '@/lib/hd-voice'
+import { rateLimit } from '@/lib/rate-limit'
 
-// Duet clean-up before a 2-voice swap (2026-10-23) — ADMIN ONLY for now. The finishing machine
+// Duet clean-up before a 2-voice swap (2026-10-23; every user's duets since 2026-10-24). The finishing machine
 // (mausam-dev/hd-finish, task "duetclean") takes the male singer's leftovers out of the female
 // stem: the voice engine's pitch tracker grabbed his note in octave overlaps, so her converted voice
 // sang his line (founder's duet test: 2.4 s → 1.2 s; her solo cracks 5.6 → 4.4 %).
@@ -13,16 +14,20 @@ import { HD_FINISH_DEPLOYMENT, hdVoiceAllowed } from '@/lib/hd-voice'
 // Any failure = the page converts her original stem. Vercel logs: search "[duet]".
 export const maxDuration = 15
 
-async function admin() {
+async function signedIn() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  return user && hdVoiceAllowed(user.email) ? user : null
+  return user
 }
 
-const okPath = (p: unknown): p is string => typeof p === 'string' && p.length > 0 && !p.includes('..')
+// only the duet split's own stems (gender-split/<hash>-male|female.mp3)
+const okPath = (p: unknown): p is string => typeof p === 'string' && /^gender-split\/[A-Za-z0-9_-]+\.(mp3|flac|wav)$/.test(p)
 
 export async function POST(req: NextRequest) {
-  if (!(await admin())) return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
+  const user = await signedIn()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  // a duet swap starts one clean-up; a few retries are fine, a loop is not
+  if (!rateLimit(user.id, 'duet-clean', { max: 6, windowMs: 10 * 60_000 }).allowed) return NextResponse.json({ error: 'Too many duet swaps — wait a few minutes' }, { status: 429 })
   let body: { femalePath?: string; malePath?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }) }
   if (!okPath(body.femalePath) || !okPath(body.malePath)) return NextResponse.json({ error: 'femalePath and malePath are required' }, { status: 400 })
@@ -44,11 +49,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await admin())) return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
+  if (!(await signedIn())) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   const id = req.nextUrl.searchParams.get('id') ?? ''
   if (!/^[a-z0-9]{8,64}$/.test(id)) return NextResponse.json({ error: 'id is required' }, { status: 400 })
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
   const p = await replicate.predictions.get(id)
+  // only clean-up jobs — never another job's output
+  if ((p.input as { task?: string } | undefined)?.task !== 'duetclean') return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (p.status === 'succeeded' && typeof p.output === 'string') {
     const line = String(p.logs ?? '').split('\n').find((l) => l.startsWith('DUETCLEAN ')) ?? ''
     const created = Date.parse(p.created_at ?? ''), done = Date.parse(p.completed_at ?? '')

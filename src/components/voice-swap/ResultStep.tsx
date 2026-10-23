@@ -73,6 +73,10 @@ interface ResultStepProps {
   // balance to the original), so the browser doesn't polish it again and mixes it like
   // the approved "balanced" recipe — glue off, shared room 0, no tone match (Studio knobs as usual).
   finishedVoice?: boolean
+  // The gentle loudness master (never clips: no soft clip, ≤ 1 dB off the peaks) without the rest of the
+  // finished-voice mix — 2-voice duets (2026-10-24: today's master soft-clipped duet peaks by up to 5–6 dB).
+  // Finished-voice takes always get it.
+  gentleMaster?: boolean
   // Manual saving (2026-10-10): this take's save state, owned by the page so it
   // survives stepping back to Configure. saveRequested = a save was asked for
   // elsewhere (Configure's button) — start it once the mix is ready.
@@ -538,8 +542,9 @@ export function ResultStep({
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
   keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
-  finishedVoice = false,
+  finishedVoice = false, gentleMaster = false,
 }: ResultStepProps) {
+  const gentle = finishedVoice || gentleMaster
   const [ab, setAb] = useState<AbSide>('Swapped')
   const [mode, setMode] = useState<PlayMode>('full')
   // Full-song mix lifecycle (decode + key change + Original side render).
@@ -553,8 +558,8 @@ export function ResultStep({
   const playerRef = useRef<LivePlayer | null>(null)
   if (!playerRef.current && typeof window !== 'undefined') playerRef.current = new LivePlayer()
   const player = playerRef.current
-  // Finished-voice takes play through the gentle master (read when the mix graph is built on play)
-  if (player) player.gentleMaster = finishedVoice
+  // Finished-voice takes and duets play through the gentle master (read when the mix graph is built on play)
+  if (player) player.gentleMaster = gentle
   const [, rerender] = useState(0)
   useEffect(() => {
     const p = playerRef.current
@@ -800,7 +805,7 @@ export function ResultStep({
       t0 = performance.now()
       const target = await masterTarget()
       const targetMs = performance.now() - t0
-      const { gain, channels, ms } = await dspMaster(channelsOf(pre), pre.sampleRate, target, undefined, finishedVoice)
+      const { gain, channels, ms } = await dspMaster(channelsOf(pre), pre.sampleRate, target, undefined, gentle)
       return { gain, buf: toBuffer(channels, pre.sampleRate), ms: { render, target: targetMs, search: ms.search, limit: ms.limit } }
     })()
     masterCacheRef.current = { key, result }
@@ -808,7 +813,7 @@ export function ResultStep({
     return result
   }
   async function masterWithGain(pre: AudioBuffer, gain: number): Promise<AudioBuffer> {
-    const { channels } = await dspMaster(channelsOf(pre), pre.sampleRate, 0, gain, finishedVoice)
+    const { channels } = await dspMaster(channelsOf(pre), pre.sampleRate, 0, gain, gentle)
     return toBuffer(channels, pre.sampleRate)
   }
 
