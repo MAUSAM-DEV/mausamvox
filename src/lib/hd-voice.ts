@@ -9,7 +9,7 @@
 //   3. Finishing on the private CPU model mausam-dev/hd-finish (models repo hd-finish/): volume
 //      contour → the app's polish → gentle de-ess / evening-out → per-section balance to the
 //      original's lead-vs-music. The Result screen then mixes it with the HD mix settings
-//      (ResultStep `hdVoice`: no browser polish, glue off, shared room 0, no tone match).
+//      (ResultStep `finishedVoice`: no browser polish, glue off, shared room 0, no tone match).
 //
 // Fallback to today's engine (same as every other swap) when SoulX hasn't started
 // after HD_START_TIMEOUT_MS, hasn't finished HD_RUN_TIMEOUT_MS after starting, fails,
@@ -32,6 +32,11 @@
 // Credits: unchanged rules — a full swap is charged by the client only after a voice
 // is delivered (once, fallback or not); a paid preview is charged at POST as today and
 // refunded here if every path fails. Admins are never charged.
+//
+// Standard + balanced finishing (engine plan step 3, 2026-10-23, admin only): today's engine
+// on the lead (stage 'std', with the same restarts), then the same finishing; if the
+// finishing fails, today's unfinished voice is delivered (finished: false → today's mix).
+// Answers carry `finished` (the Result screen's finished-voice mix) and `hd` (SoulX used).
 //
 // Vercel logs: search "hd-voice".
 import { createHmac, timingSafeEqual } from 'crypto'
@@ -67,6 +72,8 @@ export const HD_NOTE_SINGING = 'HD voice — shaping the singing (about 2–3 mi
 export const HD_NOTE_VOICE = 'HD voice — adding your voice…'
 export const HD_NOTE_FINISH = 'HD voice — balancing and polishing…'
 export const HD_NOTE_FALLBACK = 'Finishing your swap…'
+export const STD_NOTE_VOICE = 'Adding your voice…'
+export const STD_NOTE_FINISH = 'Balancing and polishing…'
 
 // Kill switch without a code change: Vercel env HD_VOICE=off (then redeploy).
 export function hdVoiceAllowed(email: string | null | undefined): boolean {
@@ -74,7 +81,7 @@ export function hdVoiceAllowed(email: string | null | undefined): boolean {
   return !!email && ADMIN_EMAILS.includes(email)
 }
 
-type Stage = 'sx' | 'rvc' | 'fin' | 'fb'
+type Stage = 'sx' | 'rvc' | 'fin' | 'fb' | 'std'
 interface Ticket {
   s: Stage        // stage
   id: string      // Replicate prediction of this stage
@@ -96,6 +103,8 @@ interface Ticket {
   ro?: string     // RVC output URL (fin stage — to restart the finishing)
   o?: string      // site origin (test switch)
   tf?: string     // admin test switch
+  m?: 'std'       // Standard + finishing flow (absent = HD)
+  rid?: string    // fin stage of the Standard flow: the Standard prediction (delivered if finishing fails)
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url')
@@ -195,6 +204,34 @@ export async function startHdVoice(opts: {
   return sign(t)
 }
 
+// Standard + balanced finishing: today's engine on the lead (our deployment), then the finishing.
+export async function startStandardVoice(opts: {
+  userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
+  pitch: number; autotune: number; previewCharged: number; trackKey: string; origin: string
+}): Promise<string> {
+  const t0 = Date.now()
+  const t: Ticket = {
+    s: 'std', id: '', m: 'std', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
+    ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, pc: opts.previewCharged, tk: opts.trackKey, r: 0,
+  }
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), true)
+  t.id = pred.id
+  console.log(`[hd-voice] start STANDARD + finishing: voice ${opts.voiceId} key ${t.p} → today's engine ${pred.id} on ${RVC_DEPLOYMENT.name}${opts.instrumentalPath ? '' : ' (no studio instrumental: no finishing)'} (${Date.now() - t0} ms)`)
+  return sign(t)
+}
+
+// Start the finishing on a voice (HD's RVC output or the Standard voice). Throws if it can't.
+async function startFinishing(t: Ticket, replicate: Replicate, voiceUrl: string): Promise<string> {
+  const [lead, instrumental, backing] = await Promise.all([signedLead(t), signedStem(t.ip), signedStem(t.bp)])
+  if (!lead || !instrumental) throw new Error(!lead ? 'no lead vocal URL' : 'no instrumental URL')
+  const fin = await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, {
+    input: { voice: voiceUrl, lead, instrumental, ...(backing ? { backing } : {}) },
+  })
+  console.log(`[hd-voice] finishing started ${fin.id} on ${HD_FINISH_DEPLOYMENT.name} (contour → polish → de-ess/evening-out → balance)`)
+  return fin.id
+}
+
 // The voice-engine inputs for a ticket's step: HD's RVC step (on SoulX's output, rmvpe, pitch 0)
 // or today's engine (on the lead, the take's pitch).
 async function rvcStepInput(t: Ticket, origin: string, step: 'rvc' | 'fb'): Promise<Record<string, unknown>> {
@@ -223,11 +260,11 @@ async function restart(t: Ticket, replicate: Replicate, origin: string, why: str
     })).id
   } else {
     // the other pool: the public model (our deployment's machine may be the problem)
-    id = (await createRvcPrediction(replicate, t.s === 'rvc' ? 'indexed' : rvcEngine(), await rvcStepInput(t, origin, t.s), false)).id
+    id = (await createRvcPrediction(replicate, t.s === 'rvc' ? 'indexed' : rvcEngine(), await rvcStepInput(t, origin, t.s === 'rvc' ? 'rvc' : 'fb'), false)).id
   }
-  const where = t.s === 'rvc' || t.s === 'fb' ? ' on the public model' : ''
+  const where = t.s === 'rvc' || t.s === 'fb' || t.s === 'std' ? ' on the public model' : ''
   console.log(`[hd-voice] RESTART ${t.s === 'sx' ? 'SoulX' : t.s === 'fin' ? 'finishing' : t.s === 'rvc' ? 'RVC step' : "today's engine"}: ${why} (at ${secs(now - t.t0)} from start) → ${id}${where}`)
-  const note = t.s === 'sx' ? HD_NOTE_STARTING : t.s === 'fin' ? HD_NOTE_FINISH : t.s === 'rvc' ? HD_NOTE_VOICE : HD_NOTE_FALLBACK
+  const note = t.s === 'sx' ? HD_NOTE_STARTING : t.s === 'fin' ? (t.m === 'std' ? STD_NOTE_FINISH : HD_NOTE_FINISH) : t.s === 'rvc' ? HD_NOTE_VOICE : t.s === 'std' ? STD_NOTE_VOICE : HD_NOTE_FALLBACK
   return { status: 'processing', nextId: sign({ ...t, id, ts: now, r: (t.r ?? 0) + 1 }), note }
 }
 
@@ -314,13 +351,8 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
     if (pred.status === 'succeeded' && outputUrl(pred.output)) {
       console.log(`[hd-voice] RVC done ${t.id}: waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s`)
       try {
-        const [lead, instrumental, backing] = await Promise.all([signedLead(t), signedStem(t.ip), signedStem(t.bp)])
-        if (!lead || !instrumental) throw new Error(!lead ? 'no lead vocal URL' : 'no instrumental URL')
-        const fin = await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, {
-          input: { voice: outputUrl(pred.output), lead, instrumental, ...(backing ? { backing } : {}) },
-        })
-        console.log(`[hd-voice] finishing started ${fin.id} on ${HD_FINISH_DEPLOYMENT.name} (contour → polish → de-ess/evening-out → balance)`)
-        return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: fin.id, ts: now, ro: outputUrl(pred.output), r: 0 }), note: HD_NOTE_FINISH }, status: 200 }
+        const finId = await startFinishing(t, replicate, outputUrl(pred.output))
+        return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: finId, ts: now, ro: outputUrl(pred.output), r: 0 }), note: HD_NOTE_FINISH }, status: 200 }
       } catch (err) {
         return { body: await fallback(t, replicate, origin, `finishing didn't start (${err instanceof Error ? err.message : String(err)})`), status: 200 }
       }
@@ -344,10 +376,16 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
   }
 
   if (t.s === 'fin') {
+    const std = t.m === 'std'
+    // Standard flow: the finishing failed → deliver today's unfinished voice (today's mix)
+    const unfinished = (why: string): Reply => {
+      console.warn(`[hd-voice] STANDARD delivered UNFINISHED (finishing ${why}): ${t.rid} | total ${secs(now - t.t0)} from start`)
+      return { status: 'succeeded', convertedVocalsUrl: t.ro, predictionId: t.rid, hd: false, finished: false }
+    }
     const out = pred.status === 'succeeded' ? outputUrl(pred.output) : ''
     if (out) {
-      console.log(`[hd-voice] HD voice delivered: finishing ${t.id} waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s | ${logLine(pred.logs, 'FINISH')} | total ${secs(now - t.t0)} from start`)
-      return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: true }, status: 200 }
+      console.log(`[hd-voice] ${std ? 'STANDARD + finishing' : 'HD voice'} delivered: finishing ${t.id} waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s | ${logLine(pred.logs, 'FINISH')} | total ${secs(now - t.t0)} from start`)
+      return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: !std, finished: true }, status: 200 }
     }
     if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
       const why = pred.status === 'succeeded' ? 'no audio in the result' : `${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`
@@ -355,13 +393,50 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
         const again = await restart(t, replicate, origin, `finishing couldn't fetch an input (${why.slice(0, 120)})`).catch(() => null)
         if (again) return { body: again, status: 200 }
       }
+      if (std) return { body: unfinished(why), status: 200 }
       return { body: await fallback(t, replicate, origin, `finishing ${why}`), status: 200 }
     }
     if (now - created > HD_FINISH_TIMEOUT_MS) {
       await replicate.predictions.cancel(t.id).catch(() => {})
+      if (std) return { body: unfinished(`not done after ${secs(now - created)}`), status: 200 }
       return { body: await fallback(t, replicate, origin, `finishing not done after ${secs(now - created)}`), status: 200 }
     }
-    return { body: { status: 'processing', note: HD_NOTE_FINISH }, status: 200 }
+    return { body: { status: 'processing', note: std ? STD_NOTE_FINISH : HD_NOTE_FINISH }, status: 200 }
+  }
+
+  if (t.s === 'std') {
+    const out = pred.status === 'succeeded' ? outputUrl(pred.output) : ''
+    if (out) {
+      console.log(`[hd-voice] STANDARD voice done ${t.id}: waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s`)
+      if (!t.ip) {
+        console.warn(`[hd-voice] STANDARD delivered UNFINISHED (no studio instrumental): ${t.id}`)
+        return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: false, finished: false }, status: 200 }
+      }
+      try {
+        const finId = await startFinishing(t, replicate, out)
+        return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: finId, ts: now, ro: out, rid: t.id, r: 0 }), note: STD_NOTE_FINISH }, status: 200 }
+      } catch (err) {
+        console.warn(`[hd-voice] STANDARD delivered UNFINISHED (finishing didn't start: ${err instanceof Error ? err.message : String(err)}): ${t.id}`)
+        return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: false, finished: false }, status: 200 }
+      }
+    }
+    if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
+      const why = pred.status === 'succeeded' ? 'no audio in the result' : `${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`
+      if (INPUT_FETCH_ERROR.test(String(pred.error ?? ''))) {
+        const again = await restart(t, replicate, origin, `today's engine couldn't fetch an input (${why.slice(0, 120)})`).catch(() => null)
+        if (again) return { body: again, status: 200 }
+      }
+      console.error(`[hd-voice] FAILED: STANDARD today's engine ${why}`)
+      await refundIfCharged(t)
+      return { body: { status: 'failed', error: `Voice conversion failed (${why})` }, status: 200 }
+    }
+    const stuck = rvcStuck(pred, now, created, started)
+    if (stuck && (t.r ?? 0) < HD_RESTARTS) {
+      await replicate.predictions.cancel(t.id).catch(() => {})
+      const again = await restart(t, replicate, origin, `today's engine ${stuck}`).catch(() => null)
+      if (again) return { body: again, status: 200 }
+    }
+    return { body: { status: 'processing', note: STD_NOTE_VOICE }, status: 200 }
   }
 
   // 'fb' — today's engine
@@ -369,7 +444,7 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
     const out = outputUrl(pred.output)
     if (out) {
       console.log(`[hd-voice] fallback delivered (${t.fr}): ${t.id} waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s | total ${secs(now - t.t0)} from start`)
-      return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: false }, status: 200 }
+      return { body: { status: 'succeeded', convertedVocalsUrl: out, predictionId: t.id, hd: false, finished: false }, status: 200 }
     }
   }
   if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {

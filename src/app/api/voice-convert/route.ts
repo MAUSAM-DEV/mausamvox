@@ -6,7 +6,7 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { createRvcPrediction, rvcEngine, rvcVersion, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
-import { hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice } from '@/lib/hd-voice'
+import { hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
 
 export const maxDuration = 30
 
@@ -95,6 +95,9 @@ export async function POST(req: NextRequest) {
       // Admin-only live test switch (?hdtest=… on the Voice Swap page), e.g.
       // 'soulx-download' = SoulX gets a missing file → retry → fallback.
       hdTest?: string
+      // Which engine for a single-voice admin take: 'standard' = today's engine + the
+      // balanced finishing; anything else = HD (SoulX → RVC → finishing).
+      engine?: string
     }
     try {
       body = await req.json()
@@ -102,7 +105,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -233,6 +236,16 @@ export async function POST(req: NextRequest) {
     // it from starting falls through to today's engine below.
     if (hd && user && voiceId && hdVoiceAllowed(user.email)) {
       try {
+        const common = {
+          userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
+          instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
+          backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
+          pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '', origin: new URL(req.url).origin,
+        }
+        if (engineChoice === 'standard') {
+          const ticket = await startStandardVoice(common)
+          return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
+        }
         const ticket = await startHdVoice({
           userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
           instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
