@@ -68,6 +68,11 @@ interface ResultStepProps {
   // The exact vocal stem(s) that were converted, in convertedVocalsUrl(2)
   // order — Voice blend mixes these (the original singer) under the new voice.
   convertedSourceUrls?: string[]
+  // An HD voice take (lib/hd-voice.ts): the voice arrives already finished on the
+  // server (contour, polish, de-ess / evening-out, balance to the original), so
+  // the browser doesn't polish it again and mixes it like the approved "balanced"
+  // recipe — glue off, shared room 0, no tone match (Studio knobs as usual).
+  hdVoice?: boolean
   // Manual saving (2026-10-10): this take's save state, owned by the page so it
   // survives stepping back to Configure. saveRequested = a save was asked for
   // elsewhere (Configure's button) — start it once the mix is ready.
@@ -533,6 +538,7 @@ export function ResultStep({
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
   persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
   keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
+  hdVoice = false,
 }: ResultStepProps) {
   const [ab, setAb] = useState<AbSide>('Swapped')
   const [mode, setMode] = useState<PlayMode>('full')
@@ -595,7 +601,7 @@ export function ResultStep({
   // Live: every knob move goes straight to the graph.
   // Tone match for this take (set once the first mix is measured; undefined = flat).
   const [toneEq, setToneEq] = useState<number[] | undefined>(undefined)
-  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: BED_ROOM, glue: true, toneEq }
+  const liveParams: MixParams = { warmth, bass, treble, reverb, echo, levelDb: level, blend, style, vocalsOnly: mode === 'vocals', bedRoom: hdVoice ? 0 : BED_ROOM, glue: !hdVoice, toneEq: hdVoice ? undefined : toneEq }
   const liveParamsRef = useRef(liveParams)
   liveParamsRef.current = liveParams
   useEffect(() => { player?.setParams(liveParams) }, [warmth, bass, treble, reverb, echo, level, blend, style, mode, toneEq]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -719,7 +725,7 @@ export function ResultStep({
   }
   // The converted voice with the studio voice applied (or as it came, for Raw).
   function baseVoice(url: string, studio: boolean): Promise<AudioBuffer> {
-    if (!studio) return decoded(url)
+    if (!studio || hdVoice) return decoded(url) // HD voice: polished on the server already
     return cached(`pol:${url}`, `pol|${url}`, async () => {
       const v = await decoded(url)
       return toBuffer([await dspPolishVoice(monoOf(v), v.sampleRate, await airTarget())], v.sampleRate)
@@ -857,7 +863,7 @@ export function ResultStep({
         const r0 = performance.now()
         const [pre, ref] = await Promise.all([renderMix(inputsRef.current!, flat), songRef()])
         const renderMs = performance.now() - r0
-        if (ref.spectrum && !cancelled) {
+        if (ref.spectrum && !cancelled && !hdVoice) { // HD voice: no tone match (the approved recipe has none)
           const t1 = performance.now()
           gains = toneMatchDb(await dspSpectrum(channelsOf(pre), pre.sampleRate), ref.spectrum, pre.sampleRate)
           prebuilt = { pre: toBuffer(await dspFilters(channelsOf(pre), pre.sampleRate, toneEqFilters(gains)), pre.sampleRate), renderMs }

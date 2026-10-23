@@ -86,9 +86,12 @@ export async function POST(req: NextRequest) {
       // the id of that failed prediction. A preview retry is then free (the
       // failed attempt already used the preview), so nobody pays twice.
       retryOf?: string
-      // HD voice (SoulX → the user's RVC voice) for this take — single-voice
-      // swaps only; used only for accounts hdVoiceAllowed() lets through.
+      // HD voice (SoulX → the user's RVC voice → finishing) for this take —
+      // single-voice swaps only; used only for accounts hdVoiceAllowed() lets
+      // through. The finishing needs the song's music: its durable stem paths.
       hd?: boolean
+      instrumentalPath?: string
+      backingPath?: string
     }
     try {
       body = await req.json()
@@ -96,7 +99,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -229,6 +232,8 @@ export async function POST(req: NextRequest) {
       try {
         const ticket = await startHdVoice({
           userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
+          instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
+          backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '',
         })
         return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })

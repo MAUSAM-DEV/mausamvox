@@ -66,6 +66,7 @@ type UnsavedTake = {
   type: 'preview' | 'full'; charged: number; key: string; songName: string
   voiceId: string; voiceName: string; pitchShift: number; keyShift: number; autotune: Autotune; duetSinger: 'male' | 'female'
   stemResult: StemResult; at: number
+  hdVoice?: boolean // an HD voice take (already finished on the server — the Result screen uses the HD mix)
 }
 
 // Every StemResult URL field that has a durable-path twin. Used on cache
@@ -548,7 +549,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Settings of the take on the Result screen (fixed once converted, even if
   // Configure is changed afterwards): its key change, auto-tune, and the
   // vocal stem(s) that were converted (Voice blend mixes these back in).
-  const [resultTake, setResultTake] = useState<{ keyShift: number; autotune: Autotune; sourceUrls: string[] } | null>(null)
+  const [resultTake, setResultTake] = useState<{ keyShift: number; autotune: Autotune; sourceUrls: string[]; hdVoice?: boolean } | null>(null)
 
   // Gender Lock → duetSinger. Keeps the two controls aligned when the user drives
   // Gender Lock (Male lock → male singer, Female lock → female). Neutral leaves the
@@ -1330,7 +1331,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setSaveInfo(NEW_TAKE_SAVE); setSaveRequested(false)
       setConvertedVocalsUrl2(null)
       setConvertedVocalsUrl(kept.url)
-      setResultTake({ keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.leadVocalsUrl || sr.vocalsUrl] })
+      setResultTake({ keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.leadVocalsUrl || sr.vocalsUrl], hdVoice: t.hdVoice })
       setRecentUnsaved(null)
       setStep(3)
     } catch (err) {
@@ -1463,7 +1464,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // Used by both single-job and dual-job paths. An HD voice job (admin only,
       // lib/hd-voice.ts) moves through stages: the server hands back `nextId` to
       // poll from then on, and a `note` to show while it works.
-      const pollJob = async (firstId: string): Promise<{ url: string; id: string }> => {
+      const pollJob = async (firstId: string): Promise<{ url: string; id: string; hd: boolean }> => {
         let predictionId = firstId
         const POLL_INTERVAL_MS = 5000
         const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
@@ -1471,7 +1472,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         let pollErrors = 0
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           await waitOrVisible(POLL_INTERVAL_MS)
-          let data: { status?: string; error?: string; convertedVocalsUrl?: string; nextId?: string; note?: string; predictionId?: string }
+          let data: { status?: string; error?: string; convertedVocalsUrl?: string; nextId?: string; note?: string; predictionId?: string; hd?: boolean }
           const t0 = Date.now()
           try {
             // A status check answers in well under a second; one that hangs is
@@ -1488,7 +1489,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           }
           pollErrors = 0
           if (Date.now() - t0 > 8000) clientTiming('poll-slow', { ms: Date.now() - t0, failed: 0 })
-          if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId }
+          if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId, hd: data.hd === true }
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
             throw new EngineJobFailed(data.error ?? 'Voice conversion failed')
@@ -1671,8 +1672,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             isPreview: type === 'preview',
             trackKey: stemResult.storagePath || '',
             retryOf,
-            // HD voice: single-voice swaps only (the server decides who gets it).
+            // HD voice: single-voice swaps only (the server decides who gets it);
+            // its finishing balances the voice against the song's music.
             hd: !target,
+            instrumentalPath: stemResult.instrumentalPath || undefined,
+            backingPath: stemResult.backingVocalsPath || undefined,
           }),
         })
         const data = await startRes.json()
@@ -1690,15 +1694,16 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // The prediction whose voice was delivered (an HD voice job ends on a
       // different one than it started with) — save and "Recent — not saved" use it.
       let deliveredId: string
+      let deliveredHd: boolean
       try {
-        ({ url: remoteUrl, id: deliveredId } = await pollJob(startData.predictionId as string))
+        ({ url: remoteUrl, id: deliveredId, hd: deliveredHd } = await pollJob(startData.predictionId as string))
       } catch (err) {
         if (!(err instanceof EngineJobFailed)) throw err
         // The engine itself failed: retry once, quietly and for free.
         console.warn('[voice-swap] engine failed — retrying once:', err.message)
         setOverlayNote('The voice engine hiccuped — trying once more…')
         startData = await startConversion(startData.predictionId as string)
-        ;({ url: remoteUrl, id: deliveredId } = await pollJob(startData.predictionId as string))
+        ;({ url: remoteUrl, id: deliveredId, hd: deliveredHd } = await pollJob(startData.predictionId as string))
       }
       setOverlayNote(null)
 
@@ -1715,7 +1720,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setSaveInfo(NEW_TAKE_SAVE)
       setSaveRequested(false)
       setConvertedVocalsUrl(convertedUrl)
-      setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [vocalsToConvert] })
+      setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [vocalsToConvert], hdVoice: deliveredHd })
       setProcessing(false)
       setStep(3)
       if (type === 'preview') {
@@ -1736,7 +1741,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           type, charged: type === 'preview' ? previewCost : 0, key: takeKey(takeKeyShift),
           songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voiceId: voice.id, voiceName: voice.name, pitchShift, keyShift: takeKeyShift, autotune, duetSinger,
-          stemResult, at: Date.now(),
+          stemResult, at: Date.now(), hdVoice: deliveredHd,
         }
         void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: deliveredId, take }) }).catch(() => {})
         setRecentUnsaved(null)
@@ -1930,6 +1935,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 keyShift={resultTake?.keyShift ?? 0}
                 autotuneLabel={resultTake && resultTake.autotune !== 'Off' ? resultTake.autotune : null}
                 convertedSourceUrls={resultTake?.sourceUrls}
+                hdVoice={resultTake?.hdVoice}
               />
             )}
           </div>
