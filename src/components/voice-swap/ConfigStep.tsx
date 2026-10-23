@@ -299,6 +299,9 @@ export function ConfigStep({
         <div className="vs-section-lbl">Swap Controls</div>
 
         <div className="vs-controls-grid">
+          {/* Gender Lock only picks which singer ONE voice replaces — both 2-voice modes convert both
+              singers and never read it (2026-10-23), so it's hidden there. */}
+          {!(hasDuet && activeDuetMode !== 'one') && (
           <div className="vs-ctrl-group">
             <label className="vs-ctrl-lbl">Gender Lock</label>
             <SegControl<Gender>
@@ -312,6 +315,7 @@ export function ConfigStep({
                 : <div className="vs-gl-status vs-gl-status--soft">No effect until you run Duet Split — it only routes stems, doesn't change the output voice's gender</div>
             )}
           </div>
+          )}
 
           {/* Age Range / Accent / Output Language were removed 2026-07-12:
               RVC exposes no parameter for any of them (see PROJECT_STATUS §6
