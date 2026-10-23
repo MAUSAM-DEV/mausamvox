@@ -6,6 +6,18 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎚️ 2026-10-23 (7) — STEP 3 shipped (`9ff769e`): Standard + balanced finishing, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Change (`hd-voice.ts` stage `std`):**
+  - Today's engine on the lead (our deployment, step-1 restarts), then the same finishing, then the finished-voice mix.
+  - If the finishing fails → today's unfinished voice with today's mix.
+  - Answers carry `finished`. The Result screen flag is renamed `hdVoice` → `finishedVoice` (older saved takes still read).
+  - Admin switch for this step: `/voice-swap?engine=standard`. HD stays the default until step 4.
+- **Test (server code vs the real services):**
+  - Sukoon delivered finished in **4 min 30 s**: today's engine waited 105 s (cold), ran 78 s; finishing waited 41 s (cold), ran 37 s.
+  - Balance residual 0.001 dB.
+- Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🌐 2026-10-23 (6) — STEP 2 shipped: song language from the lead, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Change:**

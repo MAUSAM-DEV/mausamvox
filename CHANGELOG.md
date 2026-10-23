@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **`9ff769e` Step 3 Standard + balanced finishing (admin only):** today's engine → finishing → finished-voice mix; unfinished fallback; switch `?engine=standard`. Sukoon delivered in 4 min 30 s.
 - **Step 2 song language (admin only):** `/api/song-language` + the finishing machine's Whisper language task, right after the lead split; stored as `songLanguage`. Sukoon → hi, Thinking Out Loud → en.
 - **`30cc06a` Step 1 fallback-wait fix (admin only):** own voice-engine deployment `rvc-index-t4`; one restart for input-fetch errors, 3-min not-started, no-GPU machines and 5-min runs (restart on the public model); test switch `?hdtest=soulx-download`. Enhancer rejected by the founder.
 - **Enhancer test (no app change):** Standard + Resemble Enhance + switch-fill (no pitch lock) + balanced finishing vs Standard + balanced finishing on Sukoon; dropouts 7.4 % vs 3.7 % raw; 2 clips ("Enhancer test"). Configure labels for step 4 set by the founder.
