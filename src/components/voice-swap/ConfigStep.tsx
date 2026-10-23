@@ -66,6 +66,18 @@ interface ConfigStepProps {
   // Pre-formatted time ranges of loud group/backing vocals (src/lib/group-vocals.ts);
   // set only when the warning applies.
   groupVocalsRanges?: string
+  // Voice engine (engine plan step 4, admin only for now): shown only when setVoiceEngine is given.
+  voiceEngine?: VoiceEngineChoice
+  setVoiceEngine?: (v: VoiceEngineChoice) => void
+  autoVoiceEngine?: Exclude<VoiceEngineChoice, 'Auto'>   // what Auto picks for this song
+  songLanguageName?: string | null                      // detected song language, e.g. "Hindi"
+}
+
+export type VoiceEngineChoice = 'Auto' | 'HD Voice' | 'Standard'
+// The founder's wording (2026-10-23) — no other claims.
+const VOICE_ENGINE_LABEL: Record<Exclude<VoiceEngineChoice, 'Auto'>, string> = {
+  'HD Voice': 'HD Voice — studio quality, best for English songs',
+  Standard: 'Standard — clearest words for Hindi and other Indian languages',
 }
 
 const VOICE_TABS: VoiceTab[] = ['My Voices', 'Library', 'Ghost Singers']
@@ -154,6 +166,7 @@ export function ConfigStep({
   pitchShift, setPitchShift, keyShift, setKeyShift, keyAuto, autoKeyPending, setKeyAuto, keyCompare, autotune, setAutotune,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
+  voiceEngine = 'Auto', setVoiceEngine, autoVoiceEngine = 'Standard', songLanguageName,
 }: ConfigStepProps) {
   const activeDuetMode = duetMode ?? 'one'
 
@@ -384,6 +397,18 @@ export function ConfigStep({
               {' '}Part of the conversion — no extra cost.
             </div>
           </div>
+
+          {setVoiceEngine && (
+            <div className="vs-ctrl-group vs-ctrl-full">
+              <label className="vs-ctrl-lbl">Voice</label>
+              <SegControl<VoiceEngineChoice> options={['Auto', 'HD Voice', 'Standard']} value={voiceEngine} onChange={setVoiceEngine} />
+              <div className="vs-ctrl-hint">
+                {voiceEngine === 'Auto'
+                  ? <>Auto — {songLanguageName ? <>this song is in {songLanguageName}, so: </> : <>song language not known yet, so: </>}{VOICE_ENGINE_LABEL[autoVoiceEngine]}</>
+                  : VOICE_ENGINE_LABEL[voiceEngine]}
+              </div>
+            </div>
+          )}
         </div>
         </>
         )}

@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
       // Which engine for a single-voice admin take: 'standard' = today's engine + the
       // balanced finishing; anything else = HD (SoulX → RVC → finishing).
       engine?: string
+      engineChoice?: string   // 'Auto' | 'HD Voice' | 'Standard' (logged)
+      songLanguage?: string   // detected song language (logged)
     }
     try {
       body = await req.json()
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -242,6 +244,7 @@ export async function POST(req: NextRequest) {
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '', origin: new URL(req.url).origin,
         }
+        console.log(`[engine] choice: ${String(engineUiChoice ?? 'Auto').slice(0, 12)} → ${engineChoice === 'standard' ? 'Standard' : 'HD Voice'} (song language ${String(songLanguage ?? 'unknown').slice(0, 8)}, ${isPreview ? 'preview' : 'full swap'})`)
         if (engineChoice === 'standard') {
           const ticket = await startStandardVoice(common)
           return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })

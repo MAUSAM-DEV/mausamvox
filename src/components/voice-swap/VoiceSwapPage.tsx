@@ -8,7 +8,7 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { VSidebar } from './VSidebar'
 import { VTopbar } from './VTopbar'
 import { UploadStep, StemResult } from './UploadStep'
-import { ConfigStep, VoiceOption, DuetMode, AUTOTUNE_AMOUNT, type Autotune } from './ConfigStep'
+import { ConfigStep, VoiceOption, DuetMode, AUTOTUNE_AMOUNT, type Autotune, type VoiceEngineChoice } from './ConfigStep'
 import { ResultStep, NEW_TAKE_SAVE, prewarmResultMusic, type SaveInfo } from './ResultStep'
 import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
@@ -547,6 +547,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const [manualKey, setManualKey] = useState(0)
   const [autoKey, setAutoKey] = useState<{ id: string; value: number | null }>({ id: '', value: null })
   const [autotune, setAutotune] = useState<Autotune>('Off')
+  // Voice engine (engine plan step 4, admin only for now). Auto: an English song → HD Voice,
+  // any other or unknown language → Standard (SoulX was trained on Mandarin / English / Cantonese).
+  const [voiceEngine, setVoiceEngine] = useState<VoiceEngineChoice>('Auto')
+  const autoVoiceEngine: Exclude<VoiceEngineChoice, 'Auto'> = stemResult?.songLanguage === 'en' ? 'HD Voice' : 'Standard'
+  const songLanguageName = stemResult?.songLanguage
+    ? (() => { try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(stemResult.songLanguage!) ?? stemResult.songLanguage! } catch { return stemResult.songLanguage! } })()
+    : null
   // Settings of the take on the Result screen (fixed once converted, even if
   // Configure is changed afterwards): its key change, auto-tune, and the
   // vocal stem(s) that were converted (Voice blend mixes these back in).
@@ -1688,6 +1695,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (!target) prewarmResultMusic(stemResult, takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
+      const takeVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
       const startConversion = async (retryOf?: string) => {
         const startRes = await fetch('/api/voice-convert', {
           method: 'POST',
@@ -1712,8 +1720,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             backingPath: stemResult.backingVocalsPath || undefined,
             // admin live-test switch: /voice-swap?hdtest=soulx-download (ignored for everyone else)
             hdTest: new URLSearchParams(window.location.search).get('hdtest') || undefined,
-            // admin: /voice-swap?engine=standard = today's engine + the balanced finishing (step 3 test switch)
-            engine: new URLSearchParams(window.location.search).get('engine') === 'standard' ? 'standard' : undefined,
+            // Voice engine (admin only for now; the server ignores it for everyone else):
+            // Auto = by the song's language (English → HD Voice, anything else → Standard).
+            engine: takeVoiceEngine === 'Standard' ? 'standard' : 'hd',
+            engineChoice: voiceEngine,
+            songLanguage: stemResult.songLanguage,
           }),
         })
         const data = await startRes.json()
@@ -1933,6 +1944,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 keyCompare={KEY_COMPARE_ENABLED ? keyCompareProps() : undefined}
                 autotune={autotune}
                 setAutotune={setAutotune}
+                voiceEngine={voiceEngine}
+                setVoiceEngine={isAdmin && duetMode === 'one' ? setVoiceEngine : undefined}
+                autoVoiceEngine={autoVoiceEngine}
+                songLanguageName={songLanguageName}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}
                 duetMode={duetMode}
                 setDuetMode={setDuetMode}
