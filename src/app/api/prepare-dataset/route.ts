@@ -9,6 +9,7 @@ import ffmpegPath from 'ffmpeg-static'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { denoiseVocal } from '@/lib/denoise'
+import { downloadWithRetry, withTimeout } from '@/lib/storage-transfer'
 
 const execFileAsync = promisify(execFile)
 
@@ -32,8 +33,17 @@ const MIN_CLIP_SECONDS = 2
 // hours; the URL must stay valid until Replicate fetches the input.
 const DATASET_URL_TTL = 7 * 24 * 60 * 60
 
+// The whole prep must answer inside Vercel's 60 s (maxDuration) — past it the function is killed and
+// the page gets no message. Storage transfers can stall silently (2026-10-23: four preps in a row
+// hung on the download), so each one has a time limit and the run stops retrying near this budget.
+const BUDGET_MS = 54_000
+const DOWNLOAD_ATTEMPTS = 2
+const DOWNLOAD_TIMEOUT_MS = 18_000 // a 21.7 MB sample took 4.3 s
+const STORAGE_BUSY_MSG = 'Our file storage didn’t respond in time — a temporary hiccup. Your recording is safe: press Try Again in a minute.'
+
 export async function POST(req: NextRequest) {
   console.log('[prepare-dataset] handler entered')
+  const deadline = Date.now() + BUDGET_MS
   try {
     if (!adminConfigured) {
       console.error('[prepare-dataset] SUPABASE_SERVICE_ROLE_KEY is not configured')
@@ -107,27 +117,26 @@ export async function POST(req: NextRequest) {
     // Sign a FRESH URL from the durable sample_path (the source of truth). The
     // stored sample_url was removed because it expired; audioUrl, if still sent by
     // an older client, is only a last-resort fallback when sample_path is missing.
-    let fetchUrl: string | undefined = audioUrl
-    if (clone.sample_path) {
+    if (!clone.sample_path && !audioUrl) {
+      return NextResponse.json({ error: 'No sample available to prepare (missing sample_path)' }, { status: 400 })
+    }
+    // A fresh link per attempt (time-limited, retried once — see BUDGET_MS)
+    const freshUrl = async () => {
+      if (!clone.sample_path) return audioUrl ?? null
       const { data: fresh } = await supabaseAdmin.storage
         .from('voice-samples')
         .createSignedUrl(clone.sample_path, 300) // 5-min TTL, only needed for this download
-      if (fresh?.signedUrl) fetchUrl = fresh.signedUrl
-    }
-    if (!fetchUrl) {
-      return NextResponse.json({ error: 'No sample available to prepare (missing sample_path)' }, { status: 400 })
+      return fresh?.signedUrl ?? audioUrl ?? null
     }
 
     console.log('[prepare-dataset] downloading audio')
-    const audioRes = await fetch(fetchUrl)
-    if (!audioRes.ok) {
-      return NextResponse.json(
-        { error: `Failed to download audio: HTTP ${audioRes.status}` },
-        { status: 502 }
-      )
+    let audioBuffer: Buffer
+    try {
+      audioBuffer = await downloadWithRetry(freshUrl, { attempts: DOWNLOAD_ATTEMPTS, timeoutMs: DOWNLOAD_TIMEOUT_MS, logTag: '[prepare-dataset]' })
+    } catch (err) {
+      console.error('[prepare-dataset] download gave up:', err instanceof Error ? err.message : String(err))
+      return NextResponse.json({ error: STORAGE_BUSY_MSG }, { status: 503 })
     }
-    const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
-    console.log('[prepare-dataset] downloaded', audioBuffer.length, 'bytes')
 
     // ── 5. Optional vocal cleanup, then split into clips ─────────────────────
     // Cleanup runs BEFORE splitting so every training clip benefits. On success
@@ -165,14 +174,22 @@ export async function POST(req: NextRequest) {
     let uploadError: { message: string } | null = null
 
     for (let attempt = 0; attempt < UPLOAD_BACKOFF_MS.length; attempt++) {
+      // Time left for this attempt after its back-off; no retry that can't finish inside the budget
+      const left = deadline - Date.now() - UPLOAD_BACKOFF_MS[attempt]
+      if (attempt > 0 && left < 8000) {
+        console.warn(`[prepare-dataset] no time left for ZIP upload attempt ${attempt + 1} (${left} ms)`)
+        break
+      }
       if (UPLOAD_BACKOFF_MS[attempt] > 0) {
         console.log(`[prepare-dataset] retrying ZIP upload (attempt ${attempt + 1}/${UPLOAD_BACKOFF_MS.length}) after ${UPLOAD_BACKOFF_MS[attempt]}ms`)
         await new Promise((r) => setTimeout(r, UPLOAD_BACKOFF_MS[attempt]))
       }
 
-      const { error } = await supabaseAdmin.storage
-        .from('voice-samples')
-        .upload(zipPath, zipBuffer, { contentType: 'application/zip', upsert: true })
+      const { error } = await withTimeout(
+        supabaseAdmin.storage.from('voice-samples').upload(zipPath, zipBuffer, { contentType: 'application/zip', upsert: true }),
+        Math.max(5000, left),
+        'ZIP upload',
+      ).catch((err: Error) => ({ error: { message: err.message } }))
 
       if (!error) { uploadError = null; break }
       uploadError = error
@@ -192,10 +209,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (uploadError) {
-      return NextResponse.json(
-        { error: `ZIP upload failed: ${uploadError.message}` },
-        { status: 500 }
-      )
+      console.error('[prepare-dataset] ZIP upload gave up:', uploadError.message)
+      return NextResponse.json({ error: STORAGE_BUSY_MSG }, { status: 503 })
     }
     console.log('[prepare-dataset] ZIP uploaded to:', zipPath)
 

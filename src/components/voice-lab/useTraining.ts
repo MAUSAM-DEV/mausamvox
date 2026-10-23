@@ -135,7 +135,8 @@ export function useStudioTraining({ onReady }: UseTrainingOpts) {
       })
       const prepData = await prep.json().catch(() => ({}))
       if (!mountedRef.current || activeIdRef.current !== voice.id) return
-      if (!prep.ok) throw new Error(prepData.error ?? 'Could not prepare your voice data')
+      // No message from the server = it was cut off (e.g. Vercel's 60 s limit) — say what to do
+      if (!prep.ok) throw new Error(prepData.error ?? 'Preparing your voice data took too long — a temporary hiccup. Your recording is safe: press Try Again in a minute.')
 
       // 2. Kick off Replicate training (returns immediately).
       const tr = await fetch('/api/voice-lab/train', {

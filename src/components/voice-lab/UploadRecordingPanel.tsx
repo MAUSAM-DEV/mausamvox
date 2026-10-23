@@ -44,7 +44,7 @@ async function convertOnServer(file: File, ext: string): Promise<Converted> {
     body: JSON.stringify({ path: presign.path }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? 'Could not read this recording — please try again.')
+  if (!res.ok) throw new Error(data.error ?? 'Converting took too long — a temporary hiccup. Please choose the file again in a minute.')
   return data as Converted
 }
 

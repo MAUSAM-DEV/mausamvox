@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 import { convertSample } from '@/lib/sample-convert'
+import { downloadWithRetry, withTimeout } from '@/lib/storage-transfer'
 
 export const maxDuration = 60
 
@@ -18,6 +19,12 @@ export const maxDuration = 60
 const BUCKET = 'voice-samples'
 const BUCKET_LIMIT_BYTES = 50 * 1024 * 1024 // the voice-samples bucket's file size limit
 const PREVIEW_URL_TTL = 60 * 60 // only for the panel's player right now — never stored
+// Storage transfers can stall silently on Vercel (the first "Wife English" conversion hung until
+// the 60 s kill, 2026-10-23): time-limited, the download retried once with a fresh link.
+const DOWNLOAD_ATTEMPTS = 2
+const DOWNLOAD_TIMEOUT_MS = 15_000
+const UPLOAD_TIMEOUT_MS = 20_000
+const STORAGE_BUSY_MSG = 'Our file storage didn’t respond in time — a temporary hiccup. Please choose the file again in a minute.'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -35,12 +42,17 @@ export async function POST(req: NextRequest) {
 
   const started = Date.now()
   try {
-    const { data: blob, error: dlErr } = await supabaseAdmin.storage.from(BUCKET).download(incoming)
-    if (dlErr || !blob) {
-      console.error('[voice-lab/convert-sample] download failed:', dlErr?.message)
-      return NextResponse.json({ error: 'Could not read the uploaded file — please try again.' }, { status: 502 })
+    let original: Buffer
+    try {
+      original = await downloadWithRetry(
+        async () => (await supabaseAdmin.storage.from(BUCKET).createSignedUrl(incoming, 300)).data?.signedUrl ?? null,
+        { attempts: DOWNLOAD_ATTEMPTS, timeoutMs: DOWNLOAD_TIMEOUT_MS, logTag: '[voice-lab/convert-sample]' },
+      )
+    } catch (err) {
+      console.error('[voice-lab/convert-sample] download gave up:', err instanceof Error ? err.message : String(err))
+      return NextResponse.json({ error: STORAGE_BUSY_MSG }, { status: 503 })
     }
-    const c = await convertSample(Buffer.from(await blob.arrayBuffer()))
+    const c = await convertSample(original)
     if ('error' in c) {
       console.warn(`[voice-lab/convert-sample] ${incoming}: ${c.log}`)
       return NextResponse.json({ error: c.error }, { status: 422 })
@@ -52,10 +64,14 @@ export async function POST(req: NextRequest) {
     }
 
     const stored = `${user.id}/${Date.now()}-sample.wav`
-    const { error: upErr } = await supabaseAdmin.storage.from(BUCKET).upload(stored, wav, { contentType: 'audio/wav', upsert: false })
+    const { error: upErr } = await withTimeout(
+      supabaseAdmin.storage.from(BUCKET).upload(stored, wav, { contentType: 'audio/wav', upsert: false }),
+      UPLOAD_TIMEOUT_MS,
+      'WAV upload',
+    ).catch((err: Error) => ({ error: { message: err.message } }))
     if (upErr) {
       console.error('[voice-lab/convert-sample] upload failed:', upErr.message)
-      return NextResponse.json({ error: 'Could not save the converted recording — please try again.' }, { status: 502 })
+      return NextResponse.json({ error: STORAGE_BUSY_MSG }, { status: 503 })
     }
     const { data: signed } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(stored, PREVIEW_URL_TTL)
     console.log(`[voice-lab/convert-sample] ${codec} → WAV mono ${rate} Hz, ${durationSec.toFixed(1)} s, ${(wav.length / 1e6).toFixed(1)} MB in ${Date.now() - started} ms (${stored})`)
