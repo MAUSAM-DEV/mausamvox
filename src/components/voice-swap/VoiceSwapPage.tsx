@@ -52,6 +52,10 @@ const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up
 // before judging the song's title instead.
 const LANGUAGE_WAIT_MS = 60_000
 const LANGUAGE_NOTE = 'Detecting the song\u2019s language…'
+// 2-voice duets (admin only for now): the female stem is cleaned of the male singer's leftovers
+// (/api/duet-clean) before her voice is converted — waited for at most this long.
+const DUET_CLEAN_WAIT_MS = 5 * 60_000
+const DUET_CLEAN_NOTE = 'Separating the two singers more cleanly…'
 // Engine warm pings while a swap is being set up (Upload with a song in, Configure): every minute.
 // They stop once the swap is delivered (Result), while the tab is hidden or the page is left, and at
 // WARM_MAX_MS from the start at the latest (founder, 2026-10-23: after one swap the pings ran ~25 min).
@@ -828,6 +832,29 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     return null
   }
 
+  // The female duet stem without the male singer's leftovers (/api/duet-clean, admin only): the
+  // cleaned stem's URL (Replicate's, used right away), or null = convert her original stem.
+  async function cleanDuetFemale(femalePath: string, malePath: string): Promise<string | null> {
+    const t0 = Date.now()
+    try {
+      const start = await fetch('/api/duet-clean', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ femalePath, malePath }) })
+      const id = start.ok ? ((await start.json()).id as string | undefined) : undefined
+      if (!id) throw new Error(`did not start (${start.status})`)
+      while (Date.now() - t0 < DUET_CLEAN_WAIT_MS) {
+        await new Promise((r) => setTimeout(r, 4000))
+        const res = await fetch(`/api/duet-clean?id=${id}`)
+        if (!res.ok) continue
+        const d = await res.json() as { status?: string; url?: string }
+        if (d.status === 'succeeded' && d.url) { console.log(`[duet] clean-up ready in ${Math.round((Date.now() - t0) / 1000)} s`); return d.url }
+        if (d.status === 'failed') throw new Error('failed')
+      }
+      throw new Error('took too long')
+    } catch (err) {
+      console.warn('[duet] clean-up skipped — converting her original stem:', err instanceof Error ? err.message : err)
+      return null
+    }
+  }
+
   // One lead/backing split: start it, wait for it, apply the result.
   async function karaokeOnce(result: StemResult, jobId: number): Promise<'done' | 'superseded' | { reason: string; retry: boolean }> {
     const POLL_INTERVAL_MS = 2500
@@ -1587,6 +1614,30 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         throw new Error('Voice conversion timed out')
       }
 
+      // Voice engine for this take. Auto (admin, `wait`): waits for the song-language check — up to
+      // LANGUAGE_WAIT_MS; still unknown → judges the song's title (English-looking → HD Voice, otherwise Standard).
+      const resolveEngine = async (wait: boolean) => {
+        let language = stemResult.songLanguage
+        let source: 'detected' | 'title-english' | 'title-other' | undefined = language ? 'detected' : undefined
+        if (wait && voiceEngine === 'Auto' && !language) {
+          const languageStart = performance.now()
+          setOverlayNote(LANGUAGE_NOTE)
+          const checkPath = stemResult.leadVocalsPath || stemResult.vocalsPath
+          const pending = songLanguageRef.current && songLanguageRef.current.storagePath === stemResult.storagePath
+            ? songLanguageRef.current.result
+            : checkPath ? detectSongLanguage(stemResult.storagePath, checkPath, karaokeJobRef.current) : Promise.resolve(null)
+          language = (await Promise.race([pending, new Promise<null>((r) => setTimeout(() => r(null), LANGUAGE_WAIT_MS))])) ?? undefined
+          setOverlayNote(null)
+          source = language ? 'detected' : titleLooksEnglish(stemResult.fileName) ? 'title-english' : 'title-other'
+          console.log(`[engine] waited ${Math.round((performance.now() - languageStart) / 1000)} s for the song language: ${language ?? `unknown → judged from the title (${source})`}`)
+        }
+        const engine: Exclude<VoiceEngineChoice, 'Auto'> = voiceEngine !== 'Auto' ? voiceEngine
+          : source === 'title-english' ? 'HD Voice'
+          : source === 'title-other' ? 'Standard'
+          : language === 'en' ? 'HD Voice' : 'Standard'
+        return { engine, language, source }
+      }
+
       // ── Mode 2/3: both singers converted in parallel ──────────────────────
       if (hasDuetStems && (duetMode === 'both-split' || duetMode === 'both-same')) {
         // Preview not supported for dual-job mode — the server-side preview gate
@@ -1625,45 +1676,54 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           showToast(`Auto key-match — male ${fmtSt(autoShiftA)}, female ${fmtSt(autoShiftB)}`, 4000)
         }
 
-        // Fire both jobs in parallel, then poll both in parallel.
+        // Admin (2026-10-23): the new duet pipeline — her stem cleaned of his leftovers (/api/duet-clean),
+        // each voice through the engine for the song's language plus its own balanced finishing, then the
+        // finished-voice mix on Result. Everyone else: as before.
+        const duetFinish = isAdmin && !!stemResult.instrumentalPath && !!stemResult.maleVocalsPath && !!stemResult.femaleVocalsPath
+        const duetEngine = duetFinish ? await resolveEngine(true) : null
+        const pipeline = duetEngine ? {
+          hd: true, instrumentalPath: stemResult.instrumentalPath,
+          engine: duetEngine.engine === 'Standard' ? 'standard' : 'hd', engineChoice: `Duet ${voiceEngine}`,
+          songLanguage: duetEngine.language, languageSource: duetEngine.source,
+        } : {}
+        const startJob = (vocalsUrl: string | undefined, vocalsPath: string | undefined, voiceId: string, pitch: number) =>
+          fetch('/api/voice-convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vocalsUrl, vocalsPath, voiceId, pitchShift: pitch,
+              autotune: AUTOTUNE_AMOUNT[autotune],
+              isPreview: false,
+              trackKey: stemResult.storagePath || '',
+              ...pipeline,
+            }),
+          }).then(async (r) => ({ ok: r.ok, data: await r.json() }))
+        // Fire both jobs (his at once; hers once her stem is cleaned), then poll both in parallel.
         // deductCredits(400) is only reached if Promise.all resolves — if either
         // job fails, the catch block runs and no credits are charged.
         const [dataA, dataB] = await Promise.all([
-          fetch('/api/voice-convert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vocalsUrl: stemResult.maleVocalsUrl,
-              vocalsPath: stemResult.maleVocalsPath || undefined,
-              voiceId: voice.id,
-              pitchShift: effPitchA,
-              autotune: AUTOTUNE_AMOUNT[autotune],
-              isPreview: false,
-              trackKey: stemResult.storagePath || '',
-            }),
-          }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
-          fetch('/api/voice-convert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vocalsUrl: stemResult.femaleVocalsUrl,
-              vocalsPath: stemResult.femaleVocalsPath || undefined,
-              voiceId: voice2.id,
-              pitchShift: effPitchB,
-              autotune: AUTOTUNE_AMOUNT[autotune],
-              isPreview: false,
-              trackKey: stemResult.storagePath || '',
-            }),
-          }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+          startJob(stemResult.maleVocalsUrl, stemResult.maleVocalsPath || undefined, voice.id, effPitchA),
+          (async () => {
+            let url = stemResult.femaleVocalsUrl, path = stemResult.femaleVocalsPath || undefined
+            if (duetFinish) {
+              setOverlayNote(DUET_CLEAN_NOTE)
+              const cleaned = await cleanDuetFemale(stemResult.femaleVocalsPath!, stemResult.maleVocalsPath!)
+              setOverlayNote(null)
+              if (cleaned) { url = cleaned; path = undefined }
+            }
+            return startJob(url, path, voice2.id, effPitchB)
+          })(),
         ])
 
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [{ url: remoteA }, { url: remoteB }] = await Promise.all([
+        const [{ url: remoteA, finished: finishedA }, { url: remoteB, finished: finishedB }] = await Promise.all([
           pollJob(dataA.data.predictionId as string),
           pollJob(dataB.data.predictionId as string),
         ])
+        // The finished-voice mix only when BOTH voices were finished (else today's mix for both)
+        if (duetFinish && finishedA !== finishedB) console.warn(`[duet] only the ${finishedA ? 'male' : 'female'} voice was finished — today's mix for both`)
         const [keptA, keptB] = await Promise.all([keepLocal(remoteA), keepLocal(remoteB)])
         replaceLocalVocals([keptA, keptB])
         const urlA = keptA.url, urlB = keptB.url
@@ -1677,7 +1737,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         setSaveInfo(NEW_TAKE_SAVE)
         setSaveRequested(false)
         setConvertedVocalsUrl(urlA)
-        setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!] })
+        setResultTake({ keyShift: takeKeyShift, autotune, sourceUrls: [stemResult.maleVocalsUrl!, stemResult.femaleVocalsUrl!], finishedVoice: finishedA && finishedB })
         setConvertedVocalsUrl2(urlB)
         setProcessing(false)
         setStep(3)
@@ -1742,26 +1802,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (!target) prewarmResultMusic(stemResult, takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
-      // Auto (admin, one voice): wait for the song-language check — up to LANGUAGE_WAIT_MS; still
-      // unknown → judge the song's title (English-looking → HD Voice, otherwise Standard).
-      let takeSongLanguage = stemResult.songLanguage
-      let languageSource: 'detected' | 'title-english' | 'title-other' | undefined = takeSongLanguage ? 'detected' : undefined
-      if (isAdmin && !target && voiceEngine === 'Auto' && !takeSongLanguage) {
-        const languageStart = performance.now()
-        setOverlayNote(LANGUAGE_NOTE)
-        const checkPath = stemResult.leadVocalsPath || stemResult.vocalsPath
-        const pending = songLanguageRef.current && songLanguageRef.current.storagePath === stemResult.storagePath
-          ? songLanguageRef.current.result
-          : checkPath ? detectSongLanguage(stemResult.storagePath, checkPath, karaokeJobRef.current) : Promise.resolve(null)
-        takeSongLanguage = (await Promise.race([pending, new Promise<null>((r) => setTimeout(() => r(null), LANGUAGE_WAIT_MS))])) ?? undefined
-        setOverlayNote(null)
-        languageSource = takeSongLanguage ? 'detected' : titleLooksEnglish(stemResult.fileName) ? 'title-english' : 'title-other'
-        console.log(`[engine] waited ${Math.round((performance.now() - languageStart) / 1000)} s for the song language: ${takeSongLanguage ?? `unknown → judged from the title (${languageSource})`}`)
-      }
-      const takeVoiceEngine: Exclude<VoiceEngineChoice, 'Auto'> = voiceEngine !== 'Auto' ? voiceEngine
-        : languageSource === 'title-english' ? 'HD Voice'
-        : languageSource === 'title-other' ? 'Standard'
-        : takeSongLanguage === 'en' ? 'HD Voice' : 'Standard'
+      // Auto (admin, one voice): waits for the song language (resolveEngine)
+      const { engine: takeVoiceEngine, language: takeSongLanguage, source: languageSource } = await resolveEngine(isAdmin && !target)
       const startConversion = async (retryOf?: string) => {
         const startRes = await fetch('/api/voice-convert', {
           method: 'POST',
