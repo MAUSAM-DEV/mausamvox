@@ -6,6 +6,17 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎙️ 2026-10-23 (12) — Voice Lab: iPhone lossless (ALAC) uploads fixed (`ea8adb9`) — ⚠️ founder live test pending
+
+- **Founder live test of fixes 1 + 2: PASSED.** Thinking Out Loud ran HD (Preview), clean, no distortion. **~8 min from upload to result** — note for the speed / warm-up cost decision before beta.
+- **Bug:** an iPhone Voice Memos lossless `.m4a` (Apple Lossless / ALAC) showed "only 0:00 long". Proven in Chromium 152: ALAC fails both `decodeAudioData` ("Unable to decode audio data") and `<audio>` (error 4); the same audio as AAC decodes fine → the panel's length fell back to 0.
+- **Fix (`ea8adb9`, everyone):**
+  - WAV, MP3 and AAC `.m4a` stay as before (stored as uploaded).
+  - ALAC `.m4a` (detected in the file), anything the browser can't decode, and FLAC / OGG / OPUS / WEBM / AIFF / CAF / AAC: stored as-is under `<user>/incoming/` (presign `incoming`), then `/api/voice-lab/convert-sample` (ffmpeg, `src/lib/sample-convert.ts`) makes a lossless 16-bit mono WAV at the file's own rate (max 48 kHz), stores it as the voice sample, deletes the original, returns length + waveform + a 1-hour preview link.
+  - Panel: "Converting … so it plays everywhere — this can take up to a minute…". Longest convertible recording ≈ 9 min (bucket limit 50 MB).
+  - Checked on "Wife Hindi" + "Mausam English" (both ALAC 48 kHz mono): 225.6 / 236.3 s, PCM bit-identical to a direct decode (lossless), 0.3–0.5 s locally; broken file / non-audio → clear error. "Wife English" isn't on this Mac — not tested.
+- Logs: Vercel `[voice-lab/convert-sample]`.
+
 ## 🔧 2026-10-23 (11) — FIX 1 + FIX 2 shipped (`5f4ef4b`, `9eaf6df`), ADMIN ONLY + RMVPE ending test (no app change) — ⚠️ founder live test pending
 
 - **Fix 1 — Auto waits for the song language (`5f4ef4b`):**

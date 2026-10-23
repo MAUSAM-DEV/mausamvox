@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **`ea8adb9` Voice Lab iPhone lossless uploads:** ALAC `.m4a` (and FLAC/OGG/AIFF/… or anything the browser can't decode) converted on the server to a lossless mono WAV; was "0:00 long". Live test of fixes 1+2 passed (~8 min upload → result, for the speed decision).
 - **RMVPE ending test (no app change):** Sukoon Standard with RMVPE instead of crepe holds pitch the same at 4:48–4:59 (95 % vs 96 %); 2 clips ("RMVPE ending test").
 - **`9eaf6df` Gentle loudness master (admin only):** finished-voice takes never clip — no soft clip, −1.5 dBFS ceiling, gain capped so the limiter takes ≤ 1 dB off the true peak; TOL ends −15.7 LUFS (5.5 dB under the original), Sukoon −15.2.
 - **`5f4ef4b` Auto waits for the song language (admin only):** "Detecting the song’s language…" up to 60 s; still unknown → judged from the file name (English-looking → HD Voice, else Standard); logged.
