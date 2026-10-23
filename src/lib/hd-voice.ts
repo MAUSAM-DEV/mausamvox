@@ -15,6 +15,14 @@
 // after HD_START_TIMEOUT_MS, hasn't finished HD_RUN_TIMEOUT_MS after starting, fails,
 // or its output fails the quick check (in the model: > 5 % of the lead's sung moments
 // silent; here: no / tiny audio file). An RVC or finishing failure after SoulX also falls back.
+// Before falling back (2026-10-23, fallback-wait fix): a step that failed because it
+// couldn't FETCH an input (download / connection error) is started once more with fresh
+// links; a voice-engine step (RVC, today's engine) that hasn't started after
+// RVC_START_TIMEOUT_MS, landed on a machine without a working GPU (its log says "use CPU
+// for inference" — seen 2026-10-23, 5+ min for a song instead of ~1), or is still running
+// RVC_RUN_TIMEOUT_MS after starting, is cancelled and started once more — on the OTHER
+// pool: voice-engine steps run on our own deployment (rvc-engine.ts RVC_DEPLOYMENT), and a
+// restart goes to the public model (a broken machine stays up and would get the job again).
 //
 // No database or storage state: POST returns a signed ticket ("hd.<payload>.<mac>")
 // as the predictionId; each GET poll advances it and hands the client the next ticket
@@ -30,7 +38,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
-import { INDEXED_RVC_VERSION, rvcEngine, rvcVersion } from '@/lib/rvc-engine'
+import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 
 export const HD_SOULX_DEPLOYMENT = { owner: 'mausam-dev', name: 'soulx-l40s' } // private model mausam-dev/soulx-svc
@@ -43,6 +51,15 @@ export const HD_MAX_KEY = 12                       // SoulX takes ±12 semitones
 export const HD_RVC_F0_METHOD = 'rmvpe'            // the tested setting (today's engine uses crepe)
 export const HD_RVC_PITCH = 0                      // the key is already in SoulX's output
 export const HD_MIN_OUTPUT_BYTES = 50_000          // a SoulX WAV smaller than this is not a song
+export const HD_RESTARTS = 1                       // restarts per stage (input fetch error / stuck / no GPU)
+export const RVC_START_TIMEOUT_MS = 3 * 60 * 1000  // a voice-engine step not started after this: cancelled, started once more
+export const RVC_RUN_TIMEOUT_MS = 5 * 60 * 1000    // … or still running this long after starting (a full song takes ~0.5–1.5 min)
+const NO_GPU_LOG = 'use CPU for inference'         // the RVC engine's own message when the machine's GPU isn't usable
+// "couldn't fetch an input" as Cog reports it, e.g. "404 Client Error: Not Found for url: …" or
+// "HTTPSConnectionPool(host=…): Max retries exceeded with url: …" (seen 2026-10-23)
+const INPUT_FETCH_ERROR = /Client Error|Server Error|for url:|HTTPSConnectionPool|Max retries exceeded|Connection (reset|aborted|refused)|Read timed out/i
+// admin test switch ?hdtest=soulx-download: SoulX is given a missing file (both tries) → fallback
+const TEST_MISSING_FILE = '/__hd-test-missing.wav'
 const SIGNED_URL_TTL_S = 21600
 
 export const HD_NOTE_STARTING = 'HD voice — getting the singing engine ready…'
@@ -74,6 +91,11 @@ interface Ticket {
   pc: number      // preview credits charged at POST (refunded if every path fails)
   tk: string      // track key for that refund
   fr?: string     // fallback reason
+  r?: number      // restarts used in this stage (fetch retry / start timeout)
+  so?: string     // SoulX output URL (rvc stage — to restart the RVC step)
+  ro?: string     // RVC output URL (fin stage — to restart the finishing)
+  o?: string      // site origin (test switch)
+  tf?: string     // admin test switch
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url')
@@ -128,19 +150,13 @@ async function preferredRefs(userId: string, voiceId: string): Promise<{ lang: s
   return out
 }
 
-// POST side. Throws when SoulX can't be started (the caller then runs today's engine).
-export async function startHdVoice(opts: {
-  userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
-  pitch: number; autotune: number; previewCharged: number; trackKey: string
-}): Promise<string> {
-  const t0 = Date.now()
-  if (Math.abs(opts.pitch) > HD_MAX_KEY) throw new Error(`key ${opts.pitch} is beyond ±${HD_MAX_KEY}`)
-  if (!opts.instrumentalPath) throw new Error('no studio instrumental stored (the finishing needs the music)')
+// SoulX's inputs for a ticket (fresh signed links each time). Throws when they can't be made.
+async function soulxInput(t: Ticket): Promise<{ input: Record<string, unknown>; note: string; language: string }> {
   // The user's OWN voice only (its references / Voice Lab recording).
-  const { data: voice } = await supabaseAdmin.from('voice_clones').select('sample_path, language').eq('id', opts.voiceId).eq('user_id', opts.userId).maybeSingle()
+  const { data: voice } = await supabaseAdmin.from('voice_clones').select('sample_path, language').eq('id', t.v).eq('user_id', t.u).maybeSingle()
   if (!voice) throw new Error('not the user\'s own voice')
   const language = String(voice.language ?? '')
-  const refs = await preferredRefs(opts.userId, opts.voiceId)
+  const refs = await preferredRefs(t.u, t.v)
   let refInput: Record<string, string>, refNote: string
   if (refs.length) {
     const main = refs.find((r) => r.lang === language) ?? refs[0], alt = refs.find((r) => r !== main)
@@ -153,19 +169,66 @@ export async function startHdVoice(opts: {
     refInput = { prompt_source: sample.signedUrl, prompt_language: language }
     refNote = 'picked from the Voice Lab recording'
   }
+  const lead = t.tf === 'soulx-download' && t.o ? `${t.o}${TEST_MISSING_FILE}` : await signedLead(t)
+  if (!lead) throw new Error('no lead vocal URL')
+  return { input: { target: lead, ...refInput, pitch_shift: t.p }, note: refNote, language }
+}
+
+// POST side. Throws when SoulX can't be started (the caller then runs today's engine).
+export async function startHdVoice(opts: {
+  userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
+  pitch: number; autotune: number; previewCharged: number; trackKey: string; origin?: string; test?: string
+}): Promise<string> {
+  const t0 = Date.now()
+  if (Math.abs(opts.pitch) > HD_MAX_KEY) throw new Error(`key ${opts.pitch} is beyond ±${HD_MAX_KEY}`)
+  if (!opts.instrumentalPath) throw new Error('no studio instrumental stored (the finishing needs the music)')
   const t: Ticket = {
     s: 'sx', id: '', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
     ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, pc: opts.previewCharged, tk: opts.trackKey,
+    ...(opts.test ? { tf: opts.test, o: opts.origin } : {}),
+  }
+  const { input, note, language } = await soulxInput(t)
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const pred = await replicate.deployments.predictions.create(HD_SOULX_DEPLOYMENT.owner, HD_SOULX_DEPLOYMENT.name, { input })
+  t.id = pred.id
+  console.log(`[hd-voice] start: voice ${opts.voiceId} key ${t.p} language ${language || '?'} | reference: ${note} → SoulX ${pred.id} on ${HD_SOULX_DEPLOYMENT.name} (${Date.now() - t0} ms)${t.tf ? ` | TEST ${t.tf}` : ''}`)
+  return sign(t)
+}
+
+// The voice-engine inputs for a ticket's step: HD's RVC step (on SoulX's output, rmvpe, pitch 0)
+// or today's engine (on the lead, the take's pitch).
+async function rvcStepInput(t: Ticket, origin: string, step: 'rvc' | 'fb'): Promise<Record<string, unknown>> {
+  const modelUrl = await resolveVoiceModelUrl(t.v, t.u, origin, 'hd-voice')
+  if (!modelUrl) throw new Error('no voice model')
+  if (step === 'rvc') {
+    if (!t.so) throw new Error('no SoulX output')
+    return { ...rvcInput('indexed', t.so, modelUrl, HD_RVC_PITCH, t.a), f0_method: HD_RVC_F0_METHOD }
   }
   const lead = await signedLead(t)
   if (!lead) throw new Error('no lead vocal URL')
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-  const pred = await replicate.deployments.predictions.create(HD_SOULX_DEPLOYMENT.owner, HD_SOULX_DEPLOYMENT.name, {
-    input: { target: lead, ...refInput, pitch_shift: t.p },
-  })
-  t.id = pred.id
-  console.log(`[hd-voice] start: voice ${opts.voiceId} key ${t.p} language ${language || '?'} | reference: ${refNote} → SoulX ${pred.id} on ${HD_SOULX_DEPLOYMENT.name} (${Date.now() - t0} ms)`)
-  return sign(t)
+  return rvcInput(rvcEngine(), lead, modelUrl, t.p, t.a)
+}
+
+// Start this stage's job once more (fetch error / not started in time). null = no restart left.
+async function restart(t: Ticket, replicate: Replicate, origin: string, why: string): Promise<Reply | null> {
+  if ((t.r ?? 0) >= HD_RESTARTS) return null
+  const now = Date.now()
+  let id: string
+  if (t.s === 'sx') {
+    id = (await replicate.deployments.predictions.create(HD_SOULX_DEPLOYMENT.owner, HD_SOULX_DEPLOYMENT.name, { input: (await soulxInput(t)).input })).id
+  } else if (t.s === 'fin') {
+    const [lead, instrumental, backing] = await Promise.all([signedLead(t), signedStem(t.ip), signedStem(t.bp)])
+    id = (await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, {
+      input: { voice: t.ro, lead, instrumental, ...(backing ? { backing } : {}) },
+    })).id
+  } else {
+    // the other pool: the public model (our deployment's machine may be the problem)
+    id = (await createRvcPrediction(replicate, t.s === 'rvc' ? 'indexed' : rvcEngine(), await rvcStepInput(t, origin, t.s), false)).id
+  }
+  const where = t.s === 'rvc' || t.s === 'fb' ? ' on the public model' : ''
+  console.log(`[hd-voice] RESTART ${t.s === 'sx' ? 'SoulX' : t.s === 'fin' ? 'finishing' : t.s === 'rvc' ? 'RVC step' : "today's engine"}: ${why} (at ${secs(now - t.t0)} from start) → ${id}${where}`)
+  const note = t.s === 'sx' ? HD_NOTE_STARTING : t.s === 'fin' ? HD_NOTE_FINISH : t.s === 'rvc' ? HD_NOTE_VOICE : HD_NOTE_FALLBACK
+  return { status: 'processing', nextId: sign({ ...t, id, ts: now, r: (t.r ?? 0) + 1 }), note }
 }
 
 async function refundIfCharged(t: Ticket) {
@@ -176,16 +239,19 @@ async function refundIfCharged(t: Ticket) {
 
 type Reply = Record<string, unknown>
 
+// Why a running voice-engine job should be restarted, or '' if it's fine.
+function rvcStuck(pred: { status: string; logs?: string | null }, now: number, created: number, started: number): string {
+  if (!Number.isFinite(started)) return now - created > RVC_START_TIMEOUT_MS ? `not started after ${secs(now - created)}` : ''
+  if (String(pred.logs ?? '').includes(NO_GPU_LOG)) return 'landed on a machine without a working GPU (running on CPU)'
+  return now - started > RVC_RUN_TIMEOUT_MS ? `still running ${secs(now - started)} after starting` : ''
+}
+
 async function fallback(t: Ticket, replicate: Replicate, origin: string, reason: string): Promise<Reply> {
   const now = Date.now()
   try {
-    const lead = await signedLead(t)
-    const modelUrl = await resolveVoiceModelUrl(t.v, t.u, origin, 'hd-voice')
-    if (!lead || !modelUrl) throw new Error(!lead ? 'no lead vocal URL' : 'no voice model')
-    const engine = rvcEngine()
-    const pred = await replicate.predictions.create({ version: rvcVersion(engine), input: rvcInput(engine, lead, modelUrl, t.p, t.a) })
-    console.log(`[hd-voice] FALLBACK to today's engine: ${reason} (at ${secs(now - t.t0)} from start) → ${pred.id}`)
-    return { status: 'processing', nextId: sign({ ...t, s: 'fb', id: pred.id, ts: now, fr: reason }), note: HD_NOTE_FALLBACK }
+    const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, origin, 'fb'), true)
+    console.log(`[hd-voice] FALLBACK to today's engine: ${reason} (at ${secs(now - t.t0)} from start) → ${pred.id} on ${RVC_DEPLOYMENT.name}`)
+    return { status: 'processing', nextId: sign({ ...t, s: 'fb', id: pred.id, ts: now, fr: reason, r: 0 }), note: HD_NOTE_FALLBACK }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[hd-voice] FAILED: ${reason}; today's engine didn't start either (${msg})`)
@@ -214,23 +280,24 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
       if (out) { try { bytes = Number((await fetch(out, { method: 'HEAD' })).headers.get('content-length') ?? -1) } catch { /* below */ } }
       if (!out || (bytes >= 0 && bytes < HD_MIN_OUTPUT_BYTES)) return { body: await fallback(t, replicate, origin, `SoulX output failed the quick check (${out ? `${bytes} bytes` : 'no file'})`), status: 200 }
       console.log(`[hd-voice] SoulX done ${t.id}: waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'} to start, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s | ${logLine(pred.logs, 'LANGUAGE')} | ${logLine(pred.logs, 'REFERENCE')} | ${logLine(pred.logs, 'TIMING song')} | ${logLine(pred.logs, 'CHECK')}`)
-      const modelUrl = await resolveVoiceModelUrl(t.v, t.u, origin, 'hd-voice')
-      if (!modelUrl) return { body: await fallback(t, replicate, origin, 'no voice model for the RVC step'), status: 200 }
       try {
-        const rvc = await replicate.predictions.create({
-          version: INDEXED_RVC_VERSION,
-          input: { ...rvcInput('indexed', out, modelUrl, HD_RVC_PITCH, t.a), f0_method: HD_RVC_F0_METHOD },
-        })
-        console.log(`[hd-voice] RVC started ${rvc.id} (your voice: protect 0.2, index 0.3, ${HD_RVC_F0_METHOD}, pitch ${HD_RVC_PITCH})`)
+        const next: Ticket = { ...t, s: 'rvc', so: out, r: 0 }
+        const rvc = await createRvcPrediction(replicate, 'indexed', await rvcStepInput(next, origin, 'rvc'), true)
+        console.log(`[hd-voice] RVC started ${rvc.id} on ${RVC_DEPLOYMENT.name} (your voice: protect 0.2, index 0.3, ${HD_RVC_F0_METHOD}, pitch ${HD_RVC_PITCH})`)
         // wake the finishing machine now, so it's up when the RVC step is done (only the create is awaited)
         await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
-        return { body: { status: 'processing', nextId: sign({ ...t, s: 'rvc', id: rvc.id, ts: now }), note: HD_NOTE_VOICE }, status: 200 }
+        return { body: { status: 'processing', nextId: sign({ ...next, id: rvc.id, ts: now }), note: HD_NOTE_VOICE }, status: 200 }
       } catch (err) {
         return { body: await fallback(t, replicate, origin, `RVC step didn't start (${err instanceof Error ? err.message : String(err)})`), status: 200 }
       }
     }
     if (pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
-      return { body: await fallback(t, replicate, origin, `SoulX ${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`), status: 200 }
+      const err = String(pred.error ?? '')
+      if (INPUT_FETCH_ERROR.test(err)) {
+        const again = await restart(t, replicate, origin, `SoulX couldn't fetch an input (${err.slice(0, 120)})`).catch(() => null)
+        if (again) return { body: again, status: 200 }
+      }
+      return { body: await fallback(t, replicate, origin, `SoulX ${pred.status}: ${err.slice(0, 160)}`), status: 200 }
     }
     if (!Number.isFinite(started) && now - created > HD_START_TIMEOUT_MS) {
       await replicate.predictions.cancel(t.id).catch(() => {})
@@ -253,14 +320,25 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
           input: { voice: outputUrl(pred.output), lead, instrumental, ...(backing ? { backing } : {}) },
         })
         console.log(`[hd-voice] finishing started ${fin.id} on ${HD_FINISH_DEPLOYMENT.name} (contour → polish → de-ess/evening-out → balance)`)
-        return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: fin.id, ts: now }), note: HD_NOTE_FINISH }, status: 200 }
+        return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: fin.id, ts: now, ro: outputUrl(pred.output), r: 0 }), note: HD_NOTE_FINISH }, status: 200 }
       } catch (err) {
         return { body: await fallback(t, replicate, origin, `finishing didn't start (${err instanceof Error ? err.message : String(err)})`), status: 200 }
       }
     }
     if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
       const why = pred.status === 'succeeded' ? 'no audio in the result' : `${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`
+      if (INPUT_FETCH_ERROR.test(String(pred.error ?? ''))) {
+        const again = await restart(t, replicate, origin, `RVC step couldn't fetch an input (${why.slice(0, 120)})`).catch(() => null)
+        if (again) return { body: again, status: 200 }
+      }
       return { body: await fallback(t, replicate, origin, `RVC step after SoulX ${why}`), status: 200 }
+    }
+    const stuck = rvcStuck(pred, now, created, started)
+    if (stuck) {
+      await replicate.predictions.cancel(t.id).catch(() => {})
+      const again = await restart(t, replicate, origin, `RVC step ${stuck}`).catch(() => null)
+      if (again) return { body: again, status: 200 }
+      return { body: await fallback(t, replicate, origin, `RVC step ${stuck}, twice`), status: 200 }
     }
     return { body: { status: 'processing', note: HD_NOTE_VOICE }, status: 200 }
   }
@@ -273,6 +351,10 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
     }
     if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
       const why = pred.status === 'succeeded' ? 'no audio in the result' : `${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`
+      if (t.ro && INPUT_FETCH_ERROR.test(String(pred.error ?? ''))) {
+        const again = await restart(t, replicate, origin, `finishing couldn't fetch an input (${why.slice(0, 120)})`).catch(() => null)
+        if (again) return { body: again, status: 200 }
+      }
       return { body: await fallback(t, replicate, origin, `finishing ${why}`), status: 200 }
     }
     if (now - created > HD_FINISH_TIMEOUT_MS) {
@@ -292,9 +374,19 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
   }
   if (pred.status === 'succeeded' || pred.status === 'failed' || pred.status === 'canceled' || pred.status === 'aborted') {
     const why = pred.status === 'succeeded' ? 'no audio in the result' : `${pred.status}: ${String(pred.error ?? '').slice(0, 160)}`
+    if (INPUT_FETCH_ERROR.test(String(pred.error ?? ''))) {
+      const again = await restart(t, replicate, origin, `today's engine couldn't fetch an input (${why.slice(0, 120)})`).catch(() => null)
+      if (again) return { body: again, status: 200 }
+    }
     console.error(`[hd-voice] FAILED: today's engine ${why} after fallback (${t.fr}) — every path failed`)
     await refundIfCharged(t)
     return { body: { status: 'failed', error: `Voice conversion failed (${why})` }, status: 200 }
+  }
+  const stuck = rvcStuck(pred, now, created, started)
+  if (stuck && (t.r ?? 0) < HD_RESTARTS) {   // no restart left: let it finish, slow or not
+    await replicate.predictions.cancel(t.id).catch(() => {})
+    const again = await restart(t, replicate, origin, `today's engine ${stuck}`).catch(() => null)
+    if (again) return { body: again, status: 200 }
   }
   return { body: { status: 'processing', note: HD_NOTE_FALLBACK }, status: 200 }
 }

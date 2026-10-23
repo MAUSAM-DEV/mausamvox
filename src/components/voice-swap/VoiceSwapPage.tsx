@@ -1677,6 +1677,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             hd: !target,
             instrumentalPath: stemResult.instrumentalPath || undefined,
             backingPath: stemResult.backingVocalsPath || undefined,
+            // admin live-test switch: /voice-swap?hdtest=soulx-download (ignored for everyone else)
+            hdTest: new URLSearchParams(window.location.search).get('hdtest') || undefined,
           }),
         })
         const data = await startRes.json()

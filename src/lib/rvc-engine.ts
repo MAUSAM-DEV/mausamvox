@@ -49,6 +49,17 @@ export function rvcVersion(engine: RvcEngine = rvcEngine()): string {
   return engine === 'indexed' ? INDEXED_RVC_VERSION : engine === 'bare' ? BARE_RVC_VERSION : COVER_RVC_VERSION
 }
 
+// Our own deployment of the indexed engine (2026-10-23, fallback-wait fix): admin swaps
+// and their warm pings run here instead of the public model's shared queue, which once
+// kept a swap waiting 26 min to start. Same version as INDEXED_RVC_VERSION, T4, scale
+// to zero, at most 2 machines (a duet converts two singers at once). Other engines and
+// everyone else: the public model as before.
+export const RVC_DEPLOYMENT = { owner: 'mausam-dev', name: 'rvc-index-t4' }
+export function createRvcPrediction(replicate: Replicate, engine: RvcEngine, input: Record<string, unknown>, onDeployment: boolean) {
+  if (onDeployment && engine === 'indexed') return replicate.deployments.predictions.create(RVC_DEPLOYMENT.owner, RVC_DEPLOYMENT.name, { input })
+  return replicate.predictions.create({ version: rvcVersion(engine), input })
+}
+
 // Fire-and-forget pre-warm of the RVC pool (indexed: our own model's pool —
 // it only gets our traffic, so cold boots of 2-4.5 min were seen; bare: the
 // shared pseudoram pool): one tiny built-in-voice
@@ -59,19 +70,17 @@ export function rvcVersion(engine: RvcEngine = rvcEngine()): string {
 // create call is awaited (an un-awaited promise can be frozen with the lambda);
 // every failure is swallowed — warming must never break the caller. No-op on
 // the cover engine (zsxkib's pool is kept warm by its own traffic).
-export async function fireWarmPing(origin: string, logTag: string): Promise<void> {
+export async function fireWarmPing(origin: string, logTag: string, onDeployment = false): Promise<void> {
   const engine = rvcEngine()
   if (engine === 'cover') return
   if (!process.env.REPLICATE_API_TOKEN) return
   try {
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-    const ping = await replicate.predictions.create(
-      engine === 'indexed'
-        // warm_only boots the instance and returns the input untouched.
-        ? { version: INDEXED_RVC_VERSION, input: { input_audio: `${origin}/warm-ping.wav`, warm_only: true } }
-        : { version: BARE_RVC_VERSION, input: { input_audio: `${origin}/warm-ping.wav`, pitch_change: 0, output_format: 'mp3' } },
-    )
-    console.log(`[${logTag}] warm-ping fired (${ping.id})`)
+    const ping = engine === 'indexed'
+      // warm_only boots the instance and returns the input untouched.
+      ? await createRvcPrediction(replicate, engine, { input_audio: `${origin}/warm-ping.wav`, warm_only: true }, onDeployment)
+      : await replicate.predictions.create({ version: BARE_RVC_VERSION, input: { input_audio: `${origin}/warm-ping.wav`, pitch_change: 0, output_format: 'mp3' } })
+    console.log(`[${logTag}] warm-ping fired (${ping.id}${onDeployment && engine === 'indexed' ? ` on ${RVC_DEPLOYMENT.name}` : ''})`)
   } catch (err) {
     console.warn(`[${logTag}] warm-ping failed (caller unaffected):`, err instanceof Error ? err.message : String(err))
   }

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { rvcEngine, rvcVersion } from '@/lib/rvc-engine'
+import { createRvcPrediction, rvcEngine, rvcVersion, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice } from '@/lib/hd-voice'
 
@@ -92,6 +92,9 @@ export async function POST(req: NextRequest) {
       hd?: boolean
       instrumentalPath?: string
       backingPath?: string
+      // Admin-only live test switch (?hdtest=… on the Voice Swap page), e.g.
+      // 'soulx-download' = SoulX gets a missing file → retry → fallback.
+      hdTest?: string
     }
     try {
       body = await req.json()
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -235,6 +238,7 @@ export async function POST(req: NextRequest) {
           instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '',
+          origin: new URL(req.url).origin, test: typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
         })
         return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
       } catch (hdErr) {
@@ -251,10 +255,8 @@ export async function POST(req: NextRequest) {
 
     let prediction
     try {
-      prediction = await replicate.predictions.create({
-        version: rvcVersion(engine),
-        input,
-      })
+      // admin accounts: our own deployment (no shared queue) — rvc-engine.ts
+      prediction = await createRvcPrediction(replicate, engine, input, hdVoiceAllowed(user?.email))
     } catch (createErr) {
       // The job never started — refund the preview charge and roll back the
       // count. NOTE: failures that happen LATER, during the GET poll, are NOT
@@ -267,7 +269,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 502 })
     }
 
-    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status})`)
+    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${hdVoiceAllowed(user?.email) && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining, previewCharged })
   } catch (err) {
