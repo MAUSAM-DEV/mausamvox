@@ -6,6 +6,19 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧯 2026-10-23 (13) — Voice Lab: "Wife (English)" training failed → storage stalls; time limits + clear errors (`7a53d7e`) — ⚠️ founder live test pending
+
+- **Founder:** "Wife (Hindi)" (ALAC fix) trained → READY. "Wife (English)" → "Training hit a snag — Could not prepare your voice data".
+- **Proven from the Vercel logs** (`npx vercel logs`, the CLI's saved login):
+  - All 4 English dataset preps (16:06–16:09 UTC) stopped at `[prepare-dataset] downloading audio` and were killed: "Vercel Runtime Timeout Error: Task timed out after 60 seconds".
+  - The first English conversion (16:03) hung the same way; its retry at 16:05 worked (10.7 s).
+  - Hindi at 15:44: the same-size sample (21.7 MB) downloaded in 4.3 s; the whole prep took 17 s. Same region (bom1).
+  - The English WAV is fine (21.5 MB, 224.4 s; downloaded, denoised and zipped locally in ~2 s of work). The generic message = the page got no reply (only shown when the server sends no error text).
+  - No Storage incident on status.supabase.com → a transient stall between Vercel and Supabase Storage, which our code waited on forever.
+- **Fix (`7a53d7e`, everyone):** `src/lib/storage-transfer.ts` — downloads time-limited (prep 18 s, conversion 15 s) and retried once with a fresh link; uploads time-limited; dataset prep stays inside a 54 s budget (no upload retry that can't finish). Failures now say: "Our file storage didn’t respond in time — a temporary hiccup. Your recording is safe: press Try Again in a minute." Page fallback if the server is still cut off: "Preparing your voice data took too long — … press Try Again in a minute."
+- **Founder action:** press **Try Again** on "Wife (English)" (no re-upload — its stored WAV is intact).
+- Logs: Vercel `[prepare-dataset] downloaded … in … ms (attempt n/2)` / `download attempt … failed`.
+
 ## 🎙️ 2026-10-23 (12) — Voice Lab: iPhone lossless (ALAC) uploads fixed (`ea8adb9`) — ⚠️ founder live test pending
 
 - **Founder live test of fixes 1 + 2: PASSED.** Thinking Out Loud ran HD (Preview), clean, no distortion. **~8 min from upload to result** — note for the speed / warm-up cost decision before beta.
