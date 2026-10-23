@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **`30cc06a` Step 1 fallback-wait fix (admin only):** own voice-engine deployment `rvc-index-t4`; one restart for input-fetch errors, 3-min not-started, no-GPU machines and 5-min runs (restart on the public model); test switch `?hdtest=soulx-download`. Enhancer rejected by the founder.
 - **Enhancer test (no app change):** Standard + Resemble Enhance + switch-fill (no pitch lock) + balanced finishing vs Standard + balanced finishing on Sukoon; dropouts 7.4 % vs 3.7 % raw; 2 clips ("Enhancer test"). Configure labels for step 4 set by the founder.
 - **Plan proposed (no app change):** engine by song language (Hindi/Indian → Standard + balanced finishing, English → HD), finishing for every swap, fallback-wait fix, speed — awaiting OK.
 - **Hindi test (no app change):** Standard engine (RVC on the original lead) + the frozen balanced finishing vs HD on Sukoon; 2 clips ("Hindi engine test").

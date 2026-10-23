@@ -6,6 +6,25 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🛟 2026-10-23 (5) — STEP 1 shipped (`30cc06a`): fallback-wait fix, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Founder:** enhancer rejected (enhanced + plain switching = "two different voices"). The Standard path stays "Standard + balanced finishing". Do steps 1 → 5 one at a time.
+- **Change:**
+  - Admin swaps and admin warm pings run today's engine on **our own deployment `mausam-dev/rvc-index-t4`** (T4, min 0 / max 2, version 255794a3) instead of the public model's queue (`rvc-engine.ts` `createRvcPrediction`, `RVC_DEPLOYMENT`).
+  - HD flow (`hd-voice.ts`):
+    - A stage that couldn't **fetch an input** (Cog: "404 Client Error … for url", "HTTPSConnectionPool … Max retries exceeded") is started once more with fresh links.
+    - A voice-engine step **not started after 3 min**, landing on a **machine without a working GPU** (its log: "use CPU for inference"), or **still running 5 min after starting** is cancelled and started once more **on the public model**: a broken machine stays up and would get the job again (seen).
+  - Admin test switch `/voice-swap?hdtest=soulx-download`.
+- **Tests (server code vs the real services):**
+  - Normal HD: delivered in 6 min 34 s (RVC on the deployment: waited 108 s cold, ran 31 s).
+  - Download failure: SoulX 404 → restart → 404 → fallback on the deployment, **started in 21 s**, delivered at 3 min 34 s.
+  - Stuck queue (a zero-machine deployment): restarted at 182 s.
+  - **No GPU (real):** a deployment machine came up without a working GPU (CPU, 5+ min).
+    - The restart on the same deployment landed on the same machine → changed to restart on the public model.
+    - Then: caught at 6 s, delivered at 3 min 8 s.
+  - Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+- **Open risk:** a broken deployment machine lives until idle (1–2 min without jobs or pings). Admin warm pings on Configure can keep it alive; each swap then pays one restart (~1–2 min).
+
 ## ✨ 2026-10-23 (4) — enhancer test on Standard + balanced finishing (test only, no app change) — founder to compare
 
 - **Founder:** plan approved with new Configure labels — Auto / "HD Voice — studio quality, best for English songs" / "Standard — clearest words for Hindi and other Indian languages" (no other claims). Before step 1: test the enhancer on the Standard voice.
