@@ -6,6 +6,19 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔧 2026-10-23 (11) — FIX 1 + FIX 2 shipped (`5f4ef4b`, `9eaf6df`), ADMIN ONLY + RMVPE ending test (no app change) — ⚠️ founder live test pending
+
+- **Fix 1 — Auto waits for the song language (`5f4ef4b`):**
+  - On Process with Auto, one voice, language not known yet: overlay "Detecting the song’s language…", waits up to 60 s for the running check (starts one if none).
+  - Still unknown → judged from the song's **file name** (lyrics aren't known at that moment): English-looking title → HD Voice, otherwise Standard (`src/lib/title-language.ts`).
+  - Configure hint while unknown: "Auto — still detecting the song’s language; the swap waits for it (up to a minute)".
+  - Logs: browser console `[engine] waited N s for the song language: …`; Vercel `[engine] choice: …` adds "— not detected in time, judged from the title: title-english/title-other".
+- **Fix 2 — gentle loudness master (`9eaf6df`)** for finished-voice takes (HD and Standard + finishing; everyone else unchanged):
+  - No soft clip; limiter ceiling −1.5 dBFS; gain toward the original's loudness capped so the limiter takes ≤ 1 dB off the true peak (4× oversampled). Live player and saved/downloaded file both.
+  - Checked on the live pre-master renders: Thinking Out Loud gain +2.55 dB → −15.7 LUFS (**5.5 dB quieter than the original −10.2**), max peak cut 0.99 dB, 0 clipped samples, true peak −1.34 dBTP. Sukoon +5.43 dB → −15.2 LUFS (0.9 dB quieter), max cut 1.00 dB, 0 clipped, −1.18 dBTP.
+- **Test 3 — Sukoon Standard with RMVPE instead of crepe (no app change):** whole song on `rvc-index-l40s` (ran 46 s), same finishing (local run of `hd-finish`), same mix. Pitch held on 95 % (RMVPE) vs 96 % (crepe) of the original's sung moments at 4:48–4:59 (pyin); pitch breaks ≥ 50 ms: 3 vs 2. No measurable gain — founder's ears decide. Clips (voice "RMVPE ending test", 4:30–5:00, −14 LUFS): "Sukoon ending — Standard crepe" / "— Standard RMVPE".
+- Fresh-copy `npm ci` / `tsc --noEmit` / `npm run build`: all exit 0.
+
 ## 🔬 2026-10-23 (10) — debugging the steps 1–5 live test (evidence only, no app change) — AWAITING the founder's OK before fixing
 
 - **Founder:** both swaps worked (~6 min each). Thinking Out Loud "HD" distorted and too loud; Sukoon (Standard) thin and breaking at 4:48–4:59.

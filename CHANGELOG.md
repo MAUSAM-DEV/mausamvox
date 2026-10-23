@@ -2,6 +2,9 @@
 
 ## 2026-10-23
 
+- **RMVPE ending test (no app change):** Sukoon Standard with RMVPE instead of crepe holds pitch the same at 4:48–4:59 (95 % vs 96 %); 2 clips ("RMVPE ending test").
+- **`9eaf6df` Gentle loudness master (admin only):** finished-voice takes never clip — no soft clip, −1.5 dBFS ceiling, gain capped so the limiter takes ≤ 1 dB off the true peak; TOL ends −15.7 LUFS (5.5 dB under the original), Sukoon −15.2.
+- **`5f4ef4b` Auto waits for the song language (admin only):** "Detecting the song’s language…" up to 60 s; still unknown → judged from the file name (English-looking → HD Voice, else Standard); logged.
 - **Debug (no app change):** live TOL wasn't HD (swap started 16 s after the language check → Auto = Standard); the master's soft clip trims TOL voice+music peaks up to 5.6 dB at −10.2 LUFS; Sukoon's ending = thin original outro + the Standard engine losing pitch (same on T4). Clips "Master check".
 - **`4b525c4` Step 5 speed (admin only):** engine-warm (finishing + SoulX for HD, 5-min cap), 30 s admin pings, voice engine on L40S. Standard + finishing 90 s after start; HD 4.3–7 min (SoulX cold start 1–4.5 min).
 - **`cb74c1a` Step 4 engine by language (admin only):** Auto (English → HD Voice, else Standard) + Configure "Voice" control with the founder's wording; `[engine] choice` logs.
