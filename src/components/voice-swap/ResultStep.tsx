@@ -553,6 +553,8 @@ export function ResultStep({
   const playerRef = useRef<LivePlayer | null>(null)
   if (!playerRef.current && typeof window !== 'undefined') playerRef.current = new LivePlayer()
   const player = playerRef.current
+  // Finished-voice takes play through the gentle master (read when the mix graph is built on play)
+  if (player) player.gentleMaster = finishedVoice
   const [, rerender] = useState(0)
   useEffect(() => {
     const p = playerRef.current
@@ -798,7 +800,7 @@ export function ResultStep({
       t0 = performance.now()
       const target = await masterTarget()
       const targetMs = performance.now() - t0
-      const { gain, channels, ms } = await dspMaster(channelsOf(pre), pre.sampleRate, target)
+      const { gain, channels, ms } = await dspMaster(channelsOf(pre), pre.sampleRate, target, undefined, finishedVoice)
       return { gain, buf: toBuffer(channels, pre.sampleRate), ms: { render, target: targetMs, search: ms.search, limit: ms.limit } }
     })()
     masterCacheRef.current = { key, result }
@@ -806,7 +808,7 @@ export function ResultStep({
     return result
   }
   async function masterWithGain(pre: AudioBuffer, gain: number): Promise<AudioBuffer> {
-    const { channels } = await dspMaster(channelsOf(pre), pre.sampleRate, 0, gain)
+    const { channels } = await dspMaster(channelsOf(pre), pre.sampleRate, 0, gain, finishedVoice)
     return toBuffer(channels, pre.sampleRate)
   }
 

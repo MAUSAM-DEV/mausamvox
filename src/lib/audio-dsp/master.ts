@@ -98,12 +98,14 @@ function gatedLoudness(hops: Float64Array, nb: number, per: number, blk: number)
 }
 
 // Look-ahead limiter (offline). Returns new arrays = input × gain, limited.
-export function limit(channels: Float32Array[], sr: number, gain: number, out?: Float32Array[]): Float32Array[] {
-  const n = channels[0].length, ceil = 10 ** (MASTER_CEILING_DB / 20), W = Math.max(1, Math.round(MASTER_LOOKAHEAD_S * sr))
+// `gentle` (finished-voice takes, 2026-10-23): no soft clip and the GENTLE_CEILING_DB ceiling.
+export function limit(channels: Float32Array[], sr: number, gain: number, out?: Float32Array[], gentle = false): Float32Array[] {
+  const clip = gentle ? (v: number) => v : softClip
+  const n = channels[0].length, ceil = 10 ** ((gentle ? GENTLE_CEILING_DB : MASTER_CEILING_DB) / 20), W = Math.max(1, Math.round(MASTER_LOOKAHEAD_S * sr))
   // r = gain needed at each sample; m = smallest r over the next W samples;
   // s = m averaged over the last W samples (a ramp down that ends AT the peak).
   const r = new Float32Array(n)
-  for (let i = 0; i < n; i++) { let p = 0; for (const c of channels) p = Math.max(p, Math.abs(softClip(c[i] * gain))); r[i] = p > ceil ? ceil / p : 1 }
+  for (let i = 0; i < n; i++) { let p = 0; for (const c of channels) p = Math.max(p, Math.abs(clip(c[i] * gain))); r[i] = p > ceil ? ceil / p : 1 }
   const m = new Float32Array(n), dq = new Int32Array(n + 1)
   let head = 0, tail = 0
   for (let j = 0; j < n + W; j++) {
@@ -121,9 +123,61 @@ export function limit(channels: Float32Array[], sr: number, gain: number, out?: 
     const s = acc / W
     g = s < g ? s : g + (s - g) * rel
     const gg = Math.min(g, s)
-    for (let c = 0; c < channels.length; c++) res[c][i] = softClip(channels[c][i] * gain) * gg
+    for (let c = 0; c < channels.length; c++) res[c][i] = clip(channels[c][i] * gain) * gg
   }
   return res
+}
+
+// ── Gentle master (2026-10-23, finished-voice takes — HD and Standard + finishing) ──
+// The founder's live test: mastering Thinking Out Loud to its upload's −10.2 LUFS made the
+// soft clip shave voice + music peaks by up to 5.6 dB (distortion). Gentle = never clip, and
+// aim for the original's loudness only as far as the limiter takes at most
+// GENTLE_MAX_PEAK_CUT_DB off the (true) peaks; a quieter swap is fine — clean beats loud.
+// The sample-peak ceiling sits 0.5 dB under −1 dBFS so peaks BETWEEN samples stay ≈ ≤ −1 dBTP.
+export const GENTLE_CEILING_DB = -1.5
+export const GENTLE_MAX_PEAK_CUT_DB = 1
+
+// True peak (linear): the largest |sample| with 4× oversampling (windowed-sinc, 64 taps), checked
+// only where it can matter — between samples within 6 dB of the sample peak.
+export function truePeak(channels: Float32Array[], _sr: number): number {
+  let sp = 0
+  for (const c of channels) for (let i = 0; i < c.length; i++) { const a = c[i] < 0 ? -c[i] : c[i]; if (a > sp) sp = a }
+  if (sp === 0) return 0
+  const R = 4, H = 16, thr = sp / 2
+  const taps: Float64Array[] = []
+  for (let ph = 1; ph < R; ph++) {
+    const t = new Float64Array(2 * H)
+    for (let k = -H + 1; k <= H; k++) {
+      const x = k - ph / R, w = 0.5 + 0.5 * Math.cos((Math.PI * x) / (H + 1))
+      t[k + H - 1] = (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x)) * w
+    }
+    taps.push(t)
+  }
+  let tp = sp
+  for (const c of channels) {
+    const n = c.length
+    for (let i = H; i < n - H; i++) {
+      const a = Math.max(Math.abs(c[i - 1]), Math.abs(c[i]))
+      if (a < thr) continue
+      for (const t of taps) {
+        let v = 0
+        for (let k = 0; k < 2 * H; k++) v += t[k] * c[i - H + k]
+        const av = v < 0 ? -v : v
+        if (av > tp) tp = av
+      }
+    }
+  }
+  return tp
+}
+
+// The gentle master's linear gain: toward `targetLufs`, capped so the limiter removes at most
+// GENTLE_MAX_PEAK_CUT_DB from the true peak.
+export function masterGainGentle(premaster: Float32Array[], sr: number, targetLufs: number): number {
+  const start = lufs(premaster, sr)
+  if (!Number.isFinite(start)) return 1
+  const tp = truePeak(premaster, sr)
+  const capDb = tp > 0 ? GENTLE_CEILING_DB + GENTLE_MAX_PEAK_CUT_DB - 20 * Math.log10(tp) : MAX_GAIN_DB
+  return 10 ** (Math.min(MAX_GAIN_DB, targetLufs - start, capDb) / 20)
 }
 
 // Most the limiter may cut, on average over the loud parts, to reach the

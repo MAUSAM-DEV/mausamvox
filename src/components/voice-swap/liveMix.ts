@@ -17,7 +17,7 @@
 //   → [clean | Lo-fi | Radio] → ×0.62 = PRE-MASTER
 //   → master gain → limiter (−1 dBFS) → out   (g = 1/√N for N main vocals)
 
-import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S, CLIP_CEILING_DB, CLIP_KNEE } from '@/lib/audio-dsp/master'
+import { LIMITER_WORKLET, MASTER_CEILING_DB, MASTER_LOOKAHEAD_S, MASTER_RELEASE_S, CLIP_CEILING_DB, CLIP_KNEE, GENTLE_CEILING_DB } from '@/lib/audio-dsp/master'
 import { TONE_EQ_CENTERS, TONE_EQ_Q } from '@/lib/audio-dsp/tone-match'
 
 export type PolishStyle = 'none' | 'hall' | 'lofi' | 'radio'
@@ -143,7 +143,7 @@ export class MixGraph {
   // `master`: live playback adds the master gain + limiter after the
   // pre-master mix (worklet = the 'mvx-limiter' processor is loaded in ctx);
   // offline renders stop at the pre-master mix.
-  constructor(ctx: BaseAudioContext, params: MixParams, out: AudioNode = ctx.destination, master_: { worklet: boolean; gain: number } | null = null) {
+  constructor(ctx: BaseAudioContext, params: MixParams, out: AudioNode = ctx.destination, master_: { worklet: boolean; gain: number; gentle?: boolean } | null = null) {
     this.ctx = ctx
     this.live = !(ctx instanceof OfflineAudioContext)
     this.params = params
@@ -218,7 +218,10 @@ export class MixGraph {
       if (master_.worklet) {
         limiter = new AudioWorkletNode(ctx, 'mvx-limiter', {
           numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
-          processorOptions: { ceilingDb: MASTER_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S, clipCeilingDb: CLIP_CEILING_DB, clipKnee: CLIP_KNEE },
+          // gentle (finished-voice takes): no soft clip, the lower ceiling — same as limit(…, gentle)
+          processorOptions: master_.gentle
+            ? { ceilingDb: GENTLE_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S, clipCeilingDb: 0, clipKnee: 1e9 }
+            : { ceilingDb: MASTER_CEILING_DB, lookaheadS: MASTER_LOOKAHEAD_S, releaseS: MASTER_RELEASE_S, clipCeilingDb: CLIP_CEILING_DB, clipKnee: CLIP_KNEE },
         })
       } else {
         const c = ctx.createDynamicsCompressor()
@@ -380,6 +383,7 @@ export class LivePlayer {
   original: { full: AudioBuffer | null; vocals: AudioBuffer | null } = { full: null, vocals: null }
   params: MixParams = NEUTRAL_PARAMS
   masterGain = 1        // mastering gain for the swapped side (ResultStep sets it)
+  gentleMaster = false  // the finished-voice master (no soft clip, lower ceiling) — ResultStep sets it
   private worklet = false
   onChange: () => void = () => {}
 
@@ -482,7 +486,7 @@ export class LivePlayer {
     const when = ctx.currentTime + 0.03
     const token = ++this.token
     if (this.view.side === 'swapped' && this.swapped) {
-      if (!this.graph) this.graph = new MixGraph(ctx, { ...this.params, vocalsOnly: this.view.vocalsOnly }, ctx.destination, { worklet: this.worklet, gain: this.masterGain })
+      if (!this.graph) this.graph = new MixGraph(ctx, { ...this.params, vocalsOnly: this.view.vocalsOnly }, ctx.destination, { worklet: this.worklet, gain: this.masterGain, gentle: this.gentleMaster })
       this.sources = this.graph.start(this.swapped, when, offset)
     } else {
       const buf = this.view.vocalsOnly ? this.original.vocals : this.original.full

@@ -9,7 +9,7 @@ import { renderHarmony } from '@/lib/audio-dsp/harmony'
 import { removeDoubles } from '@/lib/audio-dsp/doubles'
 import { pitchStats } from '@/lib/audio-dsp/pitch-track'
 import { polishVoice, airShare } from '@/lib/audio-dsp/voice-polish'
-import { lufs, limit, masterGain } from '@/lib/audio-dsp/master'
+import { lufs, limit, masterGain, masterGainGentle } from '@/lib/audio-dsp/master'
 import { powerSpectrum, applyFilters, alignLag } from '@/lib/audio-dsp/tone-match'
 import type { DspRequest, DspResponse } from './dspClient'
 
@@ -49,9 +49,9 @@ ctx.onmessage = async (e) => {
       ctx.postMessage({ id: req.id, ok: true, nums: a ? [a.lag, a.gain] : [] })
     } else if (req.op === 'master') {
       const t0 = performance.now()
-      const gain = req.gain ?? masterGain(req.channels, req.sampleRate, req.targetLufs)
+      const gain = req.gain ?? (req.gentle ? masterGainGentle : masterGain)(req.channels, req.sampleRate, req.targetLufs)
       const t1 = performance.now()
-      const channels = limit(req.channels, req.sampleRate, gain)
+      const channels = limit(req.channels, req.sampleRate, gain, undefined, !!req.gentle)
       ctx.postMessage({ id: req.id, ok: true, value: gain, channels, ms: { search: t1 - t0, limit: performance.now() - t1 } }, channels.map((c) => c.buffer))
     } else {
       const { stem, mode } = await renderHarmony(req.mono, req.sampleRate, req.voices, req.key, req.formantSemitones)

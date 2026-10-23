@@ -15,7 +15,7 @@ type HarmonyReq = { op: 'harmony'; mono: Float32Array; sampleRate: number; voice
 type PolishReq = { op: 'polish'; mono: Float32Array; sampleRate: number; airTargetDb: number }
 type AirShareReq = { op: 'airShare'; mono: Float32Array; sampleRate: number }
 type LufsReq = { op: 'lufs'; channels: Float32Array[]; sampleRate: number }
-type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number }
+type MasterReq = { op: 'master'; channels: Float32Array[]; sampleRate: number; targetLufs: number; gain?: number; gentle?: boolean }
 type SpectrumReq = { op: 'spectrum'; channels: Float32Array[]; sampleRate: number }
 type FiltersReq = { op: 'filters'; channels: Float32Array[]; sampleRate: number; filters: Filter[] }
 type AlignReq = { op: 'align'; channels: Float32Array[]; sampleRate: number; other: Float32Array[] }
@@ -175,8 +175,9 @@ export async function dspLufs(channels: Float32Array[], sampleRate: number): Pro
 
 // Mastering (master.ts): finds the gain for `targetLufs` (or uses `gain`) and
 // returns it with the limited audio (+ how long the search and limiter took).
-export async function dspMaster(channels: Float32Array[], sampleRate: number, targetLufs: number, gain?: number): Promise<{ gain: number; channels: Float32Array[]; ms: MasterMs }> {
-  const r = await call({ op: 'master', channels, sampleRate, targetLufs, gain }, channels.map((c) => c.buffer))
+// `gentle`: the finished-voice master (master.ts masterGainGentle — never clips, ≤ 1 dB off peaks).
+export async function dspMaster(channels: Float32Array[], sampleRate: number, targetLufs: number, gain?: number, gentle = false): Promise<{ gain: number; channels: Float32Array[]; ms: MasterMs }> {
+  const r = await call({ op: 'master', channels, sampleRate, targetLufs, gain, gentle }, channels.map((c) => c.buffer))
   if (!r.ok || typeof r.value !== 'number' || !r.channels?.length) throw new Error('Mastering failed')
   return { gain: r.value, channels: r.channels, ms: r.ms ?? { search: NaN, limit: NaN } }
 }
