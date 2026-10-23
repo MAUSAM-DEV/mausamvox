@@ -51,10 +51,12 @@ export function rvcVersion(engine: RvcEngine = rvcEngine()): string {
 
 // Our own deployment of the indexed engine (2026-10-23, fallback-wait fix): admin swaps
 // and their warm pings run here instead of the public model's shared queue, which once
-// kept a swap waiting 26 min to start. Same version as INDEXED_RVC_VERSION, T4, scale
-// to zero, at most 2 machines (a duet converts two singers at once). Other engines and
-// everyone else: the public model as before.
-export const RVC_DEPLOYMENT = { owner: 'mausam-dev', name: 'rvc-index-t4' }
+// kept a swap waiting 26 min to start. Same version as INDEXED_RVC_VERSION, scale to zero,
+// at most 2 machines (a duet converts two singers at once). L40S since step 5 (speed):
+// a full song 31 s instead of 79 s on T4, cold start ~1.7 min instead of 1.5–4.3 min
+// (measured 2026-10-23; rvc-index-t4 stays as a spare). Other engines and everyone else:
+// the public model as before.
+export const RVC_DEPLOYMENT = { owner: 'mausam-dev', name: 'rvc-index-l40s' }
 export function createRvcPrediction(replicate: Replicate, engine: RvcEngine, input: Record<string, unknown>, onDeployment: boolean) {
   if (onDeployment && engine === 'indexed') return replicate.deployments.predictions.create(RVC_DEPLOYMENT.owner, RVC_DEPLOYMENT.name, { input })
   return replicate.predictions.create({ version: rvcVersion(engine), input })

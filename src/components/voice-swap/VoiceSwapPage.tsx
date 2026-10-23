@@ -50,6 +50,12 @@ const WARMING_NOTE = 'Warming up the voice engine — the first swap can take up
 // Engine warm pings on Configure/Result: every minute, stopping after 30 min with no activity.
 const WARM_PING_EVERY_MS = 60_000
 const WARM_IDLE_STOP_MS = 30 * 60_000
+// Speed (engine plan step 5, admin only): SoulX's L40S is warmed for at most this long per song
+// while HD Voice is the chosen engine (≈ $0.06 per minute it stays up).
+const SOULX_WARM_MAX_MS = 5 * 60_000
+// …and admin pings come every 30 s: our deployments shut an idle machine down in under a minute
+// (measured 2026-10-23), so a 60 s gap let them go cold between pings.
+const ADMIN_WARM_PING_EVERY_MS = 30_000
 // Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
 const fmtSt = (n: number) => `${n > 0 ? '+' : ''}${n} st`
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -1241,20 +1247,38 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // went cold in the 96 s between the upload's ping and Configure → the
   // conversion waited 58 s; 60 s pings gave 0 s waits everywhere else).
   const songIn = !!stemResult
+  // Admin (engine plan step 5): with a song in and before the Result screen, also wake the
+  // finishing machine and — for HD Voice, at most SOULX_WARM_MAX_MS per song — SoulX.
+  const effectiveVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
+  const engineWarmRef = useRef({ admin: false, engine: effectiveVoiceEngine as string, song: '', soulxSince: 0, soulxSong: '' })
+  engineWarmRef.current = { ...engineWarmRef.current, admin: isAdmin, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
   useEffect(() => {
     if (step !== 2 && step !== 3 && !(step === 1 && songIn)) return
     lastActivityRef.current = Date.now() // arriving on the page counts as activity
     const idle = () => Date.now() - lastActivityRef.current > WARM_IDLE_STOP_MS
-    const ping = () => { fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {}) }
+    let tick = 0
+    const ping = (now = false) => {
+      const w = engineWarmRef.current
+      // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); admin: every ADMIN_WARM_PING_EVERY_MS
+      if (!w.admin && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
+      fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {})
+      if (!w.admin || stepRef.current === 3 || !w.song) return
+      let soulx = false
+      if (w.engine === 'HD Voice') {
+        if (w.soulxSong !== w.song) { w.soulxSong = w.song; w.soulxSince = Date.now() }
+        soulx = Date.now() - w.soulxSince < SOULX_WARM_MAX_MS
+      }
+      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx }) }).catch(() => {})
+    }
     const onActivity = () => {
       const wasIdle = idle()
       lastActivityRef.current = Date.now()
-      if (wasIdle) ping()
+      if (wasIdle) ping(true)
     }
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
     events.forEach((e) => window.addEventListener(e, onActivity, { capture: true, passive: true }))
-    ping()
-    const id = setInterval(() => { if (!idle()) ping() }, WARM_PING_EVERY_MS)
+    ping(true)
+    const id = setInterval(() => { if (!idle()) ping() }, ADMIN_WARM_PING_EVERY_MS)
     return () => {
       clearInterval(id)
       events.forEach((e) => window.removeEventListener(e, onActivity, { capture: true }))

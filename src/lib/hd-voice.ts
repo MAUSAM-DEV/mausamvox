@@ -217,6 +217,8 @@ export async function startStandardVoice(opts: {
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
   const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), true)
   t.id = pred.id
+  // wake the finishing machine now, so it's up when the voice is done (only the create is awaited)
+  if (opts.instrumentalPath) await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
   console.log(`[hd-voice] start STANDARD + finishing: voice ${opts.voiceId} key ${t.p} → today's engine ${pred.id} on ${RVC_DEPLOYMENT.name}${opts.instrumentalPath ? '' : ' (no studio instrumental: no finishing)'} (${Date.now() - t0} ms)`)
   return sign(t)
 }
