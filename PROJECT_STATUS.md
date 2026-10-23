@@ -6,6 +6,34 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎛️ 2026-10-23 — HD voice fixed: preferred references + server finishing = the frozen "balanced" recipe (`7249267`), ADMIN ONLY — ⚠️ founder live test pending
+
+- **Reference (cause 1):**
+  - A voice can have **preferred references**: `voice-samples/<owner>/hd-ref/<voiceId>/<language>.wav`. No DB change.
+  - "Mausam (Singing)" has `hi.wav` = lossless 0:20 (bit-identical to the tests) and `en.wav` = English 3:30 (−84 dB, 16-bit).
+  - The SoulX model (v`53ad6625`, models `0fb357d`) picks the reference in the **song's language**: Whisper on the lead's loudest 30 s, Urdu = Hindi. Checked: Sukoon → hi, Thinking Out Loud → en.
+  - Other voices: picked from their Voice Lab recording as before.
+- **Finishing (cause 2), on the server:** new private CPU model **`mausam-dev/hd-finish`** (deployment `hd-finish-cpu`, v`e19e0de7`, models `0fb357d` + balance update).
+  1. Contour (`contour.py`).
+  2. The app's own polish: `voice-polish.ts` compiled with tsc, run by Node — **bit-identical** to the recipe's polish.
+  3. De-ess / evening-out (`smooth.py`).
+  4. Per-section balance:
+     - Measured on the voice **as the app's HD mix renders it**: `mixvoice.py` reproduces the browser voice chain (×1.3, Studio warmth, seeded Studio room with Web Audio normalisation, 250 Hz return cut) to −65 dB, ≤ 0.013 dB per section.
+     - 3 measure/adjust passes.
+     - Whole-song sections ~18 s; a section with < 30 % singing takes the nearest sung section's gain (intros and breaks gave nonsense gains, −17.8 to +2.7 dB).
+  - Runs in 30 s on the cloud (the recipe's ramp, made O(n): same result to 5e-12 dB).
+- **Result screen for HD takes (`hdVoice`):** no browser polish (done on the server), glue off, shared room 0, no tone match; Studio knobs as in the approved clips; mastering as for every swap.
+- **Flow:** SoulX → RVC → (finishing machine woken at RVC start) → finishing → delivered. Fallback to today's engine if finishing fails or takes > 8 min.
+- **Proof (Sukoon, the founder's app stems, real HD path):**
+  - Cloud SoulX (song hi → reference hi, check 0.61 % silent) + RVC, finished, rendered through the HD Result mix.
+  - Balance vs the original **within 0.20 dB in every approved section**; vs the approved "balanced" clip within 0.42 dB (the approved clip itself is 0.43 dB off in its 3 s section).
+  - Cloud finishing = local (−100 dB). First version (fixed constant) failed: +0.97 dB in the 3 s section, the reverb tail — hence the mix reproduction.
+  - Total 7 min 22 s (SoulX waited 95 s, ran 109 s; RVC waited 100 s, ran 33 s; finishing waited 27 s, ran 58 s).
+- **Seen while testing:**
+  - One SoulX job couldn't download the lead from Supabase right after a cold start (transient; the fallback delivered).
+  - That fallback (today's engine) **waited 26 min** for the RVC pool.
+- **Fresh copy:** `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🔬 2026-10-22 (14) — debugging the step 3 live test ("HD worst so far, words wrong") + thin ending (evidence only, no app change)
 
 - **Live HD job:** SoulX `44wkjyf6…`, RVC `55ytqt8f…`.
@@ -16,7 +44,7 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
   - Silent sung moments: 3.2–3.4 % (app ref, 3 runs) vs 0.6 % (lossless, 5 runs).
   - → The app reference measurably makes SoulX less clear.
   - After RVC: A 0.39, B 0.39, live 0.37, tests 0.30. **The RVC step alone varies 0.30–0.39 between runs with identical input** (full song or excerpt, 24 or 44.1 kHz: 0.39 / 0.34 / 0.37 / 0.39) → after RVC the reference effect is inside RVC's run-to-run spread.
-- **Another difference found, not yet measured:** the live Result mix has glue, shared room, tone match and the automatic song-matched reverb (up to 25 % wet). The approved test clips (`q3hd`) had none of these (glue/room/tone match off by the founder's earlier choice); polish was the Studio default.
+- **Another difference found:** the live Result mix has glue, shared room and tone match; the approved test clips (`q3hd`) had none of these (founder's earlier choice); polish was the Studio default in both. ⚠️ **Correction 2026-10-23:** I also said the live mix auto-applies song-matched reverb — wrong. The Result screen starts on the Studio preset (reverb 19 %, as in the approved clips); "Match song" is a button only.
 - **Clips** (voice "HD reference check", 90 s, −17.0 LUFS, the test render chain): "Sukoon — app HD" (run A) / "Sukoon — app HD lossless ref" (run B).
 - **Thin ending (step 2 swap, 4:47–5:00):**
   - The lead split has the singing (−20 to −34 dBFS).

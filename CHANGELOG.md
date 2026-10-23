@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-23
+
+- **`7249267` HD voice = the frozen "balanced" recipe (admin only):** preferred references per voice ("Mausam (Singing)": lossless hi 0:20 / en 3:30, chosen by the song's language); server finishing on new private CPU model `mausam-dev/hd-finish` (contour → the app's polish, bit-identical → de-ess/evening-out → per-section balance measured on the reproduced HD mix); Result screen for HD takes: no browser polish, glue off, room 0, no tone match. Proof on Sukoon: within 0.20 dB of the original's balance per section, 0.42 dB of the approved clip. Correction: there is no automatic reverb in the live mix (said wrongly on 2026-10-22).
+
 One dated line per completed step/session. Newest first. Each entry ends with the commit hash.
 
 ## 2026-10-22
