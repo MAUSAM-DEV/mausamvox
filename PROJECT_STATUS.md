@@ -6,6 +6,17 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧭 2026-10-23 (8) — STEP 4 shipped (`cb74c1a`): engine by song language + Configure "Voice" control, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Auto:** English song → HD Voice; any other or unknown language → Standard (+ balanced finishing).
+- **Configure "Voice" control** (single-singer swaps): Auto · HD Voice · Standard. The hint shows the founder's wording:
+  - "HD Voice — studio quality, best for English songs"
+  - "Standard — clearest words for Hindi and other Indian languages"
+  - Under Auto: "Auto — this song is in Hindi, so: Standard — …".
+- The server logs `[engine] choice: Auto → Standard (song language hi, full swap)`. The step-3 `?engine=` switch is retired.
+- **Checked:** the control rendered on a local test page (git-ignored) with the right wording for hi / en.
+- Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🎚️ 2026-10-23 (7) — STEP 3 shipped (`9ff769e`): Standard + balanced finishing, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Change (`hd-voice.ts` stage `std`):**
