@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **`4b525c4` Step 5 speed (admin only):** engine-warm (finishing + SoulX for HD, 5-min cap), 30 s admin pings, voice engine on L40S. Standard + finishing 90 s after start; HD 4.3–7 min (SoulX cold start 1–4.5 min).
 - **`cb74c1a` Step 4 engine by language (admin only):** Auto (English → HD Voice, else Standard) + Configure "Voice" control with the founder's wording; `[engine] choice` logs.
 - **`9ff769e` Step 3 Standard + balanced finishing (admin only):** today's engine → finishing → finished-voice mix; unfinished fallback; switch `?engine=standard`. Sukoon delivered in 4 min 30 s.
 - **Step 2 song language (admin only):** `/api/song-language` + the finishing machine's Whisper language task, right after the lead split; stored as `songLanguage`. Sukoon → hi, Thinking Out Loud → en.

@@ -6,6 +6,22 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ⚡ 2026-10-23 (9) — STEP 5 shipped (`4b525c4`): speed, ADMIN ONLY — ⚠️ founder live test pending
+
+- **Change:**
+  - `/api/engine-warm` (new, admin): wakes the finishing machine, plus SoulX for HD Voice (max 5 min per song). Each wake-up is a `warm` job that does no work: soulx-svc v`2aa51d6d` (models `41339b5`), `soulx-l40s` release 4.
+  - Admin pings every **30 s** (idle shutdown < 1 min measured); users keep 60 s.
+  - Admin voice engine on **`rvc-index-l40s`** (L40S): a full song 31 s vs 79 s on T4; cold start ~1.7 min vs 1.5–4.3 min. `rvc-index-t4` stays as a spare.
+  - The Standard flow wakes the finishing machine at start.
+- **Measured** (page-style pings: every 30 s from 3 min before start until delivery):
+  - **Standard + finishing: 90 s after pressing start** (was ~4.5 min cold): voice 0 s wait + 39 s; finishing 0 s wait + 38 s.
+  - **HD: 4.3–7 min.** Bounded by SoulX's cold start, which varied **1–4.5 min** on Replicate (one test: the pre-warm began 4.5 min before the machine came up).
+  - When SoulX is up: SoulX ~111 s + RVC 24 s + finishing ~38 s ≈ 3–3.5 min.
+  - One finishing run took 146 s (others 35–40 s) — a slow CPU machine.
+- **Not done:** SoulX batching (would change the sound; needs an ear check).
+- **Cost:** keeping SoulX warm ≈ $0.06/min (capped at 5 min per song); voice engine on L40S ≈ $0.03 per song + ≈ $0.06/min warm (Likely, unverified).
+- Fresh copy: `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🧭 2026-10-23 (8) — STEP 4 shipped (`cb74c1a`): engine by song language + Configure "Voice" control, ADMIN ONLY — ⚠️ founder live test pending
 
 - **Auto:** English song → HD Voice; any other or unknown language → Standard (+ balanced finishing).
