@@ -177,7 +177,8 @@ export function ConfigStep({
         {/* ── Duet mode picker — only when both male+female URLs are present ── */}
         {hasDuet && setDuetMode && (
           <>
-            <div className="vs-section-lbl">Duet Mode</div>
+            <div className="vs-section-lbl">Duet (beta)</div>
+            <div className="vs-duet-beta-note">Works best when singers take turns; overlapping parts may sound less clean.</div>
             <div className="vs-duet-modes">
               {DUET_MODES.map((m) => (
                 <button
@@ -699,6 +700,7 @@ export function ConfigStep({
         }
 
         /* ── Duet mode picker ── */
+        .vs-duet-beta-note { font-size: 12px; color: #8E8EB4; margin: -4px 0 10px; }
         .vs-duet-modes {
           display: grid;
           grid-template-columns: repeat(3, 1fr);

@@ -745,7 +745,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                     checked={isDuet}
                     onChange={(e) => onSetIsDuet(e.target.checked)}
                   />
-                  <span className="vs-duet-toggle-text">This is a duet (alternating male/female leads)</span>
+                  <span className="vs-duet-toggle-text">This is a duet (beta) — alternating male/female leads</span>
                   {!isAdmin && plan === 'free' && (
                     <span className="vs-duet-toggle-gate">Requires Premium</span>
                   )}
