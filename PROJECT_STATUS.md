@@ -6,6 +6,16 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🇮🇳 2026-10-23 (2) — Hindi test: Standard engine + the balanced finishing (test only, no app change) — founder to compare
+
+- **Founder:** English HD pronunciation is good; Hindi is weak (SoulX wasn't trained on Hindi).
+- **Test:**
+  - Today's Standard engine: "Mausam (Singing)" RVC, live settings (indexed `255794a3`, crepe hop 128, protect 0.2, index 0.3, pitch 0), directly on the app's Sukoon lead (`kmv-Hn66…`).
+  - Then the same frozen finishing (`hd-finish` code: contour, the app's polish, de-ess / evening-out, per-section balance) and the HD Result mix (glue off, room 0, no tone match).
+  - Balance vs the original within 0.40 dB per approved section.
+- **Clips** (voice "Hindi engine test", 90 s, −17.0 LUFS, same window): "Sukoon — HD" (the proof render) / "Sukoon — Standard + balanced finishing".
+- **Cost:** 1 RVC run (≈ $0.02).
+
 ## 🎛️ 2026-10-23 — HD voice fixed: preferred references + server finishing = the frozen "balanced" recipe (`7249267`), ADMIN ONLY — ⚠️ founder live test pending
 
 - **Reference (cause 1):**
