@@ -6,6 +6,23 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 👥 2026-10-23 (14) — duet debugging: "Aao Naa Kyun Ho Gaya Na", 2 voices (test only, no app change) — founder to compare
+
+- **Baseline (founder):** Both · 2 Voices, male "Mausam (Singing)", female "Wife (Hindi)", today's engine; both sound like them, average quality (overlaps, cracks, mumbling). Swap `a1f63767…`, jobs `78p0…` (male) / `rdsr…` (female), both crepe on MVSEP male/female MP3 stems.
+- **Split:** male + female stems = the original vocals (leftover −58 dB). Words survive the split (Whisper error 0.04 in solo windows). Overlaps are real two-singer moments (only 0.8 s pitch-locked = one voice in both stems), mostly an octave apart. Some "same note, equal level" moments (0:58–0:59, 5:40s) look like one voice split half/half — likely, not proven.
+- **Conversion = where the problems are:**
+  - Female voice sings the MALE's note instead of hers on 2.4 s (0:12, 0:33, 0:54, 0:57, 3:17, 4:39–4:46, 5:39): crepe grabs his fundamental left in her stem during octave overlaps. Same with a crepe re-run (identical); RMVPE: 2.8 s (moves the problem, no fix).
+  - Female breaks 6.8 % / cracks 8.1 % when both sing vs 0.4 % / 5.6 % solo; male fine (breaks 1 %, cracks 3–4 %).
+  - Mumbling: words blurred by the conversion (Whisper error 0.70 male / 0.78 female; 0.82 when both sing vs 0.64 solo).
+- **Mix:** not a cause — the saved file reproduced to −34.7 dB; the old master barely worked (soft clip 0.1 %, max cut 0.5 dB).
+- **Gender Lock in 2-voice mode:** no effect (Mode 2/3 converts male stem → voice 1, female → voice 2; never reads it), but shows "✓ Converts only the male singer's isolated stem" — misleading. **Plan:** hide it in ConfigStep when `hasDuet && duetMode !== 'one'` (one line).
+- **New pipeline (test):**
+  1. Stem clean-up (`seedvc-local/work/duet/stemclean.py`): during two-note overlaps his partials that don't coincide with hers move from her stem to his; her ≥15 dB-quieter copies of his note move to his. Sum unchanged (−144 dB). → female grabs 2.4 → 1.2 s, female solo cracks 5.6 → 4.4 %, male unchanged. (v1 also moved her unpitched leftovers → his cracks 4.3 → 8.4 %; dropped.)
+  2. Standard engine (crepe) per voice, the frozen balanced finishing per voice against its own part vs the instrumental, finished-voice mix, gentle master (−16.4 LUFS, max peak cut 0.97 dB, −1.39 dBTP).
+- **⚠️ Bug found in the live finishing (`hd-finish/finish.py` balance):** a lead with long digital silence gives negative rounding in the 100 ms level → NaN → "balance: no section with the original singer singing" (the male stem: 0.6–1.6 M NaN values). Fix = `np.maximum(…, 0)` before the square root; tested locally only (`duet/fixed/finish.py`), live model NOT changed — needs an OK + push of hd-finish.
+- **Clips** (voice "Duet test", 1:48–3:18 = most overlap, −16.5 LUFS): "duet — today's app" / "duet — new pipeline".
+- **Cost note (speed decision):** after this swap the admin warm loop kept pinging the voice engine + finishing every 30 s for ~25 min (16:29–16:52) — the Result screen / idle page keeps warming.
+
 ## 🧯 2026-10-23 (13) — Voice Lab: "Wife (English)" training failed → storage stalls; time limits + clear errors (`7a53d7e`) — ⚠️ founder live test pending
 
 - **Founder:** "Wife (Hindi)" (ALAC fix) trained → READY. "Wife (English)" → "Training hit a snag — Could not prepare your voice data".

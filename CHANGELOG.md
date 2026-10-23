@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **Duet test (no app change):** split is clean (stems sum to the original, words kept); problems come from the conversion (female voice grabs his note in octave overlaps, 2.4 s; words blurred) — not the mix. Stem clean-up halves the grabs; new pipeline per voice + gentle master; Gender Lock does nothing in 2-voice mode (plan: hide). Found a NaN bug in the live finishing's balance for leads with digital silence (fix tested locally, not pushed). 2 clips ("Duet test").
 - **`7a53d7e` Voice Lab storage stalls:** "Wife (English)" prep hung 4× on the sample download until Vercel's 60 s kill (Hindi's took 4.3 s) — downloads/uploads now time-limited + retried, prep inside a 54 s budget, errors say "temporary hiccup — press Try Again".
 - **`ea8adb9` Voice Lab iPhone lossless uploads:** ALAC `.m4a` (and FLAC/OGG/AIFF/… or anything the browser can't decode) converted on the server to a lossless mono WAV; was "0:00 long". Live test of fixes 1+2 passed (~8 min upload → result, for the speed decision).
 - **RMVPE ending test (no app change):** Sukoon Standard with RMVPE instead of crepe holds pitch the same at 4:48–4:59 (95 % vs 96 %); 2 clips ("RMVPE ending test").
