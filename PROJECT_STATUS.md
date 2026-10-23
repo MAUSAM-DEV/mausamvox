@@ -6,6 +6,21 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 👥 2026-10-23 (15) — Gender Lock hidden, finishing NaN fix live, warm-up cap, admin duet pipeline + "Wife (All)" test — ⚠️ founder live test pending
+
+- **Founder:** the new duet pipeline beat today's; still some cracks, and her voice isn't exactly like her.
+- **(a) `67968e6`** Gender Lock hidden in both 2-voice modes (everyone).
+- **(b) finishing fix live:** models `f7ad63c` (`np.maximum(…, 0)` before the balance's sqrt). Cloud check on the duet male stem that failed: succeeded. Deployment `hd-finish-cpu` release 4 (`8b56ddeb`), then release 5 (`1df1237c`, + duetclean).
+- **(c) `51c50fe`** warm-up pings (everyone): only on Upload-with-song and Configure; stop on delivery (Result), hidden tab, leaving the page, and at 10 min (new window per song / new take). Browser log `[warm] stopped: 10-minute cap`.
+- **Duet pipeline `09743d1` (admin only)** + models `aadb06f` (hd-finish task `duetclean`, 86 s work / 133 s cold; cloud = local −47.9 dB):
+  1. `/api/duet-clean` cleans her stem of his leftovers (≤ 5 min; else her original stem). Male conversion starts at once.
+  2. Each voice: engine by song language (Auto waits ≤ 60 s like single voice; English → HD Voice — untested on duets) + its own balanced finishing (lead = its stem, instrumental, no backing).
+  3. Result: finished-voice mix + gentle master when both voices are finished.
+  Logs: `[duet] clean-up …`, `[engine] choice: Duet …`, `[hd-voice] …`.
+- **"Wife (All)"** (voice `c57290ad…`, test): her two app-prepared datasets merged (23 + 23 clips), trained with Wife (Hindi)'s exact job settings (48k, v2, rmvpe_gpu, 50 epochs, batch 7) — 305 s, ≈ $0.30. Her other voices untouched.
+- **Clips** (voice "Wife voice test", 1:48–3:18, −17 LUFS, same new pipeline + same male voice): "duet — Wife (Hindi)" / "duet — Wife (All)".
+- Note: `hd-finish-cpu` max 1 instance → the clean-up and the two finishings queue on one machine.
+
 ## 👥 2026-10-23 (14) — duet debugging: "Aao Naa Kyun Ho Gaya Na", 2 voices (test only, no app change) — founder to compare
 
 - **Baseline (founder):** Both · 2 Voices, male "Mausam (Singing)", female "Wife (Hindi)", today's engine; both sound like them, average quality (overlaps, cracks, mumbling). Swap `a1f63767…`, jobs `78p0…` (male) / `rdsr…` (female), both crepe on MVSEP male/female MP3 stems.

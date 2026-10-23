@@ -2,6 +2,10 @@
 
 ## 2026-10-23
 
+- **`09743d1` Admin duet pipeline:** cleaned female stem (hd-finish `duetclean`, models `aadb06f`), engine by language + finishing per voice, finished-voice mix. "Wife (All)" trained (test); 2 clips ("Wife voice test").
+- **`51c50fe` Warm-up pings:** stop on delivery / hidden tab / leaving, 10-min cap.
+- **Finishing NaN fix live:** models `f7ad63c` → `hd-finish-cpu` release 4/5.
+- **`67968e6` Gender Lock** hidden in 2-voice modes.
 - **Duet test (no app change):** split is clean (stems sum to the original, words kept); problems come from the conversion (female voice grabs his note in octave overlaps, 2.4 s; words blurred) — not the mix. Stem clean-up halves the grabs; new pipeline per voice + gentle master; Gender Lock does nothing in 2-voice mode (plan: hide). Found a NaN bug in the live finishing's balance for leads with digital silence (fix tested locally, not pushed). 2 clips ("Duet test").
 - **`7a53d7e` Voice Lab storage stalls:** "Wife (English)" prep hung 4× on the sample download until Vercel's 60 s kill (Hindi's took 4.3 s) — downloads/uploads now time-limited + retried, prep inside a 54 s budget, errors say "temporary hiccup — press Try Again".
 - **`ea8adb9` Voice Lab iPhone lossless uploads:** ALAC `.m4a` (and FLAC/OGG/AIFF/… or anything the browser can't decode) converted on the server to a lossless mono WAV; was "0:00 long". Live test of fixes 1+2 passed (~8 min upload → result, for the speed decision).
