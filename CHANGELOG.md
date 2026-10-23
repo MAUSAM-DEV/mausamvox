@@ -2,6 +2,7 @@
 
 ## 2026-10-23
 
+- **Plan proposed (no app change):** engine by song language (Hindi/Indian → Standard + balanced finishing, English → HD), finishing for every swap, fallback-wait fix, speed — awaiting OK.
 - **Hindi test (no app change):** Standard engine (RVC on the original lead) + the frozen balanced finishing vs HD on Sukoon; 2 clips ("Hindi engine test").
 - **`7249267` HD voice = the frozen "balanced" recipe (admin only):** preferred references per voice ("Mausam (Singing)": lossless hi 0:20 / en 3:30, chosen by the song's language); server finishing on new private CPU model `mausam-dev/hd-finish` (contour → the app's polish, bit-identical → de-ess/evening-out → per-section balance measured on the reproduced HD mix); Result screen for HD takes: no browser polish, glue off, room 0, no tone match. Proof on Sukoon: within 0.20 dB of the original's balance per section, 0.42 dB of the approved clip. Correction: there is no automatic reverb in the live mix (said wrongly on 2026-10-22).
 

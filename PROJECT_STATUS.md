@@ -6,6 +6,17 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🗺️ 2026-10-23 (3) — PLAN (awaiting OK): engine by language, balanced finishing for every swap, fallback-wait fix, speed
+
+- **Founder:** for Hindi, "Standard + balanced finishing" is better. English → HD.
+- **Plan** (admin-only first; details in chat):
+  1. Fallback-wait fix: our own RVC deployment, retried downloads, start timeouts.
+  2. Song-language detection when the lead split lands (Whisper-small on the finishing machine).
+  3. Balanced finishing for every single-voice swap (Standard too).
+  4. Auto engine by language: Hindi / Indian / untested → Standard; English → HD. Configure choice "Clearest words" / "Most like you".
+  5. Speed.
+- **Fact:** SoulX was trained on Mandarin, English and Cantonese (its README) — Hindi and other Indian languages are untested territory for it.
+
 ## 🇮🇳 2026-10-23 (2) — Hindi test: Standard engine + the balanced finishing (test only, no app change) — founder to compare
 
 - **Founder:** English HD pronunciation is good; Hindi is weak (SoulX wasn't trained on Hindi).
