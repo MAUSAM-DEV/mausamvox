@@ -6,6 +6,22 @@ _Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ✨ 2026-10-23 (4) — enhancer test on Standard + balanced finishing (test only, no app change) — founder to compare
+
+- **Founder:** plan approved with new Configure labels — Auto / "HD Voice — studio quality, best for English songs" / "Standard — clearest words for Hindi and other Indian languages" (no other claims). Before step 1: test the enhancer on the Standard voice.
+- **Chain:**
+  1. Standard RVC voice (live settings, app Sukoon lead).
+  2. Resemble Enhance (`lossless/enhance.mjs`, version 93266a7e, denoise off, Midpoint, 64 steps, temperature 0.5; 189 s).
+  3. **Switch-fill only** (step 1 of `q4/vfinal.py`, the "fixed HD no gaps" gap fix; `dbg/switchfill.py`), NO pitch lock.
+  4. The frozen balanced finishing, then the HD mix.
+- **Measured:**
+  - The enhancer erased singing: dropouts 18.9 % (raw 3.7 %); the fill used the raw voice on 16 % of singing.
+  - After the fill: dropouts **7.4 %** (37 gaps ≥ 150 ms vs 16 raw); loud singing lost 0.1 % (= raw).
+  - Pitch raw vs filled: median 4.8 cents; 95 % within 80 cents.
+  - Balance vs the original within 0.42 dB per section.
+- **Clips** (voice "Enhancer test", 90 s, −17.0 LUFS): "Standard + balanced finishing" / "Standard + enhance + balanced finishing".
+- **Cost:** 1 enhancer run (Likely, unverified: < $0.10).
+
 ## 🗺️ 2026-10-23 (3) — PLAN (awaiting OK): engine by language, balanced finishing for every swap, fallback-wait fix, speed
 
 - **Founder:** for Hindi, "Standard + balanced finishing" is better. English → HD.
