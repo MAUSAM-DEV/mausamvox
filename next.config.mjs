@@ -27,6 +27,8 @@ const nextConfig = {
     // route degrades or errors loudly if an asset is still missing at runtime.
     outputFileTracingIncludes: {
       '/api/prepare-dataset': ['./node_modules/ffmpeg-static/ffmpeg*'],
+      // Voice Lab: recordings the browser can't read (ALAC, FLAC, …) → WAV.
+      '/api/voice-lab/convert-sample': ['./node_modules/ffmpeg-static/ffmpeg*'],
       '/api/choir': ['./node_modules/ffmpeg-static/ffmpeg*'],
       // Loudness normalization (src/lib/loudness.ts) runs ffmpeg here too.
       '/api/song-studio': ['./node_modules/ffmpeg-static/ffmpeg*'],

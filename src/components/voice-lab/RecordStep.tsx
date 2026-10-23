@@ -34,6 +34,8 @@ interface Captured {
   blob: Blob
   mimeType: string
   durationSec: number
+  // Already stored by the server (an upload converted to WAV by /api/voice-lab/convert-sample)
+  storedPath?: string
 }
 
 const MODES: { id: Mode; label: string; desc: string }[] = [
@@ -71,28 +73,32 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
     setSaveError('')
 
     try {
-      // Step 1: get a presigned upload URL (avoids Vercel's 4.5 MB body limit)
-      const presignRes = await fetch('/api/voice-lab/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentType: captured.mimeType }),
-      })
-      const presign = await presignRes.json()
-      if (!presignRes.ok) throw new Error(presign.error ?? 'Could not get upload URL')
+      let stored = captured.storedPath ? { path: captured.storedPath, mime: captured.mimeType } : null
+      if (!stored) {
+        // Step 1: get a presigned upload URL (avoids Vercel's 4.5 MB body limit)
+        const presignRes = await fetch('/api/voice-lab/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contentType: captured.mimeType }),
+        })
+        const presign = await presignRes.json()
+        if (!presignRes.ok) throw new Error(presign.error ?? 'Could not get upload URL')
 
-      // Step 2: PUT the audio blob directly to Supabase Storage
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': presign.mime },
-        body: captured.blob,
-      })
-      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+        // Step 2: PUT the audio blob directly to Supabase Storage
+        const putRes = await fetch(presign.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': presign.mime },
+          body: captured.blob,
+        })
+        if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+        stored = { path: presign.path, mime: presign.mime }
+      }
 
       // Step 3: create the voice_clones row (small JSON body — no Vercel limit concern)
       const createRes = await fetch('/api/voice-lab/create-clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), cloneType, path: presign.path, mime: presign.mime }),
+        body: JSON.stringify({ name: name.trim(), cloneType, path: stored.path, mime: stored.mime }),
       })
       const createData = await createRes.json()
       if (!createRes.ok) throw new Error(createData.error ?? 'Could not save voice')
@@ -150,7 +156,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
 
           {mode === 'quick' && <QuickRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
           {mode === 'pro' && <ProRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
-          {mode === 'upload' && <UploadRecordingPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
+          {mode === 'upload' && <UploadRecordingPanel onCaptured={(blob, mimeType, durationSec, storedPath) => setCaptured({ blob, mimeType, durationSec, storedPath })} onReset={handleReset} />}
         </div>
 
         {captured && captured.durationSec >= MIN_DURATION_SEC && (

@@ -24,11 +24,19 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-    const { contentType } = await req.json()
+    const { contentType, incoming, fileExt } = await req.json()
     const rawMime = (contentType || '').split(';')[0].trim()
-    const mime = MIME_TO_EXT[rawMime] ? rawMime : 'audio/webm'
-    const ext = MIME_TO_EXT[mime] ?? 'webm'
-    const path = `${user.id}/${Date.now()}-sample.${ext}`
+    let mime = MIME_TO_EXT[rawMime] ? rawMime : 'audio/webm'
+    let path = `${user.id}/${Date.now()}-sample.${MIME_TO_EXT[mime] ?? 'webm'}`
+    // incoming = a recording the browser can't read (e.g. iPhone Voice Memos lossless / ALAC):
+    // stored as-is under incoming/ for /api/voice-lab/convert-sample, which turns it into a WAV
+    // and deletes it. The bucket only takes a fixed list of types, so anything else (FLAC,
+    // AIFF, CAF, …) is labelled audio/mp4 for this short stay — ffmpeg reads the bytes, not the label.
+    if (incoming) {
+      if (!MIME_TO_EXT[rawMime]) mime = 'audio/mp4'
+      const ext = /^[a-z0-9]{1,5}$/.test(String(fileExt ?? '')) ? String(fileExt) : 'bin'
+      path = `${user.id}/incoming/${Date.now()}-original.${ext}`
+    }
 
     const { data, error } = await supabaseAdmin.storage
       .from('voice-samples')

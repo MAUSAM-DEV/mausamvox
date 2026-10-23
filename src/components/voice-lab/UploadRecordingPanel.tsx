@@ -6,11 +6,47 @@ import { formatTime, MIN_DURATION_SEC } from './audioUtils'
 type Phase = 'idle' | 'validating' | 'ready' | 'error'
 
 interface UploadRecordingPanelProps {
-  onCaptured: (blob: Blob, mimeType: string, durationSec: number) => void
+  // storedPath: the server already stored it (converted to WAV) — nothing left to upload
+  onCaptured: (blob: Blob, mimeType: string, durationSec: number, storedPath?: string) => void
   onReset: () => void
 }
 
-const ACCEPTED_EXTS = ['wav', 'mp3', 'm4a']
+const ACCEPTED_EXTS = ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'webm', 'aif', 'aiff', 'caf']
+// Kept exactly as uploaded only when every browser can play it back: WAV, MP3 and AAC (.m4a).
+// Everything else — and anything this browser can't decode, e.g. iPhone Voice Memos lossless
+// (Apple Lossless / ALAC, which Chrome and Firefox can't read) — is converted to WAV on the server.
+const DIRECT_MIME_BY_EXT: Record<string, string> = { wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4' }
+
+// An .m4a holding Apple Lossless names its codec 'alac' in the file's track description.
+function isAppleLossless(bytes: Uint8Array): boolean {
+  for (let i = 0; i + 3 < bytes.length; i++) {
+    if (bytes[i] === 0x61 && bytes[i + 1] === 0x6c && bytes[i + 2] === 0x61 && bytes[i + 3] === 0x63) return true
+  }
+  return false
+}
+
+interface Converted { path: string; mime: string; durationSec: number; peaks: number[]; previewUrl: string | null }
+
+// Store the original as-is, have the server turn it into a WAV (/api/voice-lab/convert-sample).
+async function convertOnServer(file: File, ext: string): Promise<Converted> {
+  const presignRes = await fetch('/api/voice-lab/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contentType: file.type, incoming: true, fileExt: ext }),
+  })
+  const presign = await presignRes.json()
+  if (!presignRes.ok) throw new Error(presign.error ?? 'Could not get upload URL')
+  const putRes = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': presign.mime }, body: file })
+  if (!putRes.ok) throw new Error(`Upload failed (${putRes.status}) — please try again.`)
+  const res = await fetch('/api/voice-lab/convert-sample', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: presign.path }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? 'Could not read this recording — please try again.')
+  return data as Converted
+}
 
 function WaveformPreview({ peaks }: { peaks: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -47,7 +83,7 @@ function WaveformPreview({ peaks }: { peaks: number[] }) {
 function validateExt(file: File): string | null {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
   if (!ACCEPTED_EXTS.includes(ext)) {
-    return `Only WAV, MP3, and M4A files are supported (got .${ext || 'unknown'}).`
+    return `Supported: WAV, MP3, M4A (including iPhone lossless), AAC, FLAC, OGG, OPUS, WEBM, AIFF, CAF (got .${ext || 'unknown'}).`
   }
   return null
 }
@@ -59,6 +95,7 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
   const [peaks, setPeaks] = useState<number[]>([])
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [status, setStatus] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -76,14 +113,22 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
     setPhase('validating')
     setErrorMsg('')
     setFileName(file.name)
+    setStatus(`Checking ${file.name}…`)
 
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
     const url = URL.createObjectURL(file)
     const arrayBuffer = await file.arrayBuffer()
+    const directMime = DIRECT_MIME_BY_EXT[ext]
+    if (!directMime || (ext === 'm4a' && isAppleLossless(new Uint8Array(arrayBuffer)))) {
+      URL.revokeObjectURL(url)
+      await processOnServer(file, ext)
+      return
+    }
 
     // Duration via decodeAudioData where possible — it's the most reliable
     // cross-browser way to get both length and PCM data for the waveform.
     let durationSec = 0
-    let computedPeaks: number[] = []
+    const computedPeaks: number[] = []
     try {
       const ctx = new AudioContext()
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0))
@@ -102,15 +147,10 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
       }
       ctx.close().catch(() => {})
     } catch {
-      // Decoding failed (unsupported codec in this browser) — fall back to
-      // <audio> metadata for duration and skip the waveform preview.
-      durationSec = await new Promise<number>((resolve) => {
-        const probe = new Audio()
-        probe.src = url
-        probe.onloadedmetadata = () => resolve(probe.duration || 0)
-        probe.onerror = () => resolve(0)
-      })
-      computedPeaks = []
+      // This browser can't decode it — the server converts it (and measures it) instead.
+      URL.revokeObjectURL(url)
+      await processOnServer(file, ext)
+      return
     }
 
     if (durationSec < MIN_DURATION_SEC) {
@@ -124,7 +164,27 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
     setPeaks(computedPeaks)
     setPreviewUrl(url)
     setPhase('ready')
-    onCaptured(file, file.type || 'audio/wav', durationSec)
+    onCaptured(file, file.type || directMime, durationSec)
+  }
+
+  async function processOnServer(file: File, ext: string) {
+    setStatus(`Converting ${file.name} so it plays everywhere — this can take up to a minute…`)
+    try {
+      const c = await convertOnServer(file, ext)
+      if (c.durationSec < MIN_DURATION_SEC) {
+        setPhase('error')
+        setErrorMsg(`This file is only ${formatTime(c.durationSec)} long — need at least 0:${MIN_DURATION_SEC} for a usable clone.`)
+        return
+      }
+      setDuration(c.durationSec)
+      setPeaks(c.peaks)
+      setPreviewUrl(c.previewUrl)
+      setPhase('ready')
+      onCaptured(file, c.mime, c.durationSec, c.path)
+    } catch (err) {
+      setPhase('error')
+      setErrorMsg(err instanceof Error ? err.message : 'Could not read this recording — please try again.')
+    }
   }
 
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
@@ -152,7 +212,7 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
       <input
         ref={fileInputRef}
         type="file"
-        accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4,audio/x-m4a"
+        accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.webm,.aif,.aiff,.caf,audio/*"
         style={{ display: 'none' }}
         onChange={handleFileInput}
       />
@@ -166,11 +226,11 @@ export function UploadRecordingPanel({ onCaptured, onReset }: UploadRecordingPan
         >
           <div className="ul-icon">🎵</div>
           <div className="ul-title">Drop a recording here</div>
-          <div className="ul-sub">or click to browse · WAV, MP3, M4A · min 0:{MIN_DURATION_SEC}</div>
+          <div className="ul-sub">or click to browse · WAV, MP3, M4A, FLAC and more · min 0:{MIN_DURATION_SEC}</div>
         </div>
       )}
 
-      {phase === 'validating' && <div className="ul-status">Checking {fileName}…</div>}
+      {phase === 'validating' && <div className="ul-status">{status}</div>}
 
       {phase === 'ready' && previewUrl && (
         <>
