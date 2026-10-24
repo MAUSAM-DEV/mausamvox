@@ -6,6 +6,14 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎧 2026-10-24 (6) — English duet with HD Voice (test only, ≈ $0.35) — founder to compare
+
+- **Founder:** English "now" beat the melody fix → melody fix dropped (engine version `156e0f3f` stays unused).
+- **Test:** each singer through the app's HD path — SoulX (soulx-l40s; his preferred English reference, her Voice Lab recording) → our RVC voice (rmvpe, pitch 0) — her input = the cleaned stem; no finishing; today's duet mix + gentle master.
+- Her first SoulX run failed its own quick check (5.3 % of sung moments silent, limit 5 %) — in the app she'd have fallen back to today's engine; the retry passed (4.69 %).
+- Overlap seconds, now → HD: his jumps 0.7 → 1.9 s, breaks 0.3 → 4.0 %, cracks 38 → 36 %; hers breaks 1.1 → 2.5 %, cracks 1.2 → 1.8 %. HD doesn't fix the overlaps.
+- **Clips** (voice "Duet HD test — Need You Now", 0:53–2:23, −18 LUFS): "duet — now" / "duet — HD".
+
 ## 🔬 2026-10-24 (5) — duet overlap research: separation, outside pitch, overlap-only (test only, ≈ $0.40, live app unchanged) — founder to compare
 
 - **1. Separation:** nothing commercial-OK beats ours. MVSEP's best male/female is still MelRoformer 2025.01 (SDR 13.03, = ours); SCNet XL 11.83, aufr33 8.18, Sucial 6.52 (experimental, can't split singers taking turns). "Medley Vox (multi-singer)" on MVSEP: no licence, original weights never released, trained on research datasets → excluded. Not tested (no MVSEP minutes used).
