@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       engineChoice?: string   // 'Auto' | 'HD Voice' | 'Standard' (logged)
       songLanguage?: string   // detected song language (logged)
       languageSource?: string // 'detected' | 'title-english' | 'title-other' (Auto's last resort; logged)
+      duet?: boolean          // one voice of a 2-voice duet (admin HD): SoulX → RVC, no finishing
     }
     try {
       body = await req.json()
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource, duet } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -256,6 +257,7 @@ export async function POST(req: NextRequest) {
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '',
           origin: new URL(req.url).origin, test: typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
+          noFinish: duet === true,
         })
         return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
       } catch (hdErr) {

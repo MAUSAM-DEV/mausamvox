@@ -1574,10 +1574,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
       // Voice engine for this take. Auto (admin, `wait`): waits for the song-language check — up to
       // LANGUAGE_WAIT_MS; still unknown → judges the song's title (English-looking → HD Voice, otherwise Standard).
-      const resolveEngine = async (wait: boolean) => {
+      // `auto` = decide by language even if the Voice control says otherwise (duets: the control is hidden)
+      const resolveEngine = async (wait: boolean, auto = voiceEngine === 'Auto') => {
         let language = stemResult.songLanguage
         let source: 'detected' | 'title-english' | 'title-other' | undefined = language ? 'detected' : undefined
-        if (wait && voiceEngine === 'Auto' && !language) {
+        if (wait && auto && !language) {
           const languageStart = performance.now()
           setOverlayNote(LANGUAGE_NOTE)
           const checkPath = stemResult.leadVocalsPath || stemResult.vocalsPath
@@ -1589,7 +1590,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           source = language ? 'detected' : titleLooksEnglish(stemResult.fileName) ? 'title-english' : 'title-other'
           console.log(`[engine] waited ${Math.round((performance.now() - languageStart) / 1000)} s for the song language: ${language ?? `unknown → judged from the title (${source})`}`)
         }
-        const engine: Exclude<VoiceEngineChoice, 'Auto'> = voiceEngine !== 'Auto' ? voiceEngine
+        const engine: Exclude<VoiceEngineChoice, 'Auto'> = !auto && voiceEngine !== 'Auto' ? voiceEngine
           : source === 'title-english' ? 'HD Voice'
           : source === 'title-other' ? 'Standard'
           : language === 'en' ? 'HD Voice' : 'Standard'
@@ -1636,8 +1637,17 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
         // Duet (beta, FROZEN 2026-10-24 — the founder's pick): today's duet path + ONLY the clean-up of her
         // stem (/api/duet-clean: his leftovers out, so her voice stops jumping to his note) + the gentle
-        // master on Result. No per-voice finishing (it changed both voices). Everyone.
+        // master on Result. No per-voice finishing (it changed both voices). Everyone; admin English → HD below.
         const cleanUp = !!stemResult.maleVocalsPath && !!stemResult.femaleVocalsPath
+        // Admin (2026-10-24, the founder's pick after listening): ENGLISH duets — both voices through HD Voice
+        // (SoulX → our RVC voices, no finishing; same mix). Other languages: today's duet path.
+        const duetLang = isAdmin ? await resolveEngine(true, true) : null
+        const hdDuet = duetLang?.engine === 'HD Voice'
+        const hdFields = hdDuet && duetLang ? {
+          hd: true, engine: 'hd', duet: true, engineChoice: 'Duet Auto',
+          songLanguage: duetLang.language, languageSource: duetLang.source,
+        } : {}
+        if (duetLang) console.log(`[duet] song language ${duetLang.language ?? `unknown (title: ${duetLang.source})`} → ${hdDuet ? 'HD Voice for both voices' : "today's duet path"}`)
         const startJob = (vocalsUrl: string | undefined, vocalsPath: string | undefined, voiceId: string, pitch: number) =>
           fetch('/api/voice-convert', {
             method: 'POST',
@@ -1647,6 +1657,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               autotune: AUTOTUNE_AMOUNT[autotune],
               isPreview: false,
               trackKey: stemResult.storagePath || '',
+              ...hdFields,
             }),
           }).then(async (r) => ({ ok: r.ok, data: await r.json() }))
         // Fire both jobs (his at once; hers once her stem is cleaned), then poll both in parallel.

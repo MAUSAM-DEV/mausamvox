@@ -63,6 +63,8 @@ const NO_GPU_LOG = 'use CPU for inference'         // the RVC engine's own messa
 // "couldn't fetch an input" as Cog reports it, e.g. "404 Client Error: Not Found for url: …" or
 // "HTTPSConnectionPool(host=…): Max retries exceeded with url: …" (seen 2026-10-23)
 const INPUT_FETCH_ERROR = /Client Error|Server Error|for url:|HTTPSConnectionPool|Max retries exceeded|Connection (reset|aborted|refused)|Read timed out/i
+// SoulX's own quality check failing (soulx-svc predict.py: "quick check failed: N % of the sung moments came out silent…")
+const SOULX_CHECK_ERROR = /quick check failed/i
 // admin test switch ?hdtest=soulx-download: SoulX is given a missing file (both tries) → fallback
 const TEST_MISSING_FILE = '/__hd-test-missing.wav'
 const SIGNED_URL_TTL_S = 21600
@@ -105,6 +107,7 @@ interface Ticket {
   tf?: string     // admin test switch
   m?: 'std'       // Standard + finishing flow (absent = HD)
   rid?: string    // fin stage of the Standard flow: the Standard prediction (delivered if finishing fails)
+  nf?: 1          // 2-voice duet (2026-10-24, admin): no finishing — the RVC step's voice is delivered (today's duet mix)
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url')
@@ -187,14 +190,16 @@ async function soulxInput(t: Ticket): Promise<{ input: Record<string, unknown>; 
 export async function startHdVoice(opts: {
   userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
   pitch: number; autotune: number; previewCharged: number; trackKey: string; origin?: string; test?: string
+  noFinish?: boolean   // 2-voice duet: SoulX → RVC only (the founder's English duet pick, 2026-10-24)
 }): Promise<string> {
   const t0 = Date.now()
   if (Math.abs(opts.pitch) > HD_MAX_KEY) throw new Error(`key ${opts.pitch} is beyond ±${HD_MAX_KEY}`)
-  if (!opts.instrumentalPath) throw new Error('no studio instrumental stored (the finishing needs the music)')
+  if (!opts.noFinish && !opts.instrumentalPath) throw new Error('no studio instrumental stored (the finishing needs the music)')
   const t: Ticket = {
     s: 'sx', id: '', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
     ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, pc: opts.previewCharged, tk: opts.trackKey,
     ...(opts.test ? { tf: opts.test, o: opts.origin } : {}),
+    ...(opts.noFinish ? { nf: 1 as const } : {}),
   }
   const { input, note, language } = await soulxInput(t)
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
@@ -324,7 +329,7 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
         const rvc = await createRvcPrediction(replicate, 'indexed', await rvcStepInput(next, origin, 'rvc'), true)
         console.log(`[hd-voice] RVC started ${rvc.id} on ${RVC_DEPLOYMENT.name} (your voice: protect 0.2, index 0.3, ${HD_RVC_F0_METHOD}, pitch ${HD_RVC_PITCH})`)
         // wake the finishing machine now, so it's up when the RVC step is done (only the create is awaited)
-        await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
+        if (!t.nf) await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
         return { body: { status: 'processing', nextId: sign({ ...next, id: rvc.id, ts: now }), note: HD_NOTE_VOICE }, status: 200 }
       } catch (err) {
         return { body: await fallback(t, replicate, origin, `RVC step didn't start (${err instanceof Error ? err.message : String(err)})`), status: 200 }
@@ -334,6 +339,12 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
       const err = String(pred.error ?? '')
       if (INPUT_FETCH_ERROR.test(err)) {
         const again = await restart(t, replicate, origin, `SoulX couldn't fetch an input (${err.slice(0, 120)})`).catch(() => null)
+        if (again) return { body: again, status: 200 }
+      }
+      // duet: SoulX failed its own quality check (e.g. "5.3 % of the sung moments came out silent", just over
+      // the 5 % limit — it varies run to run) → once more before today's engine (founder, 2026-10-24)
+      if (t.nf && SOULX_CHECK_ERROR.test(err)) {
+        const again = await restart(t, replicate, origin, `SoulX failed its quality check (${err.slice(0, 120)})`).catch(() => null)
         if (again) return { body: again, status: 200 }
       }
       return { body: await fallback(t, replicate, origin, `SoulX ${pred.status}: ${err.slice(0, 160)}`), status: 200 }
@@ -352,6 +363,10 @@ export async function pollHdVoice(id: string, userId: string, origin: string): P
   if (t.s === 'rvc') {
     if (pred.status === 'succeeded' && outputUrl(pred.output)) {
       console.log(`[hd-voice] RVC done ${t.id}: waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'}, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s`)
+      if (t.nf) {
+        console.log(`[hd-voice] HD duet voice delivered (no finishing): ${t.id} | total ${secs(now - t.t0)} from start`)
+        return { body: { status: 'succeeded', convertedVocalsUrl: outputUrl(pred.output), predictionId: t.id, hd: true, finished: false }, status: 200 }
+      }
       try {
         const finId = await startFinishing(t, replicate, outputUrl(pred.output))
         return { body: { status: 'processing', nextId: sign({ ...t, s: 'fin', id: finId, ts: now, ro: outputUrl(pred.output), r: 0 }), note: HD_NOTE_FINISH }, status: 200 }
