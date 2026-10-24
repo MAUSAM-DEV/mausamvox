@@ -6,6 +6,14 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧪 2026-10-24 (10) — Vaani Step 1: Hindi ear (wav2vec2-Hindi) vs today's (HuBERT) — DISPROVEN in this setup (≈ $1.5–2.5) — waiting for the founder
+
+- **Built for the test (models repo, not live):** `mausam-dev/rvc-train` (private; copy of zsxkib/voice-cloning-training, MIT) with a `content_encoder` input — fixes needed: torch pin for cog 0.16, gradio/fastapi pins removed (container never started), audio loading via librosa (new PyAV API), RVC's `logs/mute` silence clips (git-ignored); deployment `rvc-train-l40s` (paused, max 0). Engine `rvc-v2-index` version `01efc3f9…` (+ `content_encoder`; live app still pinned `255794a3`).
+- **Test:** two voices from the founder's lossless set (48 clips, 470 s), identical except the ear: A = HuBERT, B = Vakyansh wav2vec2-Hindi (MIT); 48k v2 rmvpe batch 7, 100 epochs each (both from RVC's HuBERT-trained base). Whole Sukoon lead converted with today's Standard settings + each model's own ear.
+- **Word scores (Whisper-small CER vs the original singer's transcript, 5 s windows):** whole song A **0.58** (56/92 unclear) vs B **0.90** (92/92 unclear; B better in 19, worse in 64 windows); section 3:03–4:33 A 0.54 vs B 0.88. B's output is real singing (pitched 100 %, on the note 97 %, noisiness ≈ A) — the words are mushier.
+- **Verdict:** the Hindi ear does NOT help when dropped into RVC with its existing base (the plan's stop rule). Untested: a base model pretrained on the Hindi ear's features (the expensive full build) — the generator may simply not have re-learned the new features in 100 epochs.
+- **Clips** (voice "Vaani Step 1 — Sukoon (voice only)", 3:03–4:33, −18 LUFS): "Hindi ear A — today's" / "Hindi ear B — Hindi ear".
+
 ## 🔒 2026-10-24 (9) — final duet test: HD + melody fix only at crackle moments (test only, ≈ $0.35) — Duet stays as is, PERMANENTLY FROZEN unless the founder hears it clearly better
 
 - **Founder:** live English HD duet = the "duet — HD" clip, with many crackles.
