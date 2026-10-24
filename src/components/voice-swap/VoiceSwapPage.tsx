@@ -20,6 +20,7 @@ import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 import { titleLooksEnglish } from '@/lib/title-language'
 import { refreshStemUrls } from '@/lib/stem-urls'
+import { FULL_SWAP_CREDITS } from '@/lib/swap-prices'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -628,6 +629,15 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     } catch { /* non-critical — don't block the user flow */ }
   }
 
+  // The page gave up on a voice job (timed out, lost contact, or the other voice of a
+  // duet failed): the server stops it and gives its charge back unless it already
+  // delivered. Fire-and-forget.
+  function cancelJob(id: string) {
+    void fetch(`/api/voice-convert?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then((r) => r.json()).then((d) => { if (typeof d?.creditsRemaining === 'number') setCreditsRemaining(d.creditsRemaining) })
+      .catch(() => {})
+  }
+
   async function handleDeleteSwap(id: string) {
     const res = await fetch(`/api/voice-swaps/delete?id=${id}`, { method: 'DELETE' })
     if (!res.ok) {
@@ -1032,9 +1042,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     }
   }
 
-  // Re-reads plan + balance from the DB. Used after a gender split: the
-  // /api/gender-split route deducts 250 server-side but (unlike voice-convert)
-  // doesn't return the new balance, so we refetch to keep the display honest.
+  // Re-reads plan + balance from the DB. Used after a gender split (the
+  // /api/gender-split route deducts 250 server-side but doesn't return the new
+  // balance) and after a failed swap (the server refunded it).
   async function refreshCredits() {
     if (!userId) return
     const supabase = createClient()
@@ -1113,9 +1123,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setStep(2)
   }
 
-  // `charge` controls whether credits are deducted (defaults to true so the
-  // normal Preview/Full buttons bill as before). Index strength and the other
-  // conversion settings are fixed server-side (VOICE_SWAP_* in rvc-engine.ts).
+  // Credits are charged by the server when a job starts (/api/voice-convert). Index
+  // strength and the other conversion settings are fixed server-side (VOICE_SWAP_* in rvc-engine.ts).
   // ── Auto key-match helpers ──────────────────────────────────────────────────
   // Median F0 (+ voiced-frame confidence) of the target voice, from its reference
   // sample (cached per voice). Null on any failure → no auto shift for that voice.
@@ -1355,7 +1364,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     }
   }
 
-  const FULL_SWAP_CREDITS = 200
   // A preview's converted vocal comes from Replicate and expires after ~1 h, so
   // only offer to save it within 50 minutes (after that, a normal full swap runs
   // — still discounted by what the preview cost).
@@ -1433,10 +1441,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     localVocalUrlsRef.current = urls.filter((u) => u.local).map((u) => u.url)
   }
 
-  // Save the previewed take as the full swap: charge 200 − what the preview
-  // cost, then let ResultStep build/upload the mix and persist it (the same path
-  // a full swap uses) — no new conversion.
-  function savePreviewAsFull() {
+  // Save the previewed take as the full swap: the server charges 200 − what the
+  // preview cost (/api/voice-swaps/charge-preview), then ResultStep builds/uploads
+  // the mix and persists it (the same path a full swap uses) — no new conversion.
+  // false = no savable preview (the caller says so); true = handled (saved or refused).
+  async function savePreviewAsFull(): Promise<boolean> {
     const p = savablePreview()
     if (!p) return false
     const cost = Math.max(0, FULL_SWAP_CREDITS - p.charged)
@@ -1444,7 +1453,24 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       showToast(`Saving this swap costs ${cost} credits, and you don't have enough. Top up to continue.`)
       return true
     }
-    if (!isAdmin && cost > 0) deductCredits(cost, 'voice_swap_full')
+    if (!isAdmin) {
+      try {
+        const res = await fetch('/api/voice-swaps/charge-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ previewId: p.predictionId, trackKey: stemResult?.storagePath || '' }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (typeof data.creditsRemaining === 'number') setCreditsRemaining(data.creditsRemaining)
+        if (!res.ok) {
+          showToast(data.error ?? "Couldn't save this swap — please try again.", 7000)
+          return true
+        }
+      } catch {
+        showToast("Couldn't reach the server — check your connection and try again.", 7000)
+        return true
+      }
+    }
     p.saved = true
     lastSavedKeyRef.current = p.key
     setPreviewSaveCost(null)
@@ -1463,8 +1489,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // "Process Full Track": if this exact take was just previewed, save it (no
   // re-conversion); if it was previewed but the preview audio has expired,
   // re-convert but still subtract what the preview cost; otherwise a normal swap.
-  function handleFullClick() {
-    if (savePreviewAsFull()) return
+  async function handleFullClick() {
+    if (await savePreviewAsFull()) return
     if (lastSavedKeyRef.current === takeKey()) {
       // Already paid for: never convert (or charge) the same take twice.
       if (saveInfo && saveInfo.state !== 'saved' && convertedVocalsUrl) {
@@ -1475,27 +1501,23 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       }
       return
     }
+    // A previewed take re-converted (its audio expired): the server counts what that
+    // preview cost toward this swap, once.
     const p = lastPreviewRef.current
-    const discount = p && !p.saved && p.key === takeKey() ? p.charged : 0
-    if (p && discount > 0) p.saved = true // the discount is used once
-    void handleProcess('full', { discount })
+    const previewId = p && !p.saved && p.key === takeKey() && p.charged > 0 ? p.predictionId : undefined
+    if (p && previewId) p.saved = true // the preview counts once
+    void handleProcess('full', { previewId })
   }
 
   async function handleProcess(
     type: 'preview' | 'full',
     opts: {
-      charge?: boolean
-      // Credits already paid for a preview of this same take (re-convert path
-      // after the preview's audio expired) — deducted from the full price.
-      discount?: number
-      // Fine-tune overrides for the remaining RVC quality params; omitted on
-      // normal swaps so the server applies its defaults.
+      // A paid preview of this same take (re-convert path after the preview's audio
+      // expired): its delivered prediction id — the server counts its cost toward this swap.
+      previewId?: string
     } = {},
   ) {
-    const {
-      charge = true,
-      discount = 0,
-    } = opts
+    const { previewId } = opts
     if (!confirmLeave('replace it with a new one')) return
     if (!stemResult) {
       showToast('Upload a track first')
@@ -1536,8 +1558,18 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // Used by both single-job and dual-job paths. An HD voice job (admin only,
       // lib/hd-voice.ts) moves through stages: the server hands back `nextId` to
       // poll from then on, and a `note` to show while it works.
+      // On a give-up (timeout / lost contact) the job is cancelled so its charge comes back.
       const pollJob = async (firstId: string): Promise<{ url: string; id: string; finished: boolean }> => {
-        let predictionId = firstId
+        const live = { id: firstId }
+        try {
+          return await pollJobInner(live)
+        } catch (err) {
+          if (!(err instanceof EngineJobFailed)) cancelJob(live.id) // a failed job was refunded by its poll
+          throw err
+        }
+      }
+      const pollJobInner = async (live: { id: string }): Promise<{ url: string; id: string; finished: boolean }> => {
+        let predictionId = live.id
         const POLL_INTERVAL_MS = 5000
         const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
         const started = Date.now()
@@ -1564,9 +1596,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId, finished: (data.finished ?? data.hd) === true }
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
+            if (typeof (data as { creditsRemaining?: unknown }).creditsRemaining === 'number') setCreditsRemaining((data as { creditsRemaining: number }).creditsRemaining)
             throw new EngineJobFailed(data.error ?? 'Voice conversion failed')
           }
-          if (data.nextId) predictionId = data.nextId
+          if (data.nextId) { predictionId = data.nextId; live.id = data.nextId }
           setOverlayNote(data.note ?? (data.status === 'starting' && Date.now() - started > WARMING_NOTE_AFTER_MS ? WARMING_NOTE : null))
         }
         throw new Error('Voice conversion timed out')
@@ -1657,12 +1690,23 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               autotune: AUTOTUNE_AMOUNT[autotune],
               isPreview: false,
               trackKey: stemResult.storagePath || '',
+              twoVoice: true, // charged per voice by the server (2 × 200)
               ...hdFields,
             }),
-          }).then(async (r) => ({ ok: r.ok, data: await r.json() }))
+          }).then(async (r) => {
+            const data = await r.json()
+            if (typeof data.creditsRemaining === 'number') setCreditsRemaining(data.creditsRemaining)
+            if (r.ok && typeof data.predictionId === 'string') duetJobs.push(data.predictionId)
+            return { ok: r.ok, data }
+          })
         // Fire both jobs (his at once; hers once her stem is cleaned), then poll both in parallel.
-        // deductCredits(400) is only reached if Promise.all resolves — if either
-        // job fails, the catch block runs and no credits are charged.
+        // Each start is charged by the server; if either voice fails, the other job is
+        // cancelled so both charges come back (a failed one is refunded by its poll).
+        const duetJobs: string[] = []
+        const duetDelivered = new Set<string>()
+        const cancelOtherVoice = () => duetJobs.filter((id) => !duetDelivered.has(id)).forEach(cancelJob)
+        let polled: [{ url: string; id: string }, { url: string; id: string }]
+        try {
         const [dataA, dataB] = await Promise.all([
           startJob(stemResult.maleVocalsUrl, stemResult.maleVocalsPath || undefined, voice.id, effPitchA),
           (async () => {
@@ -1680,10 +1724,15 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [{ url: remoteA, id: idA }, { url: remoteB, id: idB }] = await Promise.all([
-          pollJob(dataA.data.predictionId as string),
-          pollJob(dataB.data.predictionId as string),
+        polled = await Promise.all([
+          pollJob(dataA.data.predictionId as string).then((r) => { duetDelivered.add(dataA.data.predictionId); return r }),
+          pollJob(dataB.data.predictionId as string).then((r) => { duetDelivered.add(dataB.data.predictionId); return r }),
         ])
+        } catch (err) {
+          cancelOtherVoice()
+          throw err
+        }
+        const [{ url: remoteA, id: idA }, { url: remoteB, id: idB }] = polled
         const [keptA, keptB] = await Promise.all([keepLocal(remoteA), keepLocal(remoteB)])
         replaceLocalVocals([keptA, keptB])
         const urlA = keptA.url, urlB = keptB.url
@@ -1704,7 +1753,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         clientTiming('convert-full-duet', { total: performance.now() - convertStart })
         showToast('Both voices swapped!')
 
-        if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
         // Keep this duet recoverable for 24 h until it's saved ("Recent — not saved"), both voices. Fire-and-forget.
         {
           const take: UnsavedTake = {
@@ -1787,12 +1835,14 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             voiceId: voice.id,
             pitchShift: effectivePitch,
             autotune: AUTOTUNE_AMOUNT[autotune],
-            // Previews are gated + charged server-side (first 2 per track free,
-            // 3rd+ costs 50). trackKey is the upload storagePath; empty for
-            // manual-extracted stems, which are always free.
+            // Charged server-side before the job starts: full swap 200 (minus a paid
+            // preview of this take, previewId), previews first 2 per track free, then 50.
+            // trackKey is the upload storagePath; empty for manual-extracted stems,
+            // whose previews are always free.
             isPreview: type === 'preview',
             trackKey: stemResult.storagePath || '',
             retryOf,
+            previewId: type === 'full' ? previewId : undefined,
             // HD voice: single-voice swaps only (the server decides who gets it);
             // its finishing balances the voice against the song's music.
             hd: !target,
@@ -1878,8 +1928,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
       // Deduct credits and record swap (non-blocking).
       console.log(`[voice-swap] type=${type} —`, type === 'full' ? 'persisting swap' : 'skipping persist (preview)')
+      // The server charged this swap when it started (refunded if it had failed).
       if (type === 'full') {
-        if (charge && !isAdmin && FULL_SWAP_CREDITS - discount > 0) deductCredits(FULL_SWAP_CREDITS - discount, 'voice_swap_full')
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
           predictionId: deliveredId,
@@ -1898,6 +1948,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // 8-second toast for errors — long enough to read even if the user's
       // eyes were on the fading overlay when the message appeared.
       showToast(err instanceof Error ? err.message : 'Voice conversion failed', 8000)
+      void refreshCredits() // a failed / cancelled job was refunded on the server
     }
   }
 
@@ -2063,7 +2114,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 saveRequested={saveRequested}
                 onSaveRequestHandled={() => setSaveRequested(false)}
                 onSavePreview={() => {
-                  if (!savePreviewAsFull()) showToast('This preview can no longer be saved — press ⚡ Process Full Track on Configure for a fresh full swap.', 7000)
+                  void savePreviewAsFull().then((handled) => {
+                    if (!handled) showToast('This preview can no longer be saved — press ⚡ Process Full Track on Configure for a fresh full swap.', 7000)
+                  })
                 }}
                 keyShift={resultTake?.keyShift ?? 0}
                 autotuneLabel={resultTake && resultTake.autotune !== 'Off' ? resultTake.autotune : null}

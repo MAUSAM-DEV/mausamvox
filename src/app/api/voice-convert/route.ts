@@ -4,32 +4,21 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { createRvcPrediction, rvcEngine, rvcVersion, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
+import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
-import { hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
+import { cancelHdVoice, hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
+import { attachSwapJob, chargeSwap, refundSwap, settleSwap } from '@/lib/swap-charges'
+import { FULL_SWAP_CREDITS, PREVIEW_CREDITS } from '@/lib/swap-prices'
 
 export const maxDuration = 30
 
-// Preview pricing: the first 2 previews of a given track are free, the 3rd+
-// costs 50 credits. Gated server-side via the consume_preview RPC.
-const FREE_PREVIEWS_PER_TRACK = 2
-const PREVIEW_COST = 50
-
-// Refunds a preview charge whose Replicate job never started (create-failure
-// only). Also rolls back the count increment so a never-run preview isn't
-// counted. Best-effort: a failed refund is logged, never thrown.
-async function refundPreview(userId: string, trackKey: string, amount: number): Promise<void> {
-  try {
-    const { error } = await supabaseAdmin.rpc('refund_preview', {
-      p_user: userId,
-      p_track: trackKey,
-      p_refund: amount,
-    })
-    if (error) console.error('[voice-convert] preview refund failed:', error.message)
-  } catch (err) {
-    console.error('[voice-convert] preview refund threw:', err instanceof Error ? err.message : String(err))
-  }
-}
+// Charging (2026-10-24, engine rollout step 1 — lib/swap-charges.ts): every swap of a
+// non-admin account is charged by POST below BEFORE any machine starts (can't afford
+// it → refused, nothing starts): previews (first FREE_PREVIEWS_PER_TRACK of a track
+// free, then PREVIEW_CREDITS), full swaps FULL_SWAP_CREDITS per voice (minus what a
+// paid preview of the same take cost). The charge is refunded, at most once, when the
+// job can't start, when a poll sees it failed, or when the page cancels it (DELETE)
+// before the voice was delivered. A delivered voice is settled and never refunded.
 
 // Replicate SDK v1 wraps file outputs in a FileOutput class whose .url()
 // method returns a URL object. JSON.stringify() shows {} because the URL
@@ -54,24 +43,13 @@ function safeStringify(v: unknown): string {
 
 // Clamp a number into [lo, hi].
 
-// True when `id` is one of our RVC predictions that failed (or was canceled)
-// in the last 15 minutes — the only case where a retry preview is free.
-const RETRY_WINDOW_MS = 15 * 60 * 1000
-async function isRecentFailure(id: string): Promise<boolean> {
-  try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-    const p = await replicate.predictions.get(id)
-    const created = Date.parse(p.created_at)
-    return (p.status === 'failed' || p.status === 'canceled') && p.version === rvcVersion() && Date.now() - created < RETRY_WINDOW_MS
-  } catch {
-    return false
-  }
-}
-
 // Starts a voice-conversion job. Returns immediately with a prediction id —
 // RVC runs can take longer than a serverless function is allowed to stay
 // open, so the client polls GET below instead of us blocking here.
 export async function POST(req: NextRequest) {
+  // A charge taken below that no job has taken over yet (refunded if anything throws).
+  let chargeId: string | null = null
+  let chargeUser: string | null = null
   try {
     let body: {
       vocalsUrl?: string
@@ -83,9 +61,14 @@ export async function POST(req: NextRequest) {
       isPreview?: boolean
       trackKey?: string
       // The app's one automatic retry after a conversion FAILED on the engine:
-      // the id of that failed prediction. A preview retry is then free (the
-      // failed attempt already used the preview), so nobody pays twice.
+      // the id of that failed prediction (logged). Nobody pays twice: the failed
+      // job was refunded when its poll saw the failure.
       retryOf?: string
+      // Full swap of a take that was previewed: the preview's delivered prediction id —
+      // what that preview cost counts toward this swap (once; checked in the ledger).
+      previewId?: string
+      // One voice of a 2-voice duet (charged FULL_SWAP_CREDITS per voice, kind 'duet').
+      twoVoice?: boolean
       // HD voice (SoulX → the user's RVC voice → finishing) for this take —
       // single-voice swaps only; used only for accounts hdVoiceAllowed() lets
       // through. The finishing needs the song's music: its durable stem paths.
@@ -109,7 +92,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource, duet } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, previewId, twoVoice = false, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource, duet } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -122,28 +105,26 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
-    // Run when voiceId is present (server-side model URL resolution) or when
-    // isPreview is true (credit gate). Full swaps with only a client-supplied
-    // voiceModelUrl and no voiceId skip auth — legacy path, no server lookup needed.
-    let user: { id: string; email?: string | null } | null = null
-    if (voiceId || isPreview) {
-      if (!adminConfigured) {
-        console.error('[voice-convert] SUPABASE_SERVICE_ROLE_KEY is not configured')
-        return NextResponse.json(
-          { error: 'Server configuration error: service role key is missing. Contact support.' },
-          { status: 500 }
-        )
-      }
-      const sessionClient = await createClient()
-      const { data: { user: sessionUser }, error: authError } = await sessionClient.auth.getUser()
-      if (authError) {
-        return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
-      }
-      if (!sessionUser) {
-        return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
-      }
-      user = sessionUser
+    // Every swap needs a signed-in account: it is charged to that account. (Until
+    // 2026-10-24 a full swap with a client-supplied voiceModelUrl and no voiceId
+    // skipped sign-in — anyone could start jobs on our Replicate account.)
+    if (!adminConfigured) {
+      console.error('[voice-convert] SUPABASE_SERVICE_ROLE_KEY is not configured')
+      return NextResponse.json(
+        { error: 'Server configuration error: service role key is missing. Contact support.' },
+        { status: 500 }
+      )
     }
+    const sessionClient = await createClient()
+    const { data: { user: sessionUser }, error: authError } = await sessionClient.auth.getUser()
+    if (authError) {
+      return NextResponse.json({ error: 'Auth error: ' + authError.message }, { status: 401 })
+    }
+    if (!sessionUser) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    }
+    const user = sessionUser
+    const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
 
     // ── Model URL resolution ──────────────────────────────────────────────────
     // Prefer the durable Supabase copy (model_path, signed on read) so the voice
@@ -161,61 +142,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No model URL available for this voice' }, { status: 400 })
     }
 
-    // ── PREVIEW GATE (full swaps are untouched — charged client-side as before) ──
-    // First 2 previews of a track are free; the 3rd+ costs PREVIEW_COST. All
-    // decisions are server-side: the user comes from the session cookie (never the
-    // body), and the check+increment+charge is one atomic RPC. We charge BEFORE
-    // starting Replicate and refund only if the create itself fails.
-    // Auth and adminConfigured already verified above (isPreview was in the condition
-    // that triggered auth); user is guaranteed non-null here when isPreview is true.
-    let previewRefund: { userId: string; trackKey: string; amount: number } | null = null
+    // ── CHARGE (before any machine starts) ────────────────────────────────────
+    // The user comes from the session cookie (never the body); balance check +
+    // charge + ledger row are one atomic RPC (lib/swap-charges.ts). Admin accounts
+    // are never charged. Manual-extracted-stems tracks have no storagePath: their
+    // previews are free and never touch preview_uses.
     let creditsRemaining: number | null = null
-    // Credits this preview cost (0 = free preview / admin / full swap). The client
-    // subtracts it when the same take is saved as the full swap (never pay twice).
+    // Credits this preview cost (0 = free preview / admin / full swap) — shown by the
+    // page; the server counts it toward the full swap of the same take (previewId).
     let previewCharged = 0
-    if (isPreview) {
-      if (!user) {
-        // Defensive — can't happen: auth ran above when isPreview is true.
-        return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    if (!isAdmin) {
+      const kind = isPreview ? 'preview' : twoVoice ? 'duet' : 'full'
+      const charge = await chargeSwap({
+        userId: user.id, kind, price: isPreview ? PREVIEW_CREDITS : FULL_SWAP_CREDITS,
+        trackKey: trackKey ?? '', previewId: isPreview ? undefined : previewId,
+      })
+      if (!charge.ok) {
+        if (charge.insufficient) {
+          const price = isPreview ? PREVIEW_CREDITS : FULL_SWAP_CREDITS
+          return NextResponse.json({ error: `Not enough credits — this ${isPreview ? 'preview' : 'swap'} costs up to ${price} credits and you have ${charge.creditsRemaining}. Top up to continue.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
+        }
+        return NextResponse.json({ error: "Couldn't check your credits — please try again in a minute." }, { status: 500 })
       }
-      // Admin accounts are exempt from all credit gates — skip the RPC entirely.
-      const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
-      // Manual-extracted-stems tracks have no storagePath — always free, so skip
-      // the RPC entirely and never touch preview_uses.
-      if (!isAdmin && trackKey) {
-        const { data, error } = await supabaseAdmin.rpc('consume_preview', {
-          p_user: user.id,
-          p_track: trackKey,
-          p_free_limit: FREE_PREVIEWS_PER_TRACK,
-          p_cost: PREVIEW_COST,
-        })
-        if (error) {
-          console.error('[voice-convert] consume_preview failed:', error.message)
-          return NextResponse.json({ error: 'Failed to check preview allowance' }, { status: 500 })
-        }
-        const row = Array.isArray(data) ? data[0] : data
-        if (!row) {
-          return NextResponse.json({ error: 'Failed to check preview allowance' }, { status: 500 })
-        }
-        if (row.insufficient) {
-          return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
-        }
-        if (row.charged > 0) {
-          previewRefund = { userId: user.id, trackKey, amount: row.charged }
-          previewCharged = row.charged
-        }
-        // Surface the new balance so the client can update its display.
-        creditsRemaining = row.credits_remaining
-        // Automatic retry of a conversion that failed on the engine within the
-        // last 15 min: undo this preview's count and charge right away.
-        if (retryOf && await isRecentFailure(retryOf)) {
-          await refundPreview(user.id, trackKey, row.charged)
-          console.log(`[voice-convert] free retry of failed prediction ${retryOf}`)
-          if (row.charged > 0) creditsRemaining = (creditsRemaining ?? 0) + row.charged
-          previewRefund = null
-          previewCharged = 0
-        }
-      }
+      chargeId = charge.chargeId
+      chargeUser = user.id
+      creditsRemaining = charge.creditsRemaining
+      if (isPreview) previewCharged = charge.charged
+      if (retryOf) console.log(`[voice-convert] retry of failed prediction ${retryOf} (that one was refunded when it failed)`)
     }
 
     // Re-sign the vocal stem from its durable Supabase path so RVC always fetches
@@ -238,27 +191,30 @@ export async function POST(req: NextRequest) {
 
     // ── HD voice (admin accounts only, lib/hd-voice.ts). Anything that stops
     // it from starting falls through to today's engine below.
-    if (hd && user && voiceId && hdVoiceAllowed(user.email)) {
+    if (hd && voiceId && hdVoiceAllowed(user.email)) {
       try {
         const common = {
           userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
           instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
-          pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '', origin: new URL(req.url).origin,
+          pitch: pitchShift, autotune: Number(autotune) || 0, chargeId: chargeId ?? undefined, origin: new URL(req.url).origin,
         }
         console.log(`[engine] choice: ${String(engineUiChoice ?? 'Auto').slice(0, 12)} → ${engineChoice === 'standard' ? 'Standard' : 'HD Voice'} (song language ${String(songLanguage ?? 'unknown').slice(0, 8)}${languageSource && languageSource !== 'detected' ? ` — not detected in time, judged from the title: ${String(languageSource).slice(0, 14)}` : ''}, ${isPreview ? 'preview' : 'full swap'})`)
+        // The ticket carries the charge from here (settled on delivery, refunded if every path fails).
         if (engineChoice === 'standard') {
           const ticket = await startStandardVoice(common)
+          chargeId = null
           return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
         }
         const ticket = await startHdVoice({
           userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
           instrumentalPath: instrumentalPath && !instrumentalPath.includes('..') ? instrumentalPath : '',
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
-          pitch: pitchShift, autotune: Number(autotune) || 0, previewCharged, trackKey: trackKey ?? '',
+          pitch: pitchShift, autotune: Number(autotune) || 0, chargeId: chargeId ?? undefined,
           origin: new URL(req.url).origin, test: typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
           noFinish: duet === true,
         })
+        chargeId = null
         return NextResponse.json({ predictionId: ticket, status: 'starting', creditsRemaining, previewCharged })
       } catch (hdErr) {
         console.warn(`[hd-voice] FALLBACK to today's engine: SoulX didn't start (${hdErr instanceof Error ? hdErr.message : String(hdErr)})`)
@@ -275,25 +231,35 @@ export async function POST(req: NextRequest) {
     let prediction
     try {
       // admin accounts: our own deployment (no shared queue) — rvc-engine.ts
-      prediction = await createRvcPrediction(replicate, engine, input, hdVoiceAllowed(user?.email))
+      prediction = await createRvcPrediction(replicate, engine, input, hdVoiceAllowed(user.email))
     } catch (createErr) {
-      // The job never started — refund the preview charge and roll back the
-      // count. NOTE: failures that happen LATER, during the GET poll, are NOT
-      // refunded (accepted limitation).
-      if (previewRefund) {
-        await refundPreview(previewRefund.userId, previewRefund.trackKey, previewRefund.amount)
-      }
+      // The job never started — give the charge back (a poll-time failure is
+      // refunded by GET, a cancel by DELETE).
+      if (chargeId) await refundSwap(user.id, { chargeId }, "job didn't start")
+      chargeId = null
       const msg = createErr instanceof Error ? createErr.message : String(createErr)
       console.error('[voice-convert] prediction create failed:', msg)
       return NextResponse.json({ error: msg }, { status: 502 })
     }
 
-    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${hdVoiceAllowed(user?.email) && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
+    // The ledger must know this job, or its refund / delivery can't be matched to the
+    // charge: if that fails, stop the job and give the charge back.
+    if (chargeId && !(await attachSwapJob(user.id, chargeId, prediction.id))) {
+      await replicate.predictions.cancel(prediction.id).catch(() => {})
+      await refundSwap(user.id, { chargeId }, "couldn't record the job")
+      chargeId = null
+      return NextResponse.json({ error: "Couldn't start the swap — please try again in a minute." }, { status: 500 })
+    }
+    chargeId = null // handed to the job: from here GET / DELETE settle or refund it
+
+    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${hdVoiceAllowed(user.email) && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining, previewCharged })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-convert] unhandled error:', msg)
+    // Charged but no job started → give it back.
+    if (chargeId && chargeUser) await refundSwap(chargeUser, { chargeId }, 'error before the job started')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -310,11 +276,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
+    const sessionClient = await createClient()
+    const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+    if (!sessionUser) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+
     // HD voice ticket (lib/hd-voice.ts): each poll may advance it to the next stage.
     if (isHdTicket(id)) {
-      const sessionClient = await createClient()
-      const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
-      if (!sessionUser) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
       const r = await pollHdVoice(id, sessionUser.id, new URL(req.url).origin)
       return NextResponse.json(r.body, { status: r.status })
     }
@@ -322,27 +289,67 @@ export async function GET(req: NextRequest) {
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
     const prediction = await replicate.predictions.get(id)
 
+    // A failed job gives its charge back (at most once — repeat polls find nothing to refund).
+    const failed = async (status: string, error: string, httpStatus = 200) => {
+      const credits = await refundSwap(sessionUser.id, { jobId: id }, `job ${status}`)
+      return NextResponse.json({ status, error, ...(credits !== null ? { creditsRemaining: credits } : {}) }, { status: httpStatus })
+    }
+
     if (prediction.status === 'succeeded') {
       logReplicateTiming('voice-convert', prediction)
       logReplicateStageTiming('rvc', prediction)
       const convertedVocalsUrl = toUrlString(prediction.output)
       if (!convertedVocalsUrl) {
-        return NextResponse.json(
-          { status: 'failed', error: `Could not parse Replicate output. Shape: ${safeStringify(prediction.output)}` },
-          { status: 502 }
-        )
+        return failed('failed', `Could not parse Replicate output. Shape: ${safeStringify(prediction.output)}`, 502)
       }
+      // Handing the voice over: its charge can't be refunded from now on. A job the
+      // page cancelled (refunded) is never handed over; a database hiccup → ask again.
+      const settled = await settleSwap(sessionUser.id, { jobId: id }, id)
+      if (settled === 'refunded') return NextResponse.json({ status: 'canceled', error: 'This swap was cancelled' })
+      if (settled === 'error') return NextResponse.json({ status: 'processing' })
       return NextResponse.json({ status: 'succeeded', convertedVocalsUrl })
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
-      return NextResponse.json({ status: prediction.status, error: safeStringify(prediction.error) })
+      return failed(prediction.status, safeStringify(prediction.error))
     }
 
     return NextResponse.json({ status: prediction.status })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-convert] poll error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+// The page gave up on a job (timed out, lost contact, or the other voice of a duet
+// failed): stop it and give its charge back — unless its voice was already done, which
+// is then settled (a finished job is never refunded; GET won't hand over a refunded one).
+export async function DELETE(req: NextRequest) {
+  try {
+    const id = req.nextUrl.searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    const sessionClient = await createClient()
+    const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+    if (!sessionUser) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+
+    if (isHdTicket(id)) {
+      const r = await cancelHdVoice(id, sessionUser.id)
+      return NextResponse.json(r.body, { status: r.status })
+    }
+
+    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const prediction = await replicate.predictions.get(id).catch(() => null)
+    if (prediction?.status === 'succeeded') {
+      await settleSwap(sessionUser.id, { jobId: id }, id)
+      return NextResponse.json({ refunded: false })
+    }
+    await replicate.predictions.cancel(id).catch(() => {})
+    const credits = await refundSwap(sessionUser.id, { jobId: id }, 'cancelled by the page')
+    return NextResponse.json({ refunded: credits !== null, ...(credits !== null ? { creditsRemaining: credits } : {}) })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[voice-convert] cancel error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

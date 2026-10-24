@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+import { ADMIN_EMAILS } from '@/lib/admin'
+import { swapPaid } from '@/lib/swap-charges'
 
 // Allow up to 60 s: normally a storage-side copy (~2 s); the fallback downloads
 // and re-uploads the file.
@@ -164,6 +166,18 @@ export async function POST(req: NextRequest) {
     }
     console.log('[voice-swaps/persist] resaved swap', existing.id, '→', Object.keys(updates).join('+'))
     return NextResponse.json({ swapId: existing.id, resaved: true })
+  }
+
+  // ── Paid for? (2026-10-24, lib/swap-charges.ts) ───────────────────────────
+  // A NEW saved swap needs a delivered full-swap / duet / saved-preview charge for
+  // this prediction (admins are never charged). Re-saves above are free as before.
+  if (!ADMIN_EMAILS.includes(user.email ?? '')) {
+    const paid = await swapPaid(user.id, predictionId)
+    if (paid === null) return NextResponse.json({ error: "Couldn't check this swap's payment — please try again in a minute." }, { status: 500 })
+    if (!paid) {
+      console.warn(`[voice-swaps/persist] refused: no paid swap for prediction ${predictionId}`)
+      return NextResponse.json({ error: "This swap hasn't been paid for — run it again to save it." }, { status: 402 })
+    }
   }
 
   // ── Fetch the Replicate prediction to get the output URL ─────────────────

@@ -29,9 +29,10 @@
 // (`nextId`) when a new stage starts. The finished answer carries the real Replicate
 // prediction id of the voice that was delivered, which save / "Recent — not saved" use.
 //
-// Credits: unchanged rules — a full swap is charged by the client only after a voice
-// is delivered (once, fallback or not); a paid preview is charged at POST as today and
-// refunded here if every path fails. Admins are never charged.
+// Credits (2026-10-24, lib/swap-charges.ts): the POST charged the swap before anything
+// started; the ticket carries that charge (`ch`). It is settled when a voice is delivered
+// (fallback or not — same price) and refunded, once, if every path fails or the page
+// cancels the ticket (cancelHdVoice). Admins are never charged (no `ch`).
 //
 // Standard + balanced finishing (engine plan step 3, 2026-10-23, admin only): today's engine
 // on the lead (stage 'std', with the same restarts), then the same finishing; if the
@@ -45,6 +46,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
+import { refundSwap, settleSwap } from '@/lib/swap-charges'
 
 export const HD_SOULX_DEPLOYMENT = { owner: 'mausam-dev', name: 'soulx-l40s' } // private model mausam-dev/soulx-svc
 export const HD_FINISH_DEPLOYMENT = { owner: 'mausam-dev', name: 'hd-finish-cpu' } // private model mausam-dev/hd-finish
@@ -97,8 +99,7 @@ interface Ticket {
   a: number       // auto-tune amount (as today)
   t0: number      // HD start, ms
   ts: number      // this stage's start, ms
-  pc: number      // preview credits charged at POST (refunded if every path fails)
-  tk: string      // track key for that refund
+  ch?: string     // the swap's charge (swap_charges id) — absent for admins (never charged)
   fr?: string     // fallback reason
   r?: number      // restarts used in this stage (fetch retry / start timeout)
   so?: string     // SoulX output URL (rvc stage — to restart the RVC step)
@@ -189,7 +190,7 @@ async function soulxInput(t: Ticket): Promise<{ input: Record<string, unknown>; 
 // POST side. Throws when SoulX can't be started (the caller then runs today's engine).
 export async function startHdVoice(opts: {
   userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
-  pitch: number; autotune: number; previewCharged: number; trackKey: string; origin?: string; test?: string
+  pitch: number; autotune: number; chargeId?: string; origin?: string; test?: string
   noFinish?: boolean   // 2-voice duet: SoulX → RVC only (the founder's English duet pick, 2026-10-24)
 }): Promise<string> {
   const t0 = Date.now()
@@ -197,7 +198,8 @@ export async function startHdVoice(opts: {
   if (!opts.noFinish && !opts.instrumentalPath) throw new Error('no studio instrumental stored (the finishing needs the music)')
   const t: Ticket = {
     s: 'sx', id: '', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
-    ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, pc: opts.previewCharged, tk: opts.trackKey,
+    ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0,
+    ...(opts.chargeId ? { ch: opts.chargeId } : {}),
     ...(opts.test ? { tf: opts.test, o: opts.origin } : {}),
     ...(opts.noFinish ? { nf: 1 as const } : {}),
   }
@@ -212,12 +214,13 @@ export async function startHdVoice(opts: {
 // Standard + balanced finishing: today's engine on the lead (our deployment), then the finishing.
 export async function startStandardVoice(opts: {
   userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
-  pitch: number; autotune: number; previewCharged: number; trackKey: string; origin: string
+  pitch: number; autotune: number; chargeId?: string; origin: string
 }): Promise<string> {
   const t0 = Date.now()
   const t: Ticket = {
     s: 'std', id: '', m: 'std', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
-    ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, pc: opts.previewCharged, tk: opts.trackKey, r: 0,
+    ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, r: 0,
+    ...(opts.chargeId ? { ch: opts.chargeId } : {}),
   }
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
   const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), true)
@@ -275,10 +278,9 @@ async function restart(t: Ticket, replicate: Replicate, origin: string, why: str
   return { status: 'processing', nextId: sign({ ...t, id, ts: now, r: (t.r ?? 0) + 1 }), note }
 }
 
+// Every path failed: give the swap's charge back (at most once — a repeat poll finds nothing).
 async function refundIfCharged(t: Ticket) {
-  if (!(t.pc > 0) || !t.tk) return
-  const { error } = await supabaseAdmin.rpc('refund_preview', { p_user: t.u, p_track: t.tk, p_refund: t.pc })
-  console.log(`[hd-voice] preview refund ${t.pc} cr: ${error ? `FAILED ${error.message}` : 'ok'}`)
+  if (t.ch) await refundSwap(t.u, { chargeId: t.ch }, 'hd-voice: every path failed')
 }
 
 type Reply = Record<string, unknown>
@@ -306,11 +308,34 @@ async function fallback(t: Ticket, replicate: Replicate, origin: string, reason:
 
 // GET side: one poll. Returns the JSON the client expects from /api/voice-convert GET,
 // plus `nextId` (switch to this ticket), `note` (progress message), and on success
-// `predictionId` (the Replicate prediction of the delivered voice).
+// `predictionId` (the Replicate prediction of the delivered voice). A delivered voice
+// settles the charge first; a cancelled (refunded) ticket is never handed over.
 export async function pollHdVoice(id: string, userId: string, origin: string): Promise<{ body: Reply; status: number }> {
   const t = verify(id)
   if (!t) return { body: { error: 'Bad HD voice ticket' }, status: 400 }
   if (t.u !== userId) return { body: { error: 'Not allowed' }, status: 403 }
+  const r = await pollStage(t, origin)
+  if (r.body.status !== 'succeeded' || !t.ch) return r
+  const settled = await settleSwap(t.u, { chargeId: t.ch }, String(r.body.predictionId ?? t.id))
+  if (settled === 'refunded') return { body: { status: 'canceled', error: 'This swap was cancelled' }, status: 200 }
+  if (settled === 'error') return { body: { status: 'processing' }, status: 200 }  // database hiccup: the next poll asks again
+  return r
+}
+
+// The page gave up on this ticket: stop its current job and give the charge back
+// (nothing happens to a charge already settled by a delivered voice).
+export async function cancelHdVoice(id: string, userId: string): Promise<{ body: Reply; status: number }> {
+  const t = verify(id)
+  if (!t) return { body: { error: 'Bad HD voice ticket' }, status: 400 }
+  if (t.u !== userId) return { body: { error: 'Not allowed' }, status: 403 }
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  await replicate.predictions.cancel(t.id).catch(() => {})
+  const credits = t.ch ? await refundSwap(t.u, { chargeId: t.ch }, 'hd-voice: cancelled by the page') : null
+  console.log(`[hd-voice] cancelled by the page at stage ${t.s} (${t.id})${credits !== null ? ' — refunded' : ''}`)
+  return { body: { refunded: credits !== null, ...(credits !== null ? { creditsRemaining: credits } : {}) }, status: 200 }
+}
+
+async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; status: number }> {
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
   const pred = await replicate.predictions.get(t.id)
   const now = Date.now()
