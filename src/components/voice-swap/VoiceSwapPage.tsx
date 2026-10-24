@@ -86,6 +86,9 @@ type UnsavedTake = {
   stemResult: StemResult; at: number
   finishedVoice?: boolean // finished on the server (balanced finishing) — the Result screen uses the finished-voice mix
   hdVoice?: boolean       // older name of finishedVoice (takes saved before 2026-10-23)
+  // 2-voice duet (since 2026-10-24): the second voice (female singer) is stored next to the first
+  duet?: { mode: 'both-split' | 'both-same'; voiceId2: string; voiceName2: string }
+  gentleMaster?: boolean
 }
 
 // ── Lead vocal quality assessment ─────────────────────────────────────────────
@@ -272,7 +275,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // "Recent — not saved": the most recent unsaved swap, kept 24 h by
   // /api/unsaved. Shown as a card on the Upload step; Open rebuilds its
   // Result screen (no re-conversion, same price to save as before).
-  const [recentUnsaved, setRecentUnsaved] = useState<{ predictionId: string; take: UnsavedTake; voiceUrl: string; createdAt: string } | null>(null)
+  const [recentUnsaved, setRecentUnsaved] = useState<{ predictionId: string; take: UnsavedTake; voiceUrl: string; voiceUrl2?: string; createdAt: string } | null>(null)
   const [restoring, setRestoring] = useState(false)
   useEffect(() => {
     if (!userId) return
@@ -1372,16 +1375,18 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     setRestoring(true)
     try {
       const t = r.take
+      const duet = t.duet && r.voiceUrl2 ? t.duet : null
       const sr = await refreshStemUrls(t.stemResult)
-      const kept = await keepLocal(r.voiceUrl)
-      if (!kept.local) throw new Error('voice download failed')
+      const [kept, kept2] = await Promise.all([keepLocal(r.voiceUrl), duet ? keepLocal(r.voiceUrl2!) : Promise.resolve(null)])
+      if (!kept.local || (duet && !kept2?.local)) throw new Error('voice download failed')
       karaokeJobRef.current++
       genderSplitJobRef.current++
       setKaraokeStatus('idle'); setKaraokeError(null); setAllowFullVocal(false)
-      replaceLocalVocals([kept])
-      setStemResult(sr); setIsDuet(false); setDuetMode('one'); setDuetSinger(t.duetSinger); setSelectedVoiceId2(null)
+      replaceLocalVocals(kept2 ? [kept, kept2] : [kept])
+      if (duet) { setStemResult(sr); setIsDuet(true); setDuetMode(duet.mode); setSelectedVoiceId2(duet.voiceId2) }
+      else { setStemResult(sr); setIsDuet(false); setDuetMode('one'); setDuetSinger(t.duetSinger); setSelectedVoiceId2(null) }
       setSelectedVoiceId(t.voiceId); setPitchShift(t.pitchShift); setKeyAuto(false); setManualKey(t.keyShift); setAutotune(t.autotune)
-      persistContextRef.current = { predictionId: r.predictionId, songName: t.songName, voiceUsed: t.voiceName }
+      persistContextRef.current = { predictionId: r.predictionId, songName: t.songName, voiceUsed: duet ? `${t.voiceName} + ${duet.voiceName2}` : t.voiceName }
       if (t.type === 'preview') {
         lastPreviewRef.current = { key: t.key, predictionId: r.predictionId, charged: t.charged, at: Date.now(), saved: false, local: true }
         setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - t.charged))
@@ -1394,9 +1399,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       }
       setPersistedSwapId(null)
       setSaveInfo(NEW_TAKE_SAVE); setSaveRequested(false)
-      setConvertedVocalsUrl2(null)
+      setConvertedVocalsUrl2(kept2 ? kept2.url : null)
       setConvertedVocalsUrl(kept.url)
-      setResultTake({ keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.leadVocalsUrl || sr.vocalsUrl], finishedVoice: t.finishedVoice ?? t.hdVoice })
+      setResultTake(duet
+        ? { keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.maleVocalsUrl, sr.femaleVocalsUrl].filter((u): u is string => !!u), gentleMaster: true }
+        : { keyShift: t.keyShift, autotune: t.autotune, sourceUrls: [sr.leadVocalsUrl || sr.vocalsUrl], finishedVoice: t.finishedVoice ?? t.hdVoice })
       setRecentUnsaved(null)
       setStep(3)
     } catch (err) {
@@ -1662,7 +1669,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         if (!dataA.ok) throw new Error(dataA.data.error ?? 'Male vocal job failed to start')
         if (!dataB.ok) throw new Error(dataB.data.error ?? 'Female vocal job failed to start')
 
-        const [{ url: remoteA }, { url: remoteB }] = await Promise.all([
+        const [{ url: remoteA, id: idA }, { url: remoteB, id: idB }] = await Promise.all([
           pollJob(dataA.data.predictionId as string),
           pollJob(dataB.data.predictionId as string),
         ])
@@ -1687,11 +1694,23 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         showToast('Both voices swapped!')
 
         if (charge && !isAdmin) deductCredits(400, 'voice_swap_duet_full')
+        // Keep this duet recoverable for 24 h until it's saved ("Recent — not saved"), both voices. Fire-and-forget.
+        {
+          const take: UnsavedTake = {
+            type: 'full', charged: 0, key: takeKey(takeKeyShift),
+            songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
+            voiceId: voice.id, voiceName: voice.name, pitchShift, keyShift: takeKeyShift, autotune, duetSinger,
+            stemResult, at: Date.now(), gentleMaster: true,
+            duet: { mode: duetMode === 'both-same' ? 'both-same' : 'both-split', voiceId2: voice2.id, voiceName2: voice2.name },
+          }
+          void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: idA, predictionId2: idB, take }) }).catch(() => {})
+          setRecentUnsaved(null)
+        }
         lastPreviewRef.current = null // a two-voice take replaced the result
         setPreviewSaveCost(null)
         // Defer persist until ResultStep uploads the full mix (handleFullMixReady).
         persistContextRef.current = {
-          predictionId: dataA.data.predictionId as string,
+          predictionId: idA, // = the id kept in "Recent — not saved", so saving removes it there
           songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voiceUsed: `${voice.name} + ${voice2.name}`,
         }
@@ -1937,7 +1956,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <div className="vs-recent" role="region" aria-label="Recent — not saved">
                 <div className="vs-recent-txt">
                   <span className="vs-recent-tag">Recent — not saved</span>
-                  <strong>{recentUnsaved.take.songName}</strong> · {recentUnsaved.take.voiceName}
+                  <strong>{recentUnsaved.take.songName}</strong> · {recentUnsaved.take.voiceName}{recentUnsaved.take.duet && recentUnsaved.voiceUrl2 ? ` + ${recentUnsaved.take.duet.voiceName2}` : ''}
                   {' '}· {(() => { const m = Math.max(1, Math.round((Date.now() - Date.parse(recentUnsaved.createdAt)) / 60000)); return m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago` })()}
                   <span className="vs-recent-sub">Kept for 24 hours so you can still save it.</span>
                 </div>
