@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **`79eacf7` Result screen links:** stems re-signed at the moment of use, one auto-retry with fresh links, `result-mix-retry/failed` reports (the live duet's links were fresh and its mix reached "ready" — the later failure is unproven).
 - **Session wrap-up (docs only):** status summary of everything live (work commits `c50c782`, `493aa65`, `67968e6`, `51c50fe`, models `aadb06f`) and the open items.
 - **`c50c782` Duets (everyone, FROZEN):** today's path + clean-up + gentle master — today's master shaved duet peaks up to 5.1 dB in 205 spots (the distortion). **`493aa65`** "Duet (beta)" label + note.
 - **Duet clean-up only test (no app change):** today's duet path + her stem cleaned: her jumps 12 → 6, slips 178 → 120; 2 clips ("Clean-up test").

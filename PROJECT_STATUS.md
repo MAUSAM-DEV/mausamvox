@@ -6,6 +6,17 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🩹 2026-10-24 (3) — "Full-song mix failed" on the live duet → fresh links + auto-retry + failure report (`79eacf7`, everyone) — ⚠️ founder live test pending
+
+- **Founder:** duet "Aao Naa Kyun Ho Gaya Na" (Both · 2 Voices) — Result: "Full-song mix failed — some stem URLs may have expired", no music.
+- **Evidence (Vercel logs 06:23–06:35 UTC, Replicate jobs):** fresh upload 06:23; studio split stored + signed 06:25 (6 h links); duet clean-up 52 s; both conversions OK; `result-mix` timing at 06:31:15 = the full mix reached "ready" (music built in 15 s). The only duet since `c50c782`. So the links were ~6 min old — **expiry was NOT the cause**; the failure came later in the browser (the only record is its console). Page was hidden 06:32–06:34.
+- **Not proven:** which file failed afterwards. **Done instead (as asked):**
+  - Result signs every stem fresh from its storage path right before fetching (`refreshStemUrls` → `src/lib/stem-urls.ts`); bed / decode caches keyed by file (token stripped), so the music prepared during conversion is still reused.
+  - One automatic retry with fresh links before the error shows; new copy: "Full-song mix failed, even after retrying with fresh links. Vocals-only still works — reload the page to try again."
+  - Report: `[timing] client stage=result-mix-retry` / `result-mix-failed` with `step` (1 links, 2 voice, 3 music, 4 original vocal, 5 master) and `http`.
+- **Recovery:** duets aren't kept in "Recent — not saved" (single-voice takes only) → rerun. Its two converted voices are saved locally (`seedvc-local/work/duet/recover/`) in case.
+- Vercel Hobby keeps runtime logs ~45 min only (`--since 60m` refused) — check logs right after a failure.
+
 ## 📌 SESSION WRAP-UP 2026-10-24 — where things stand
 
 - **Live for everyone:**
