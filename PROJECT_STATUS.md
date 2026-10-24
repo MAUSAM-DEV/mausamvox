@@ -6,6 +6,18 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔊 2026-10-24 (4) — duet crackles traced (test) + per-section balance test + duets in "Recent — not saved" (`723ddee`) — founder to compare / live test
+
+- **Founder:** rerun full song OK (music back). Crackling at 0:20, 0:23, 0:30–0:32, 0:40, 2:01–2:05, 2:13, 3:08–3:09, 3:18, 5:39; male too loud vs the music, breaks at high speaker volume.
+- **Crackles = the voice engine's conversion** (measured on a rebuild of the saved rerun: same stems, same path incl. clean-up, the 06:28 conversions; rebuild = saved file within 0.1–0.4 dB per 30 s):
+  - saved file: no clipping (peaks −16…−3.4 dBFS at those times), no click bursts → not the mix / master;
+  - her voice: pitch lost / noisy where her stem is clean (0:20–0:40, 2:01–2:05: pitched only 8 % at 0:40, 39–56 % at 2:01–05; ×1.3–2.4 noisier) and noisier at 2:13 (×2.3); 3:18 = her original is already breathy (stem ×4.4);
+  - his voice: ×2.3 noisier at 3:08, ×4.6 at 5:39; a pitch crack at 0:23;
+  - the clean-up changes her stem only −14…−24 dB in overlaps and not at all in her solos; her voice is as noisy without it.
+- **Balance (test only):** measured in today's REAL duet chain (renders of each part): his voice is **2.3 dB quieter** than the original male vs the music (−1.9…−3.0 per section), hers ≈ the original (+0.2; −1.0…+2.2). The solo finishing's balance model is 4.5 dB off for this chain (mixvoice ≠ today's duet chain) → calibrated on the real chain instead: gain only, per section, 0.5 s ramps → 0.0 dB off the original in every sung section, both voices (his +1.9…+3.0, hers −2.2…+1.0). Script: `seedvc-local/work/duet2/balance_chain.py`.
+- **Clips** (voice "Duet balance test", 1:48–3:18 incl. 2:01–2:13, −18 LUFS): "duet — now" / "duet — balanced".
+- **`723ddee` (everyone):** duets kept in "Recent — not saved" for 24 h (both voices, `<id>-2.wav`), reopened as a 2-voice take with the gentle master.
+
 ## 🩹 2026-10-24 (3) — "Full-song mix failed" on the live duet → fresh links + auto-retry + failure report (`79eacf7`, everyone) — ⚠️ founder live test pending
 
 - **Founder:** duet "Aao Naa Kyun Ho Gaya Na" (Both · 2 Voices) — Result: "Full-song mix failed — some stem URLs may have expired", no music.
