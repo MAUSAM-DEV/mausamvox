@@ -6,7 +6,20 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
-## 🗺️ 2026-10-24 (11) — PLAN (awaiting OK, no app change): new engines for ALL users
+## 💳 2026-10-24 (12) — ROLLOUT STEP 1 shipped (`60415b1`): swaps charged on the server — ⚠️ founder must apply migration `20261024000000_swap_charges.sql`, then live test
+
+- **Founder's decisions (plan approved):** speed Option B; HD Voice 800 cr (India pricing revisited with real data); HD for everyone with enough credits during beta; MVSEP split for everyone; song 3 = Punjabi.
+- **New ledger `public.swap_charges`** + RPCs `charge_swap` / `attach_swap_job` / `settle_swap` / `refund_swap` / `swap_paid` (service_role only, RLS on, no policies). **Until it's applied, non-admin swaps are refused** ("Couldn't check your credits"). Admins are never charged and don't touch it.
+- **`/api/voice-convert`:** sign-in always required (the old "voiceModelUrl, no sign-in" path is gone). Every non-admin preview / full swap / duet voice is charged at POST before any machine starts; not enough → 402 with the price and balance. GET: failed job → refunded (once); delivered → settled (never refundable; a refunded job is never handed over). New DELETE = the page gave up (timeout, lost contact, the other duet voice failed) → job cancelled + refunded unless already delivered.
+- **Prices** in `src/lib/swap-prices.ts` (unchanged: full 200 per voice, previews 2 free per track then 50). A paid preview still counts toward the same take's full swap / save, once (checked in the ledger, not trusted from the browser). The old "free retry" refund is replaced by the refund of the failed job.
+- **HD / Standard tickets** carry the charge (`ch`): settled on delivery, refunded if every path fails or the page cancels.
+- **Saving a preview** → `/api/voice-swaps/charge-preview` (200 − the preview's cost; a second save costs 0). **`/api/voice-swaps/persist`** refuses a NEW non-admin swap without a delivered paid charge (re-saves stay free).
+- **Page:** no browser-side swap charges left; balance refreshed after failures. Still browser-side (not swaps, not changed): "Split" stems 50 cr on Voice Swap, Stem Studio 50 cr.
+- **Checks:** ledger SQL on a throwaway Postgres (PGlite), 32/32 rules pass (charge, once-only refund, delivered never refunded, insufficient = no change, preview counts / free uses back, discount once, save once, browser roles blocked). Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓ (needs `.env.local` copied in — first try failed without it, unrelated).
+- **Known limits:** closing the tab mid-swap = still charged if the voice finishes (it isn't kept anywhere to come back to). If one duet voice is delivered and the other then fails, the delivered half stays charged. A swap started before this deploy can't be saved after it. Free previews (2 per uploaded song, full-length) still need no credits — decide in step 5.
+- Vercel logs: `[charge]`.
+
+## 🗺️ 2026-10-24 (11) — PLAN (approved): new engines for ALL users
 
 - **Found (blocks opening up):** full swaps are charged by the browser after delivery (`VoiceSwapPage.tsx` `deductCredits`), and `/api/voice-convert` doesn't check the balance for a full swap. Anyone calling the server directly gets free swaps. Must move to the server first.
 - **Replicate billing (docs, checked today):** deployments are billed for all the time a machine is on (start-up + idle + work). Warm-up buys speed, never saves money. Prices today: L40S $0.0585/min, T4 $0.0135/min, CPU $0.006/min.

@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **`60415b1` Rollout step 1, server-side swap charging:** new ledger `swap_charges` (migration `20261024000000`, founder applies). Every non-admin preview / full swap / duet voice is charged before any machine starts (402 when short), refunded once on failure or cancel, never after delivery. Sign-in is now required for every swap. Saving a preview is charged on the server; persist refuses unpaid new swaps. The page no longer charges swaps. Ledger SQL 32/32 pass on PGlite.
 - **Plan proposed (no app change): new engines for all users.** Speed/cost options, HD credit price, "Unlimited" wording, 4-song test, load risks. Found: full swaps are charged by the browser, with no server balance check, so this must be fixed first. Awaiting OK. No work commit (plan only; last work commit `3ebfb67`).
 - **Vaani Step 1 (research, not live):** rvc-train (content_encoder) + engine version `01efc3f9`; Sukoon words — today's ear CER 0.58 vs Hindi ear 0.90 (100 epochs from RVC's HuBERT base) → disproven in this setup. 2 clips ("Vaani Step 1 — Sukoon (voice only)").
 - **Final duet crackle test (no app change):** melody fix only at crackle moments — his pitch cracks fall (33.9 → 5.0 s) but noise bursts barely move (20.8 → 19.3 s; hers 31.1 → 30.0 s) → not clearly better; Duet stays frozen. 2 clips ("Duet crackle test — Need You Now").
