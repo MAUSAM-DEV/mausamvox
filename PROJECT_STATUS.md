@@ -6,6 +6,16 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧪 2026-10-24 (8) — Vaani Step 0 (free, local): which content encoder hears SUNG Hindi best — founder to decide on Step 1
+
+- **Setup:** frozen encoders + the same linear CTC "text reader" (61 Devanagari characters) trained on FLEURS Hindi read speech (557 utt., CC-BY-4.0); scored on 100 held-out FLEURS utterances and 67 sung Hindi 5 s solo windows (original Sukoon lead 38, Aao Naa male 13 / female 16; reference = openai/whisper-small on the same window); speaker identity = 5-singer linear classifier on 1 s features. `seedvc-local/work/vaani/step0.py`, `step0_results.json`. $0.
+- **Results (character error, lower = better; speaker-ID accuracy, lower = less voice identity):**
+  - HuBERT base (RVC's ear today): speech 0.41 | **sung 0.86** | speaker-ID 0.81
+  - Vakyansh wav2vec2-Hindi (MIT; stand-in for the gated IndicWav2Vec): speech 0.15 | **sung 0.69 (−19.9 %)** | speaker-ID **0.59**
+  - Vaani Whisper-small-Hindi (Apache-2.0): speech 0.35 | **sung 1.54** (the probe falls apart on singing) | speaker-ID 0.71
+- **Verdict:** Whisper-encoder route: no. wav2vec2-Hindi route: borderline pass — 19.9 % fewer sung-Hindi errors (bar was 20 %) and much less voice identity in its features (good for sounding like the user).
+- **Caveats:** the sung reference is Whisper-small's own transcript (imperfect); 67 windows; IndicWav2Vec-Hindi (Apache-2.0, gated — needs the founder's Hugging Face OK) not tested. **Step 1 (≤ $10) waits for the founder's OK.**
+
 ## 🧊 2026-10-24 (7) — Duet FINAL (FROZEN): admin English duets through HD Voice (`3ebfb67`) — ⚠️ founder live test pending
 
 - **Founder:** prefers "duet — HD" for the English song (even with some crackles).
