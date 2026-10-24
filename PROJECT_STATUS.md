@@ -6,6 +6,13 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔒 2026-10-24 (9) — final duet test: HD + melody fix only at crackle moments (test only, ≈ $0.35) — Duet stays as is, PERMANENTLY FROZEN unless the founder hears it clearly better
+
+- **Founder:** live English HD duet = the "duet — HD" clip, with many crackles.
+- **Test:** SoulX once per voice; from the SAME SoulX output two RVC passes (normal = live; melody-guided = engine version `156e0f3f` with the stem-pitch guide); the guided pass used only at the normal pass's crackle moments ±0.15 s (crack > 1.5 st off / on the other singer's note, break, or noise burst > 3× the voice's median flatness), 40 ms crossfades; today's duet mix + gentle master.
+- **Result:** his cracks 33.9 → 5.0 s, but noise bursts (the likely "crackles") 20.8 → 19.3 s; hers: cracks 5.8 → 5.2 s, breaks 7.4 → 5.2 s, noise bursts 31.1 → 30.0 s. The "moments" cover 102 s (his) / 82 s (hers) of 237 s — the crackle is spread, not spot-fixable. **Not clearly better** by the numbers → Duet stays as is.
+- **Clips** (voice "Duet crackle test — Need You Now", 0:53–2:23, −18 LUFS): "duet — HD" / "duet — HD + crackle fix".
+
 ## 🧪 2026-10-24 (8) — Vaani Step 0 (free, local): which content encoder hears SUNG Hindi best — founder to decide on Step 1
 
 - **Setup:** frozen encoders + the same linear CTC "text reader" (61 Devanagari characters) trained on FLEURS Hindi read speech (557 utt., CC-BY-4.0); scored on 100 held-out FLEURS utterances and 67 sung Hindi 5 s solo windows (original Sukoon lead 38, Aao Naa male 13 / female 16; reference = openai/whisper-small on the same window); speaker identity = 5-singer linear classifier on 1 s features. `seedvc-local/work/vaani/step0.py`, `step0_results.json`. $0.
