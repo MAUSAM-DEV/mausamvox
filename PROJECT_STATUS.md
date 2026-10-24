@@ -6,6 +6,18 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔬 2026-10-24 (5) — duet overlap research: separation, outside pitch, overlap-only (test only, ≈ $0.40, live app unchanged) — founder to compare
+
+- **1. Separation:** nothing commercial-OK beats ours. MVSEP's best male/female is still MelRoformer 2025.01 (SDR 13.03, = ours); SCNet XL 11.83, aufr33 8.18, Sucial 6.52 (experimental, can't split singers taking turns). "Medley Vox (multi-singer)" on MVSEP: no licence, original weights never released, trained on research datasets → excluded. Not tested (no MVSEP minutes used).
+- **2. Melody guidance:** RVC's code supports an outside pitch track; our engine now has an optional `f0_file` input — models `675c0ff`, NEW version `156e0f3f…` only (live app pinned to `255794a3`, unchanged). Guide = each singer's pyin pitch from their own stem (leftover guard: on the other singer's note and ≥ 10 dB quieter → no pitch; gaps ≤ 0.15 s bridged).
+- **3. Overlap-only:** today's voices everywhere; the guided voice only where today's goes off its note during overlaps (±0.15 s, 40 ms crossfades).
+- **Results (overlap seconds; pitch vs each singer's own stem):**
+  - English "Need You Now" (68 s of overlap): his voice was pulled up toward hers (output median 306 Hz vs his stem 221 Hz; on his note only 60 %) → **cracks 38 % → 3 %, jumps 0.7 → 0 s**; but noisier (flatness 0.0104 → 0.0224) and breaks 0.3 → 3.8 %. Her voice ≈ unchanged (cracks 1.2 → 0.7 %).
+  - Hindi "Aao Naa" (53 s): no measurable change — the live clean-up already fixed her note jumps (0:12 now on her note); her remaining breaks (7 %) happen even with her correct note given (0:40: guide 408–440 Hz, output unpitched) → they come from what the engine "hears" in her stem, not from pitch.
+- **Clips** (gentle master; Hindi 1:48–3:18, English 0:53–2:23 = most overlap; −18 LUFS): voice "Duet research — Aao Naa" and "Duet research — Need You Now": "duet — now" / "duet — research fix".
+- Note: duets always use today's (Standard) engine, also for English — "HD Voice" isn't used in 2-voice mode. Replicate balance is under $5 (creates were throttled).
+- Scripts: `seedvc-local/work/duet3/` (`guide.py`, `repair.py`, `measure.py`, `conv3.mjs`, `clean.mjs`).
+
 ## 🔊 2026-10-24 (4) — duet crackles traced (test) + per-section balance test + duets in "Recent — not saved" (`723ddee`) — founder to compare / live test
 
 - **Founder:** rerun full song OK (music back). Crackling at 0:20, 0:23, 0:30–0:32, 0:40, 2:01–2:05, 2:13, 3:08–3:09, 3:18, 5:39; male too loud vs the music, breaks at high speaker volume.

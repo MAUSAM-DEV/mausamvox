@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **Duet overlap research (test only, ≈ $0.40):** no better commercial-OK separator; outside pitch (models `675c0ff`, engine version `156e0f3f`, not live) fixes the English male voice being pulled toward hers in overlaps (cracks 38 % → 3 %) but adds noise; Hindi unchanged (clean-up already fixed jumps; her breaks aren't pitch). 4 clips ("Duet research — …").
 - **`723ddee` Duets in "Recent — not saved"** (24 h, both voices). **Duet crackles traced (test):** the voice engine (her voice loses pitch in overlaps; his noisy at 3:08 / 5:39) — not clipping, mix, master or clean-up. **Balance test:** in the real duet chain his voice is 2.3 dB under the original's balance; calibrated per-section balance → 0.0 dB; 2 clips ("Duet balance test").
 - **`79eacf7` Result screen links:** stems re-signed at the moment of use, one auto-retry with fresh links, `result-mix-retry/failed` reports (the live duet's links were fresh and its mix reached "ready" — the later failure is unproven).
 - **Session wrap-up (docs only):** status summary of everything live (work commits `c50c782`, `493aa65`, `67968e6`, `51c50fe`, models `aadb06f`) and the open items.
