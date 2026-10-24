@@ -18,6 +18,7 @@ import { subShelfDb, SUB_SHELF_HZ, toneMatchDb, toneEqFilters } from '@/lib/audi
 import { DEFAULT_AIR_TARGET_DB } from '@/lib/audio-dsp/voice-polish'
 import { clampTarget, MASTER_TARGET_FALLBACK } from '@/lib/audio-dsp/master'
 import { clientTiming } from '@/lib/client-timing'
+import { refreshStemUrls } from '@/lib/stem-urls'
 import { ShareControl } from '@/components/share/ShareControl'
 import { ShareVideoButton } from '@/components/share/ShareVideoButton'
 
@@ -316,10 +317,13 @@ async function makeBed(spec: BedSpec, opts: BedOpts, fallback: Fallback): Promis
   }
   return sum(parts)
 }
+// A signed link without its token: the same stored file whatever link it was signed with, so a
+// re-signed link (Result signs fresh at the moment of use) still finds what was prepared with an older one.
+const linkKey = (s: string) => s.replace(/([?&])token=[^&"]*/g, '$1')
 // Last few beds (each ~95 MB for a 4½-min song, so only a few are kept).
 const bedCache = new Map<string, Promise<AudioBuffer | null>>()
 export function bedFor(spec: BedSpec, opts: BedOpts = {}, fallback: Fallback = quietFallback): Promise<AudioBuffer | null> {
-  const key = JSON.stringify([spec, !!opts.musicOnly, !!opts.originalKey])
+  const key = linkKey(JSON.stringify([spec, !!opts.musicOnly, !!opts.originalKey]))
   const hit = bedCache.get(key)
   if (hit) return hit
   const p = makeBed(spec, opts, fallback)
@@ -683,7 +687,15 @@ export function ResultStep({
     : null
   const converted = [convertedVocalsUrl, convertedVocalsUrl2].filter((u): u is string => Boolean(u))
 
-  const decoded = (url: string) => cached(`dec:${url}`, `dec|${url}`, () => decodeUrl(url))
+  const decoded = (url: string) => cached(`dec:${linkKey(url)}`, `dec|${linkKey(url)}`, () => decodeUrl(url))
+  // The stems as signed right before they're fetched (2026-10-24, the founder's rule: never stored
+  // expiring links): freshStems() re-signs every stem from its storage path; stems() = the latest.
+  const stemsRef = useRef<StemResult | null>(null)
+  const stems = (): StemResult | null => stemsRef.current ?? stemResult
+  async function freshStems(): Promise<StemResult | null> {
+    if (stemResult) stemsRef.current = await refreshStemUrls(stemResult)
+    return stems()
+  }
   async function shiftBuffer(b: AudioBuffer, opts: ShiftOptions): Promise<AudioBuffer> {
     return toBuffer(await dspShift(channelsOf(b), b.sampleRate, opts), b.sampleRate)
   }
@@ -695,7 +707,7 @@ export function ResultStep({
   }
   // Music (+ backing vocals unless musicOnly) in the take's key; drums stay put.
   function buildBed(opts: BedOpts = {}): Promise<AudioBuffer | null> {
-    return bedFor(bedSpecFor(stemResult, keyShift, !!(convertedVocalsUrl2 || duetUntouchedVocalsUrl)), opts, fxFallback)
+    return bedFor(bedSpecFor(stems(), keyShift, !!(convertedVocalsUrl2 || duetUntouchedVocalsUrl)), opts, fxFallback)
   }
 
   // The song's key (from the original music), found once — for Add harmony.
@@ -705,8 +717,9 @@ export function ResultStep({
     if (!songKeyRef.current) {
       setSongKey('pending')
       songKeyRef.current = (async () => {
-        if (tonalUrls.length === 0) return null
-        const key = await dspKey(monoOf(sum(await Promise.all(tonalUrls.map(decodeUrl)))), 44100)
+        const tonal = bedSpecFor(stems(), keyShift, false).tonalUrls
+        if (tonal.length === 0) return null
+        const key = await dspKey(monoOf(sum(await Promise.all(tonal.map(decodeUrl)))), 44100)
         console.log('[voice-fx] song key', keyName(key), key)
         return key
       })().catch((err) => { console.error('[voice-fx] key detection failed:', err); return null })
@@ -720,7 +733,7 @@ export function ResultStep({
   // so each song's voice gets as bright as its own singer was.
   const airTargetRef = useRef<Promise<number> | null>(null)
   function airTarget(): Promise<number> {
-    const leadUrl = stemResult?.leadVocalsUrl || stemResult?.vocalsUrl
+    const leadUrl = stems()?.leadVocalsUrl || stems()?.vocalsUrl
     airTargetRef.current ??= (async () => {
       if (!leadUrl) return DEFAULT_AIR_TARGET_DB
       const lead = await decoded(leadUrl)
@@ -834,8 +847,14 @@ export function ResultStep({
     void songRef() // the uploaded song's loudness, measured alongside
     setFullMixState('mixing')
     const mixStart = performance.now()
-    ;(async () => {
+    // Which step is running (for the failure report): 1 links, 2 voice, 3 music, 4 original vocal, 5 master
+    let step = 0
+    const build = async () => {
+      step = 1
+      await freshStems() // fresh links at the moment of use
+      if (cancelled) return
       // 1. The voice first, so "Vocals only" can play while the music is prepared.
+      step = 2
       let t0 = performance.now()
       const [layers, partner] = await Promise.all([
         voiceLayers(voiceFx),
@@ -853,8 +872,11 @@ export function ResultStep({
       // voice converted — prewarmResultMusic). The Original side's full mix is
       // built only when first asked for (ensureOriginal); its vocals are here.
       t0 = performance.now()
+      step = 3
       const bed = await buildBed()
-      const lead = await decoded(stemResult.leadVocalsUrl || stemResult.vocalsUrl)
+      step = 4
+      const sr = stems() ?? stemResult
+      const lead = await decoded(sr.leadVocalsUrl || sr.vocalsUrl)
       const musicMs = performance.now() - t0
       if (cancelled) return
       setInputs({ ...inputsRef.current!, bed })
@@ -880,6 +902,7 @@ export function ResultStep({
       } catch (err) { console.warn('[master] tone match skipped:', err); gains = undefined; prebuilt = undefined }
       if (cancelled) return
       setToneEq(gains)
+      step = 5
       const { gain, ms } = await masteredMix({ ...liveParamsRef.current, toneEq: gains }, prebuilt)
       const masterMs = performance.now() - t0
       if (cancelled) return
@@ -898,9 +921,21 @@ export function ResultStep({
       const originals = await Promise.all((convertedSourceUrls ?? []).filter(Boolean).map((u) => inKey(u, () => decoded(u))))
         .catch(fxFallback('voice blend', [] as AudioBuffer[]))
       if (!cancelled && inputsRef.current) setInputs({ ...inputsRef.current, originals })
+    }
+    // A failure (an expired or unreachable link, most likely) is retried once with freshly signed
+    // links before the error shows; both are reported (Vercel logs: [timing] client stage=result-mix-…).
+    const httpOf = (err: unknown) => Number(String(err instanceof Error ? err.message : err).match(/fetch failed \((\d+)\)/)?.[1] ?? 0)
+    ;(async () => {
+      try { await build() } catch (err) {
+        if (cancelled) return
+        console.warn(`[result] mix preparation failed at step ${step} — retrying with fresh links:`, err)
+        clientTiming('result-mix-retry', { step, http: httpOf(err) })
+        await build()
+      }
     })().catch((err) => {
       if (cancelled) return
       console.error('[result] mix preparation failed:', err)
+      clientTiming('result-mix-failed', { step, http: httpOf(err) })
       setFullMixState('error'); setMode('vocals')
     })
     return () => { cancelled = true }
@@ -1069,7 +1104,8 @@ export function ResultStep({
     const mine = (originalRef.current = (async () => {
       setOriginalPending(true)
       const start = performance.now()
-      const lead = await decoded(stemResult.leadVocalsUrl || stemResult.vocalsUrl)
+      const sr = stems() ?? stemResult
+      const lead = await decoded(sr.leadVocalsUrl || sr.vocalsUrl)
       const originalBed = keyShift ? await buildBed({ originalKey: true }) : inputsRef.current!.bed!
       const pre = await renderMix({ voices: [lead], harmony: [], partner: null, originals: [], bed: originalBed }, NEUTRAL_PARAMS)
       const m = await dspMaster(channelsOf(pre), pre.sampleRate, await masterTarget())
@@ -1248,7 +1284,7 @@ export function ResultStep({
               )}
               {fullMixState === 'error' && mode === 'vocals' && (
                 <div className="vs-mix-note vs-mix-note--err">
-                  Full-song mix failed — some stem URLs may have expired. Vocals-only still works.
+                  Full-song mix failed, even after retrying with fresh links. Vocals-only still works — reload the page to try again.
                 </div>
               )}
               {!canPlay ? (
