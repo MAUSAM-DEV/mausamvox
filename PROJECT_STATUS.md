@@ -1,10 +1,33 @@
 # MausamVox — Project Status
 
-_Last updated: 2026-10-12 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
+_Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre-launch mode ON — public sign-ups closed**)_
 
 **✅ Migrations (checked 2026-10-03, read-only):** all 20 files in `supabase/migrations/` are applied in production — share links (`share_token` column exists), Voice Library (4 `voice_clones` columns exist), waitlist (table exists, 15 sign-ups), polish re-save grant (a swap was re-saved via UPDATE on 2026-08-13 14:55 UTC — that UPDATE fails without the grant). Older "⚠️ PENDING / NOT APPLIED" notes further down are historical. **✅ Replicate topped up** ($10, founder, 2026-10-03) — the under-$5 throttle note below is resolved.
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
+
+## 📌 SESSION WRAP-UP 2026-10-24 — where things stand
+
+- **Live for everyone:**
+  - Duet (beta, FROZEN) `c50c782` / `493aa65`;
+  - Gender Lock hidden in 2-voice `67968e6`;
+  - warm-up pings capped `51c50fe`;
+  - Voice Lab ALAC uploads `ea8adb9` + storage-stall time limits `7a53d7e`;
+  - finishing NaN fix (models `f7ad63c`).
+- **Live for admin only:**
+  - Auto engine waits for the song language `5f4ef4b`;
+  - gentle master for finished-voice takes `9eaf6df`;
+  - engine plan steps 1–5.
+- **Cloud models:**
+  - `hd-finish-cpu` release 5 (`1df1237c` = models `aadb06f`: finishing + language + duetclean), max 1 instance;
+  - `rvc-index-l40s`;
+  - `soulx-l40s` release 4.
+- **Open for the founder:**
+  - live-test the frozen duet (no crunch at 3:05 / 4:35–4:50; quieter than the original);
+  - verdict on the "Wife (All)" clips (voice "Wife voice test");
+  - speed / warm-up cost decision before beta (HD ~8 min upload → result);
+  - whether to raise `hd-finish-cpu` max instances (duet clean-ups + finishings queue on one machine).
+- **Local only:** test copies of the duet audio in `public/dsp-test/duet/` (git-ignored; a safety check blocked my delete — remove when you like).
 
 ## 🧊 2026-10-24 (2) — DUET FROZEN: today's path + clean-up + gentle master, live for everyone (`c50c782`, `493aa65`) — ⚠️ founder live test pending
 
