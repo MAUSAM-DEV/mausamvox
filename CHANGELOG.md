@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **`3ebfb67` Admin English duets → HD Voice** (SoulX → RVC, no finishing, one SoulX retry on a failed quality check). Other languages unchanged. Duet FROZEN.
 - **English duet HD test (no app change):** SoulX → RVC per singer; overlaps no better (his jumps 0.7 → 1.9 s, breaks up); her first SoulX run failed its quick check. Melody fix dropped. 2 clips ("Duet HD test — Need You Now").
 - **Duet overlap research (test only, ≈ $0.40):** no better commercial-OK separator; outside pitch (models `675c0ff`, engine version `156e0f3f`, not live) fixes the English male voice being pulled toward hers in overlaps (cracks 38 % → 3 %) but adds noise; Hindi unchanged (clean-up already fixed jumps; her breaks aren't pitch). 4 clips ("Duet research — …").
 - **`723ddee` Duets in "Recent — not saved"** (24 h, both voices). **Duet crackles traced (test):** the voice engine (her voice loses pitch in overlaps; his noisy at 3:08 / 5:39) — not clipping, mix, master or clean-up. **Balance test:** in the real duet chain his voice is 2.3 dB under the original's balance; calibrated per-section balance → 0.0 dB; 2 clips ("Duet balance test").

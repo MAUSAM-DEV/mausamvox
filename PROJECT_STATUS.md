@@ -6,6 +6,12 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧊 2026-10-24 (7) — Duet FINAL (FROZEN): admin English duets through HD Voice (`3ebfb67`) — ⚠️ founder live test pending
+
+- **Founder:** prefers "duet — HD" for the English song (even with some crackles).
+- **`3ebfb67` (admin only):** English duets (song language detected, waited ≤ 60 s, else the title) → both voices on an HD ticket with `nf` (no finishing): SoulX (preferred reference / Voice Lab recording) → our RVC voice (rmvpe, pitch 0) → delivered; her input is still the cleaned stem; Result = today's duet mix + gentle master. A SoulX quality-check failure on a duet ticket restarts SoulX once before today's engine (log `[hd-voice] RESTART SoulX: SoulX failed its quality check`; final voice `[hd-voice] HD duet voice delivered (no finishing)`). Hindi / other languages and all non-admin duets: today's duet path + clean-up, unchanged. Browser log: `[duet] song language … → HD Voice for both voices`.
+- **Duet = "Duet (beta)", FROZEN.**
+
 ## 🎧 2026-10-24 (6) — English duet with HD Voice (test only, ≈ $0.35) — founder to compare
 
 - **Founder:** English "now" beat the melody fix → melody fix dropped (engine version `156e0f3f` stays unused).
