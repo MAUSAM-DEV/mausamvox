@@ -6,6 +6,14 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🗺️ 2026-10-24 (11) — PLAN (awaiting OK, no app change): new engines for ALL users
+
+- **Found (blocks opening up):** full swaps are charged by the browser after delivery (`VoiceSwapPage.tsx` `deductCredits`), and `/api/voice-convert` doesn't check the balance for a full swap. Anyone calling the server directly gets free swaps. Must move to the server first.
+- **Replicate billing (docs, checked today):** deployments are billed for all the time a machine is on (start-up + idle + work). Warm-up buys speed, never saves money. Prices today: L40S $0.0585/min, T4 $0.0135/min, CPU $0.006/min.
+- **Estimated voice-part cost per swap (measured times × today's prices):** Standard + finishing ~$0.07 on T4 / ~$0.20 on L40S when cold. HD ~$0.41–0.52 when cold, ~$0.14 when machines are already on.
+- **Proposed:** speed option B (one 3-min warm-up per song, Standard on T4, voice machine woken when SoulX starts); Standard 200 cr, HD 600 cr (or 800), refund to 200 if HD falls back; "Unlimited" → 40 swaps / 50 HD swaps / 75,000 credits; one running swap per user + daily HD cap; raise machine limits (SoulX 1 → 3, voice 2 → 4, finishing 1 → 3); `NEW_ENGINES` switch off / testers / all; 4-song test on a non-admin account first (it needs its own trained voices).
+- Full plan in chat. Founder to choose: speed option, HD price, who gets HD, MVSEP split for everyone, song 3's language.
+
 ## 🧪 2026-10-24 (10) — Vaani Step 1: Hindi ear (wav2vec2-Hindi) vs today's (HuBERT) — DISPROVEN in this setup (≈ $1.5–2.5) — waiting for the founder
 
 - **Built for the test (models repo, not live):** `mausam-dev/rvc-train` (private; copy of zsxkib/voice-cloning-training, MIT) with a `content_encoder` input — fixes needed: torch pin for cog 0.16, gradio/fastapi pins removed (container never started), audio loading via librosa (new PyAV API), RVC's `logs/mute` silence clips (git-ignored); deployment `rvc-train-l40s` (paused, max 0). Engine `rvc-v2-index` version `01efc3f9…` (+ `content_encoder`; live app still pinned `255794a3`).

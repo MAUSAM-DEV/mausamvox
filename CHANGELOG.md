@@ -2,6 +2,7 @@
 
 ## 2026-10-24
 
+- **Plan proposed (no app change): new engines for all users.** Speed/cost options, HD credit price, "Unlimited" wording, 4-song test, load risks. Found: full swaps are charged by the browser, with no server balance check, so this must be fixed first. Awaiting OK. No work commit (plan only; last work commit `3ebfb67`).
 - **Vaani Step 1 (research, not live):** rvc-train (content_encoder) + engine version `01efc3f9`; Sukoon words — today's ear CER 0.58 vs Hindi ear 0.90 (100 epochs from RVC's HuBERT base) → disproven in this setup. 2 clips ("Vaani Step 1 — Sukoon (voice only)").
 - **Final duet crackle test (no app change):** melody fix only at crackle moments — his pitch cracks fall (33.9 → 5.0 s) but noise bursts barely move (20.8 → 19.3 s; hers 31.1 → 30.0 s) → not clearly better; Duet stays frozen. 2 clips ("Duet crackle test — Need You Now").
 - **Vaani Step 0 (free, local):** sung-Hindi character error — HuBERT 0.86, wav2vec2-Hindi (Vakyansh) 0.69 (−19.9 %, less voice identity 0.59 vs 0.81), Vaani Whisper-Hindi encoder 1.54 (no). Step 1 awaits OK.
