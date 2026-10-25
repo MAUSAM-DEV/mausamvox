@@ -8,7 +8,7 @@ import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { cancelHdVoice, hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
 import { attachSwapJob, chargeSwap, refundSwap, settleSwap } from '@/lib/swap-charges'
-import { FULL_SWAP_CREDITS, PREVIEW_CREDITS } from '@/lib/swap-prices'
+import { FULL_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
 
 export const maxDuration = 30
 
@@ -19,6 +19,9 @@ export const maxDuration = 30
 // paid preview of the same take cost). The charge is refunded, at most once, when the
 // job can't start, when a poll sees it failed, or when the page cancels it (DELETE)
 // before the voice was delivered. A delivered voice is settled and never refunded.
+// Guards (2026-10-25, step 2), checked in the same atomic step: one swap at a time per
+// account (the two voices of one duet share a pairId), at most HD_SWAPS_PER_DAY HD
+// Voice full swaps in 24 h.
 
 // Replicate SDK v1 wraps file outputs in a FileOutput class whose .url()
 // method returns a URL object. JSON.stringify() shows {} because the URL
@@ -69,6 +72,8 @@ export async function POST(req: NextRequest) {
       previewId?: string
       // One voice of a 2-voice duet (charged FULL_SWAP_CREDITS per voice, kind 'duet').
       twoVoice?: boolean
+      // Shared by the two voices of one duet: they may run at the same time (one-swap guard).
+      pairId?: string
       // HD voice (SoulX → the user's RVC voice → finishing) for this take —
       // single-voice swaps only; used only for accounts hdVoiceAllowed() lets
       // through. The finishing needs the song's music: its durable stem paths.
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, previewId, twoVoice = false, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource, duet } = body
+    const { vocalsUrl, vocalsPath, voiceModelUrl, voiceId, pitchShift = 0, autotune = 0, isPreview = false, trackKey, retryOf, previewId, twoVoice = false, pairId, hd = false, instrumentalPath, backingPath, hdTest, engine: engineChoice, engineChoice: engineUiChoice, songLanguage, languageSource, duet } = body
     if (!vocalsUrl) {
       return NextResponse.json({ error: 'vocalsUrl is required' }, { status: 400 })
     }
@@ -153,14 +158,25 @@ export async function POST(req: NextRequest) {
     let previewCharged = 0
     if (!isAdmin) {
       const kind = isPreview ? 'preview' : twoVoice ? 'duet' : 'full'
+      // The engine this take will start on (the same test as the HD branch below) — for the HD cap.
+      const engine = hd && voiceId && hdVoiceAllowed(user.email) && engineChoice !== 'standard' ? 'hd' : 'standard'
       const charge = await chargeSwap({
         userId: user.id, kind, price: isPreview ? PREVIEW_CREDITS : FULL_SWAP_CREDITS,
         trackKey: trackKey ?? '', previewId: isPreview ? undefined : previewId,
+        guard: { engine, pairId: twoVoice && typeof pairId === 'string' ? pairId.slice(0, 64) : undefined },
       })
       if (!charge.ok) {
         if (charge.insufficient) {
           const price = isPreview ? PREVIEW_CREDITS : FULL_SWAP_CREDITS
           return NextResponse.json({ error: `Not enough credits — this ${isPreview ? 'preview' : 'swap'} costs up to ${price} credits and you have ${charge.creditsRemaining}. Top up to continue.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
+        }
+        if (charge.blocked === 'running') {
+          const freeIn = Math.max(1, Math.ceil(SWAP_LOCK_MINUTES - (Date.now() - Date.parse(charge.runningSince)) / 60_000))
+          return NextResponse.json({ error: `You already have a swap running — wait for it to finish (one swap at a time). If you closed that page, you can start a new one in about ${freeIn} min.` }, { status: 409 })
+        }
+        if (charge.blocked === 'hd_cap') {
+          const hours = Math.max(1, Math.ceil((Date.parse(charge.hdFreeAt) - Date.now()) / 3_600_000))
+          return NextResponse.json({ error: `You've used your ${HD_SWAPS_PER_DAY} HD Voice swaps for today. Choose Standard on Configure, or try HD again in about ${hours} h.` }, { status: 429 })
         }
         return NextResponse.json({ error: "Couldn't check your credits — please try again in a minute." }, { status: 500 })
       }

@@ -1681,6 +1681,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           songLanguage: duetLang.language, languageSource: duetLang.source,
         } : {}
         if (duetLang) console.log(`[duet] song language ${duetLang.language ?? `unknown (title: ${duetLang.source})`} → ${hdDuet ? 'HD Voice for both voices' : "today's duet path"}`)
+        const duetPairId = crypto.randomUUID()
         const startJob = (vocalsUrl: string | undefined, vocalsPath: string | undefined, voiceId: string, pitch: number) =>
           fetch('/api/voice-convert', {
             method: 'POST',
@@ -1691,6 +1692,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               isPreview: false,
               trackKey: stemResult.storagePath || '',
               twoVoice: true, // charged per voice by the server (2 × 200)
+              pairId: duetPairId, // the two voices may run together (one swap at a time otherwise)
               ...hdFields,
             }),
           }).then(async (r) => {

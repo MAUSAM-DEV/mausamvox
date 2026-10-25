@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (charge.insufficient) {
       return NextResponse.json({ error: `Not enough credits — saving this swap costs up to ${FULL_SWAP_CREDITS} credits and you have ${charge.creditsRemaining}. Top up to continue.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
     }
-    if (charge.previewNotFound) return NextResponse.json({ error: "This preview can't be saved any more — run the full swap instead." }, { status: 404 })
+    if (!charge.blocked && charge.previewNotFound) return NextResponse.json({ error: "This preview can't be saved any more — run the full swap instead." }, { status: 404 })
     return NextResponse.json({ error: "Couldn't check your credits — please try again in a minute." }, { status: 500 })
   }
   return NextResponse.json({ charged: charge.charged, creditsRemaining: charge.creditsRemaining })
