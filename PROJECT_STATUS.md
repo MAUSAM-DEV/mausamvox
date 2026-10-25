@@ -6,6 +6,15 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎭 2026-10-25 (7) — duet split for everyone (beta) + no unsplit duets + SoulX warmed early (`591027a`) — ⚠️ founder live test pending; step 5 on hold
+
+- **Founder:** OK for both fixes; re-saved the Replicate limits — confirmed live: soulx-l40s 3, rvc-index-l40s 4, rvc-index-t4 4, hd-finish-cpu 3.
+- **Duet split (beta):** `DUET_SPLIT_ANY_PLAN = true` (`src/lib/swap-prices.ts`) — page + `/api/gender-split` let any plan split with ≥ 250 cr (charged/refunded as before; "Premium" labels hidden). `false` = Premium-only again.
+- **Marked as a duet, not split:** Configure blocks Preview/Process with "⚠ This song is marked as a duet — split it before swapping" + `Split duet · 250 cr` / `It’s not a duet` (unticks; runs the lead split if there's no lead); `handleProcess` refuses too.
+- **Not marked, no clean single lead:** the lead-failure banner now says it "often means two singers take turns (a duet)" and offers `Split duet · 250 cr` first, then "Try the lead split again" / "Use the full vocal anyway". (The founder's Tere Hawaale went through "Use the full vocal anyway".)
+- **Warm-up (new engines):** while Auto doesn't know the song's language, both the T4 voice machine and SoulX are warmed (same 3-min window); the moment the language lands the page pings once for the engine Auto picks.
+- Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🔍 2026-10-25 (6) — step 4 live test: why 11–13 min, English HD differences, duet split gate (evidence only, no app change) — awaiting the founder's OK; step 5 on hold
 
 - **Founder:** SoulX deployment switched to `50d5785f` (release 5, max 3; the other limits not raised yet). Hindi duet "Tere Hawaale": Split duet blocked ("Premium"), went on without it → his voice sang both parts, female part thin, 13 min. English "Thinking Out Loud" (Mausam English, HD, Auto key −3): not as good as admin, 11 min 20 s.
