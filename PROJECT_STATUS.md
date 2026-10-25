@@ -6,6 +6,14 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🔍 2026-10-25 (6) — step 4 live test: why 11–13 min, English HD differences, duet split gate (evidence only, no app change) — awaiting the founder's OK; step 5 on hold
+
+- **Founder:** SoulX deployment switched to `50d5785f` (release 5, max 3; the other limits not raised yet). Hindi duet "Tere Hawaale": Split duet blocked ("Premium"), went on without it → his voice sang both parts, female part thin, 13 min. English "Thinking Out Loud" (Mausam English, HD, Auto key −3): not as good as admin, 11 min 20 s.
+- **Duet timeline (UTC):** upload 14:01:48 → lead/language ready ~14:05:14 → Process ~14:06:05 → voice on T4 waited 39 s + ran 87 s → **finishing 287 s** (usual ~30 s; input = the WHOLE vocal track `hq-…-vocals.flac`, 5:46, both singers — no lead split was used) → ~14:13:08 + page mix. Cause of the slow finishing unproven (one 146 s run seen before).
+- **English timeline:** upload 14:22:14 → split + language ~14:26:46 → Process 14:27:12. During the warm-up Auto was still "Standard" (language unknown), so the T4 was warmed, not SoulX; SoulX pings began 14:27:22, after Process → **SoulX waited 124 s (cold) + ran 108 s**; L40S voice waited **0 s** (woken while SoulX sang ✓) + 21 s; finishing 36 s → 14:32:14 + page. After Process ≈ 5 min; the split phase before it ≈ 4 min.
+- **English HD:** the new pick WAS used (`REFERENCE start 210 s`, words 14). Differences vs admin's 10-23 "Mausam (Singing)" swaps: voice model (Voice Lab English recording vs the hand-made 3:00 of the Hindi-singing m4a); **Auto key −3 vs 0** (on this lead the English recording sits 6.7 st below the song, the Singing one 3.1 → inside the ±4 comfort band); reference now the same spot (3:30 of the same English recording). Admin's actual 10-23 job inputs are gone (computed by the same rule).
+- **Split duet:** premium-only since `7775a4e` (2026-06-20) — page and `/api/gender-split` both refuse `plan = 'free'`; billing isn't wired, so every non-admin account is free → nobody but admins can split. The 250 cr charge itself is already server-side.
+
 ## ⚡ 2026-10-25 (5) — ROLLOUT STEP 4 shipped (`99df183`, speed Option B) + stable HD reference pick (models `dcbf854`, soulx-svc `50d5785f`) — ⚠️ founder: switch the SoulX deployment + raise limits, then live test
 
 - **Founder:** "Mausam Hindi" (Voice Lab, `Mausam Vox voice test.m4a`, Hindi, cleanup on) on the test account sounds as good as admin on Rock On. Don't copy admin's reference clips (real users won't have them) — the automatic pick must be good on its own.
