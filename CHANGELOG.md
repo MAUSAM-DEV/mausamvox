@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-25
+
+- **`0d549f6` Rollout step 2, per-account guards:** migration `20261025000000` (founder applies) + `charge_swap_checked`. One swap at a time per account (409; the lock runs out after 30 min if the page was closed; the two voices of one duet run together). HD Voice max 5 full swaps per 24 h (429; refunded ones free their slot; takes effect when step 3 opens HD). Guards 23/23 pass on PGlite. Step 1 live test passed (founder).
+
 ## 2026-10-24
 
 - **`60415b1` Rollout step 1, server-side swap charging:** new ledger `swap_charges` (migration `20261024000000`, founder applies). Every non-admin preview / full swap / duet voice is charged before any machine starts (402 when short), refunded once on failure or cancel, never after delivery. Sign-in is now required for every swap. Saving a preview is charged on the server; persist refuses unpaid new swaps. The page no longer charges swaps. Ledger SQL 32/32 pass on PGlite.

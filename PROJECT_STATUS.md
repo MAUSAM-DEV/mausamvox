@@ -6,7 +6,17 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
-## 💳 2026-10-24 (12) — ROLLOUT STEP 1 shipped (`60415b1`): swaps charged on the server — ⚠️ founder must apply migration `20261024000000_swap_charges.sql`, then live test
+## 🚦 2026-10-25 — ROLLOUT STEP 2 shipped (`0d549f6`): one swap at a time + HD cap — ⚠️ founder must apply migration `20261025000000_swap_guards.sql`, then live test
+
+- **Step 1 live test PASSED** (founder, test account mausam.theshadows, non-admin): full swap charged at once and saved; at 50 cr "Not enough credits … you have 50"; admin never charged.
+- **Founder's notes for later (not fixed):** (a) a Hindi duet uploaded without ticking "duet" swapped badly and crackled → auto-detect duets or warn more strongly before processing; (b) move the 50 cr split charge to the server.
+- **Migration `20261025000000`:** `swap_charges.engine`, `swap_charges.pair_id`, and RPC `charge_swap_checked` (service_role only). The guards run under the same user-row lock as the charge, so two tabs at once can't both pass. **Until it's applied, non-admin swaps are refused** ("Couldn't check your credits").
+- **One swap at a time:** a new preview / full swap / duet is refused (409) while another of the account's swaps is still running: "You already have a swap running — wait for it to finish … If you closed that page, you can start a new one in about N min." A swap whose page was closed stops blocking after 30 min (`SWAP_LOCK_MINUTES`). The two voices of one duet share a pair id and run together. Saving a preview isn't blocked.
+- **HD Voice cap:** max 5 HD full swaps per account in any 24 h (`HD_SWAPS_PER_DAY`, 429): "You've used your 5 HD Voice swaps for today. Choose Standard on Configure, or try HD again in about N h." Refunded swaps don't count, a duet counts once, previews don't count. **Not live-testable yet:** only admins get HD today, and they're never charged — it comes into play with step 3.
+- **Checks:** guards on a throwaway Postgres (PGlite), 23/23 pass (lock, other accounts unaffected, delivered/refunded release it, 30-min expiry, duet pair together / other duet blocked, HD 5 → 6th blocked, Standard still OK at the cap, refunded and > 24 h ones free a slot, duet counted once, insufficient leaves no lock, browser roles blocked). Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+- Vercel logs: `[charge] … refused — another swap is running` / `refused — HD cap`.
+
+## 💳 2026-10-24 (12) — ROLLOUT STEP 1 shipped (`60415b1`): swaps charged on the server — ✅ migration applied, live test PASSED 2026-10-25
 
 - **Founder's decisions (plan approved):** speed Option B; HD Voice 800 cr (India pricing revisited with real data); HD for everyone with enough credits during beta; MVSEP split for everyone; song 3 = Punjabi.
 - **New ledger `public.swap_charges`** + RPCs `charge_swap` / `attach_swap_job` / `settle_swap` / `refund_swap` / `swap_paid` (service_role only, RLS on, no policies). **Until it's applied, non-admin swaps are refused** ("Couldn't check your credits"). Admins are never charged and don't touch it.
