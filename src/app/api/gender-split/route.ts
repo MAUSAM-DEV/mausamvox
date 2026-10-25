@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { logStageTiming } from '@/lib/replicate-timing'
 
 // Gender-split is a PREMIUM feature. Cost is a placeholder — change here only.
-const GENDER_SPLIT_COST = 250
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS } from '@/lib/swap-prices'
+const GENDER_SPLIT_COST = DUET_SPLIT_CREDITS
 
 // GET copies both stems into Supabase (2 downloads + 2 uploads) before
 // returning, so allow more time than a pure status check.
@@ -249,8 +250,9 @@ export async function POST(req: NextRequest) {
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
 
     if (!isAdmin) {
-      // 3. Plan gate — premium tiers are starter | pro | studio; only 'free' is blocked.
-      if (profile.plan === 'free') {
+      // 3. Plan gate — premium tiers are starter | pro | studio; only 'free' is blocked
+      //    (off during the beta: DUET_SPLIT_ANY_PLAN — the credits below are the gate).
+      if (profile.plan === 'free' && !DUET_SPLIT_ANY_PLAN) {
         return NextResponse.json({ error: 'Premium feature' }, { status: 403 })
       }
 

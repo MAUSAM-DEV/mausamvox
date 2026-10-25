@@ -8,3 +8,9 @@ export const FREE_PREVIEWS_PER_TRACK = 2    // previews per uploaded song that c
 // (charge_swap_checked, migration 20261025000000):
 export const SWAP_LOCK_MINUTES = 30         // one swap at a time; a swap whose page was closed stops blocking after this
 export const HD_SWAPS_PER_DAY = 5           // HD Voice full swaps per account in any 24 hours (beta)
+
+// Duet split (male/female singers, MVSEP) — charged and refunded on the server by /api/gender-split.
+export const DUET_SPLIT_CREDITS = 250
+// Beta (founder, 2026-10-25): any plan may split a duet when it has the credits — billing isn't
+// wired, so every non-admin account is on 'free'. false = Premium plans only again (as before).
+export const DUET_SPLIT_ANY_PLAN = true

@@ -20,7 +20,7 @@ import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 import { titleLooksEnglish } from '@/lib/title-language'
 import { refreshStemUrls } from '@/lib/stem-urls'
-import { FULL_SWAP_CREDITS } from '@/lib/swap-prices'
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS } from '@/lib/swap-prices'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -29,9 +29,9 @@ const STEM_CACHE_KEY = 'mvox_stem_session'
 const STEM_CACHE_TTL_MS = 5 * 60 * 60 * 1000 // 5 hours (signed URLs last 6h)
 // Length of the short clip the Fine-tune panel renders for previews — keeps a
 // tuning render to ~12 s of vocal instead of the whole song (faster + cheaper).
-// Client mirror of the server's GENDER_SPLIT_COST (api/gender-split). Drives the
-// premium-split button's affordability state; the server remains the real gate.
-const GENDER_SPLIT_COST = 250
+// The server's duet-split price (lib/swap-prices.ts, api/gender-split). Drives the
+// split button's affordability state; the server remains the real gate.
+const GENDER_SPLIT_COST = DUET_SPLIT_CREDITS
 // Final pitch sent to RVC = auto key-match + manual Pitch Shift, clamped to a
 // sane semitone range (manual is ±12, auto up to ±24) and rounded to an integer.
 // Shared with Saved Tracks (SwapsIndexPage): a save still running there shows
@@ -65,7 +65,8 @@ const WARM_PING_EVERY_MS = 60_000
 const WARM_MAX_MS = 10 * 60_000
 // New-engine accounts (rollout step 4, Option B, 2026-10-25 — cost per swap): ONE warm-up per song,
 // starting when a voice is picked on Configure, for at most this long: the Standard voice machine (T4)
-// + the finishing machine, or SoulX (L40S, ≈ $0.06/min) + the finishing machine for HD Voice. At most
+// + the finishing machine, or SoulX (L40S, ≈ $0.06/min) + the finishing machine for HD Voice (Auto with the
+// language still unknown: both, until it's known — then at once only the engine Auto picks). At most
 // ≈ $0.18 (HD) / $0.04 (Standard) per song. A second take of the same song starts cold.
 const NEW_ENGINE_WARM_MAX_MS = 3 * 60_000
 // …and their pings come every 30 s: our deployments shut an idle machine down in under a minute
@@ -1073,7 +1074,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // server is still the real gate and already has its own admin bypass.
   async function handleSplitDuet() {
     if (!stemResult) return
-    if (!isAdmin && plan === 'free') {
+    if (!isAdmin && plan === 'free' && !DUET_SPLIT_ANY_PLAN) {
       showToast('Duet split is a Premium feature — upgrade to split male/female vocals.')
       return
     }
@@ -1250,8 +1251,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // (+ SoulX for HD Voice). Everyone else: as before (Upload with a song in + Configure, WARM_MAX_MS).
   const effectiveVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
   const voicePicked = !!selectedVoiceId
-  const engineWarmRef = useRef({ newEngines: false, engine: effectiveVoiceEngine as string, song: '' })
-  engineWarmRef.current = { ...engineWarmRef.current, newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
+  const warmLanguage = stemResult?.songLanguage ?? ''
+  const engineWarmRef = useRef({ newEngines: false, engine: effectiveVoiceEngine as string, song: '', languageUnknown: false })
+  // Auto with the song's language not known yet (it lands ~20–60 s after the lead split): warm BOTH
+  // the Standard voice machine and SoulX, inside the same window — once it's known only the one Auto
+  // picks (2026-10-25: the warm-up warmed Standard, the song came back English, SoulX started cold).
+  engineWarmRef.current = { ...engineWarmRef.current, newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '', languageUnknown: voiceEngine === 'Auto' && !stemResult?.songLanguage }
   const newWarmRef = useRef({ song: '', since: 0 })
   useEffect(() => {
     const ws = warmRef.current, cameFromResult = ws.prevStep === 3
@@ -1274,9 +1279,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const w = engineWarmRef.current
       // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); new-engine accounts: every ADMIN_WARM_PING_EVERY_MS
       if (!w.newEngines && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
-      fetch('/api/rvc-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine: w.engine }) }).catch(() => {})
+      const both = w.newEngines && w.languageUnknown
+      fetch('/api/rvc-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine: both ? 'Standard' : w.engine }) }).catch(() => {})
       if (!w.newEngines || stepRef.current !== 2 || !w.song) return
-      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx: w.engine === 'HD Voice' }) }).catch(() => {})
+      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx: both || w.engine === 'HD Voice' }) }).catch(() => {})
     }
     // Hidden tab = the user left: no pings (back within the cap: one at once, then on schedule)
     const onVisible = () => { if (document.visibilityState === 'visible' && !capped()) ping(true) }
@@ -1294,7 +1300,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [step, songIn, newEngines, voicePicked])
+  }, [step, songIn, newEngines, voicePicked, warmLanguage]) // language known → ping at once (SoulX for English)
 
   // Diagnostics (2026-10-10): twice the page stopped checking on a running
   // conversion for ~70 s although the Mac's display stayed on. Log every gap
@@ -1519,6 +1525,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     if (!confirmLeave('replace it with a new one')) return
     if (!stemResult) {
       showToast('Upload a track first')
+      return
+    }
+    // A song marked as a duet is only swapped once it's split into the two singers
+    // (founder, 2026-10-25: unsplit, one voice sang both parts and the female part came out thin).
+    if (isDuet && !(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)) {
+      showToast(`This song is marked as a duet — split it first (Split duet · ${GENDER_SPLIT_COST} cr).`, 6000)
       return
     }
 
@@ -2138,17 +2150,44 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             const leadPending = step === 2 && karaokeStatus === 'running'
             // The split failed: never swap the whole vocal track without asking.
             const leadFailed = step === 2 && karaokeStatus === 'failed' && !stemResult?.leadVocalsUrl && !hasDuetStems && !allowFullVocal
-            const waitTitle = genderSplitting ? 'Waiting for vocal split to finish…' : leadPending ? 'Finding the lead vocal… (about a minute)' : leadFailed ? 'The lead vocal couldn’t be separated — choose below' : undefined
+            // Marked as a duet but not split yet: no swap until it is (2026-10-25).
+            const duetUnsplit = step === 2 && isDuet && !hasDuetStems
+            const canAffordSplit = isAdmin || creditsRemaining === null || creditsRemaining >= GENDER_SPLIT_COST
+            const splitDuetBtn = (
+              <button className="vs-btn-solid" disabled={genderSplitting || !canAffordSplit} onClick={() => { void handleSplitDuet() }}>
+                {genderSplitting ? 'Splitting the duet…' : `Split duet · ${GENDER_SPLIT_COST} cr`}
+              </button>
+            )
+            const waitTitle = genderSplitting ? 'Waiting for vocal split to finish…' : duetUnsplit ? 'Split the duet first — see above' : leadPending ? 'Finding the lead vocal… (about a minute)' : leadFailed ? 'The lead vocal couldn’t be separated — choose below' : undefined
             return (
             <>
-            {leadFailed && stemResult && (
+            {duetUnsplit && stemResult && (
               <div className="vs-lead-fail" role="alert">
                 <div className="vs-lead-fail-txt">
-                  <strong>We couldn&rsquo;t separate the lead vocal</strong> ({karaokeError ?? 'unknown reason'}).
-                  Swapping without it also converts the backing singers, and Song Key can&rsquo;t be set for your voice (it stays at Original) — it won&rsquo;t sound as much like you.
+                  <strong>⚠ This song is marked as a duet — split it before swapping.</strong>{' '}
+                  Splitting separates the male and female singers, so each part gets the right voice. Without it, one voice sings both parts and the other singer&rsquo;s part comes out thin.
+                  {!canAffordSplit && <> You need {GENDER_SPLIT_COST} credits (you have {creditsRemaining}).</>}
                 </div>
                 <div className="vs-lead-fail-btns">
-                  <button className="vs-btn-solid" onClick={() => { void runKaraokeSplit(stemResult) }}>↻ Try again</button>
+                  {splitDuetBtn}
+                  <button className="vs-btn-ghost" disabled={genderSplitting} onClick={() => {
+                    setIsDuet(false)
+                    if (!stemResult.leadVocalsUrl && karaokeStatus !== 'running') void runKaraokeSplit(stemResult)
+                  }}>It&rsquo;s not a duet</button>
+                </div>
+              </div>
+            )}
+            {leadFailed && !duetUnsplit && stemResult && (
+              <div className="vs-lead-fail" role="alert">
+                <div className="vs-lead-fail-txt">
+                  <strong>⚠ We couldn&rsquo;t separate a single lead vocal</strong> ({karaokeError ?? 'unknown reason'}).
+                  <strong> This often means two singers take turns (a duet).</strong>{' '}
+                  If so, split the duet first — each singer then gets the right voice. Swapping the full vocal instead also converts the other singer and the backing singers with your voice, and Song Key stays at Original.
+                  {!canAffordSplit && <> Split duet needs {GENDER_SPLIT_COST} credits (you have {creditsRemaining}).</>}
+                </div>
+                <div className="vs-lead-fail-btns">
+                  {splitDuetBtn}
+                  <button className="vs-btn-ghost" onClick={() => { void runKaraokeSplit(stemResult) }}>↻ Try the lead split again</button>
                   <button className="vs-btn-ghost" onClick={() => setAllowFullVocal(true)}>Use the full vocal anyway</button>
                 </div>
               </div>
@@ -2162,7 +2201,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <div className="vs-action-btns">
                 <button
                   className="vs-btn-ghost"
-                  disabled={genderSplitting || leadPending || leadFailed}
+                  disabled={genderSplitting || leadPending || leadFailed || duetUnsplit}
                   title={waitTitle}
                   onClick={() => {
                     if (step === 1 && !stemResult) {
@@ -2189,7 +2228,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 {step === 2 && (
                   <button
                     className="vs-btn-solid"
-                    disabled={genderSplitting || leadPending || leadFailed}
+                    disabled={genderSplitting || leadPending || leadFailed || duetUnsplit}
                     title={waitTitle}
                     onClick={handleFullClick}
                   >

@@ -6,6 +6,7 @@ import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
 import { uploadAudioToStorage } from '@/lib/audio-upload'
 import { clientTiming } from '@/lib/client-timing'
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS } from '@/lib/swap-prices'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
@@ -166,8 +167,8 @@ interface UploadStepProps {
   guided?: boolean
 }
 
-// Client mirror of the server's GENDER_SPLIT_COST (api/gender-split).
-const GENDER_SPLIT_COST = 250
+// The server's duet-split price + beta plan rule (lib/swap-prices.ts, api/gender-split).
+const GENDER_SPLIT_COST = DUET_SPLIT_CREDITS
 
 function UploadWaveCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -746,11 +747,11 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                     onChange={(e) => onSetIsDuet(e.target.checked)}
                   />
                   <span className="vs-duet-toggle-text">This is a duet (beta) — alternating male/female leads</span>
-                  {!isAdmin && plan === 'free' && (
+                  {!isAdmin && plan === 'free' && !DUET_SPLIT_ANY_PLAN && (
                     <span className="vs-duet-toggle-gate">Requires Premium</span>
                   )}
-                  {!isAdmin && plan !== 'free' && (
-                    <span className="vs-duet-toggle-cost">250 cr</span>
+                  {!isAdmin && (plan !== 'free' || DUET_SPLIT_ANY_PLAN) && (
+                    <span className="vs-duet-toggle-cost">{GENDER_SPLIT_COST} cr</span>
                   )}
                 </label>
                 )}
@@ -986,7 +987,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                 Hidden in guided (AI Cover) mode with the rest of the duet UI. */}
             {!guided && (() => {
               const done = !!(displayResult.maleVocalsUrl || displayResult.femaleVocalsUrl)
-              const isFree = !isAdmin && plan === 'free'
+              const isFree = !isAdmin && plan === 'free' && !DUET_SPLIT_ANY_PLAN
               const tooPoor = !isAdmin && !isFree && creditsRemaining !== null && creditsRemaining < GENDER_SPLIT_COST
               const disabled = genderSplitting || done || tooPoor
               const label = done
@@ -997,7 +998,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                     ? `🔒 Split duet · ${GENDER_SPLIT_COST} cr · Premium`
                     : isAdmin
                       ? 'Split duet'
-                      : `Split duet · ${GENDER_SPLIT_COST} cr · Premium`
+                      : `Split duet · ${GENDER_SPLIT_COST} cr${DUET_SPLIT_ANY_PLAN ? '' : ' · Premium'}`
               return (
                 <>
                   <button
