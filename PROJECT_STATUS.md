@@ -6,6 +6,17 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## ⚡ 2026-10-25 (5) — ROLLOUT STEP 4 shipped (`99df183`, speed Option B) + stable HD reference pick (models `dcbf854`, soulx-svc `50d5785f`) — ⚠️ founder: switch the SoulX deployment + raise limits, then live test
+
+- **Founder:** "Mausam Hindi" (Voice Lab, `Mausam Vox voice test.m4a`, Hindi, cleanup on) on the test account sounds as good as admin on Rock On. Don't copy admin's reference clips (real users won't have them) — the automatic pick must be good on its own.
+- **Why the test voice auto-picked a different 10 s:** not a different rule — a **near-tie**. The live picker (`soulx-svc/pick_ref.py`) on the English recording: 2:15 at −0.1420 vs the hand pick 3:30 at −0.1433 (same line "…give it one more try tonight baby"). Same result on the stored test recording and the original `english/source.m4a`. Tiny GPU/CPU number differences decide such a tie: with ±0.003 jitter the old rule flipped **45 %** of runs. Hindi (lossless recording) is clear: 0:20 wins by 0.038.
+- **Fix (models `dcbf854`):** windows within 0.01 of the most confident one go to the one with the most words (then confidence); `choose()` split out for checks. English → 3:30, Hindi lossless → 0:20 (both hand picks), "Mausam Hindi" m4a → 3:20; 0 % flips under jitter. Pushed as **soulx-svc `50d5785f`**; cloud check on the GPU (`83q91p318x…`): `REFERENCE start 210 s | words 14 | rule clear+varied`.
+- **Not done — blocked as a production deploy:** pointing deployment `soulx-l40s` (release 4, `2aa51d6d`) at `50d5785f`. Until the founder does it, live HD keeps the old pick.
+- **"In the song's language when the user has it":** today a voice without preferred references uses ITS OWN recording (the voice's language). Using another of the user's voices' recordings when it matches the song's language is NOT built: a user's voices can be different people (e.g. the "Wife" voices) — needs the founder's decision.
+- **Step 4 (`99df183`, new-engine accounts):** one warm-up per song, only on Configure once a voice is picked, **3 min** max (was: from upload, 10 min, SoulX 5 min); pings every 30 s: Standard → `rvc-index-t4` + finishing; HD → SoulX + finishing. **Standard swaps and duet voices on `rvc-index-t4`** (T4 $0.0135/min vs L40S $0.0585); HD's RVC step + fallback on `rvc-index-l40s`, woken from SoulX's polls once SoulX is singing and every 40 s (`HD_RVC_WAKE_EVERY_MS`). Everyone else unchanged.
+- **Limits to raise (Replicate dashboard, founder):** soulx-l40s max 1 → 3, rvc-index-l40s 2 → 4, rvc-index-t4 2 → 4, hd-finish-cpu 1 → 3 (min stays 0). Not done by me (production config).
+- Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓. Picker scripts: `seedvc-local/work/rockon/pick/`.
+
 ## 🎯 2026-10-25 (4) — octave fix shipped (`149752b`) + test account vs admin: the difference is the VOICE — ⚠️ founder live test pending; HD reference copy needs the founder's OK
 
 - **Founder:** re-ran Rock On on the test account (Auto key −1): still thin, not like admin. Wants the test account to sound exactly like admin.
