@@ -6,7 +6,15 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
-## 🚦 2026-10-25 — ROLLOUT STEP 2 shipped (`0d549f6`): one swap at a time + HD cap — ⚠️ founder must apply migration `20261025000000_swap_guards.sql`, then live test
+## 🔀 2026-10-25 (2) — ROLLOUT STEP 3 shipped (`ac49635`): NEW_ENGINES switch (off / testers / all) — ⚠️ founder must add `NEW_ENGINES_TESTERS` in Vercel + redeploy, then live test
+
+- **Step 2 live test PASSED** (founder, test account): with tab 1 running, tab 2 refused "You already have a swap running…", balance 500 → 300 (charged once). An earlier try showed both tabs processing — most likely a stale tab; one charge = at most one job (the server can't start an uncharged job for a normal account).
+- **`src/lib/new-engines.ts`** (server only): `NEW_ENGINES` = `off` (nobody, admins too — kill switch) / `testers` (admins + `NEW_ENGINES_TESTERS`; also when unset or misspelt) / `all` (every signed-in account). `NEW_ENGINES_TESTERS` = comma-separated emails **in Vercel, not in code — the repo is PUBLIC**. `HD_VOICE=off` still works (= off).
+- **What it switches:** song-language check + Auto by language, HD Voice, Standard + balanced finishing, the Configure "Voice" control, our own voice-engine deployment (`rvc-index-l40s`), engine warm-ups (30 s pings, SoulX pre-warm — Option B comes in step 4), the MVSEP lead/backing split. **Not switched:** English HD duets stay admin-only (Duet frozen; the server also ignores `duet` HD from non-admins). Charging: testers pay like everyone (HD still 200 cr until step 5 → 800); the HD cap (5 / 24 h) now applies to testers.
+- **`/api/engine-access`** tells the page `{ newEngines, mode }`; every server route checks again (`newEnginesFor`). `hdVoiceAllowed` removed.
+- **Checks:** switch logic under 7 settings (unset, testers list case-insensitive, two emails, all, off, HD_VOICE=off, misspelt) all as intended. Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
+## 🚦 2026-10-25 — ROLLOUT STEP 2 shipped (`0d549f6`): one swap at a time + HD cap — ✅ migration applied, live test PASSED
 
 - **Step 1 live test PASSED** (founder, test account mausam.theshadows, non-admin): full swap charged at once and saved; at 50 cr "Not enough credits … you have 50"; admin never charged.
 - **Founder's notes for later (not fixed):** (a) a Hindi duet uploaded without ticking "duet" swapped badly and crackled → auto-detect duets or warn more strongly before processing; (b) move the 50 cr split charge to the server.

@@ -2,6 +2,7 @@
 
 ## 2026-10-25
 
+- **`ac49635` Rollout step 3, NEW_ENGINES switch:** `NEW_ENGINES` off / testers / all (unset = testers) + `NEW_ENGINES_TESTERS` (Vercel env — the repo is public) replace the admin-only gate on the new engines (language check + Auto, HD Voice, Standard + finishing, Voice control, own deployment, warm-ups, MVSEP split); `/api/engine-access` for the page. English HD duets stay admin-only; testers are charged. Step 2 live test passed (founder).
 - **`0d549f6` Rollout step 2, per-account guards:** migration `20261025000000` (founder applies) + `charge_swap_checked`. One swap at a time per account (409; the lock runs out after 30 min if the page was closed; the two voices of one duet run together). HD Voice max 5 full swaps per 24 h (429; refunded ones free their slot; takes effect when step 3 opens HD). Guards 23/23 pass on PGlite. Step 1 live test passed (founder).
 
 ## 2026-10-24
