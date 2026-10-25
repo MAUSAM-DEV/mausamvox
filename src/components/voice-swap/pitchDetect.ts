@@ -13,6 +13,11 @@
 //
 // Crucially, anything short of a near-octave gap yields a 0 shift, so swaps that
 // already sound correct are left exactly as they were.
+//
+// 2026-10-25: the page no longer uses estimateMedianF0 / detectMedianF0 for this — they
+// read recordings 0.5–0.9 octave low (first 60 s only) and caused wrong −12 shifts. The
+// medians now come from pitch-track.ts (pitchStats, whole file); only the octave rule
+// below (autoOctaveShiftSemitones) and Auto Song Key (autoKeySemitones) are used.
 
 // ── F0 estimation tuning ─────────────────────────────────────────────────────
 const ANALYSIS_MAX_S = 60      // cap CPU: analyse at most the first 60 s

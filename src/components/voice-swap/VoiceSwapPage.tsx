@@ -14,7 +14,7 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
-import { detectMedianF0, autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S, MIN_RELIABLE_VOICED_FRAMES, type MedianF0 } from './pitchDetect'
+import { autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S } from './pitchDetect'
 import { dspPitchStats } from './dspClient'
 import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
@@ -297,8 +297,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Auto key-match caches: detected median F0 + voiced-frame confidence (or null)
   // per target voiceId and per source stem URL, so repeated swaps of
   // the same pair don't re-fetch + re-decode the same audio.
-  const targetF0Ref = useRef<Record<string, MedianF0 | null>>({})
-  const sourceF0Ref = useRef<Record<string, MedianF0 | null>>({})
   // Second converted vocal — set only for Mode 2/3 (both singers swapped).
   const [convertedVocalsUrl2, setConvertedVocalsUrl2] = useState<string | null>(null)
   // True while a premium gender (duet) split is in flight, so the trigger button
@@ -1138,31 +1136,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Credits are charged by the server when a job starts (/api/voice-convert). Index
   // strength and the other conversion settings are fixed server-side (VOICE_SWAP_* in rvc-engine.ts).
   // ── Auto key-match helpers ──────────────────────────────────────────────────
-  // Median F0 (+ voiced-frame confidence) of the target voice, from its reference
-  // sample (cached per voice). Null on any failure → no auto shift for that voice.
-  async function getTargetF0(voiceId: string): Promise<MedianF0 | null> {
-    if (voiceId in targetF0Ref.current) return targetF0Ref.current[voiceId]
-    let f0: MedianF0 | null = null
-    try {
-      const res = await fetch(`/api/voice-lab/sample-url?id=${voiceId}`)
-      if (res.ok) {
-        const { signedUrl } = await res.json()
-        if (typeof signedUrl === 'string') f0 = await detectMedianF0(signedUrl)
-      }
-    } catch { /* leave null */ }
-    targetF0Ref.current[voiceId] = f0
-    return f0
-  }
-
-  // Median F0 (+ confidence) of a source stem (cached per URL).
-  async function getSourceF0(url: string): Promise<MedianF0 | null> {
-    if (url in sourceF0Ref.current) return sourceF0Ref.current[url]
-    const f0 = await detectMedianF0(url)
-    sourceF0Ref.current[url] = f0
-    return f0
-  }
-
-  // Median sung note of a recording (whole song / whole sample), cached per URL.
+  // Median sung note of a recording (whole song / whole sample), cached per URL —
+  // used by both the octave match and Auto Song Key. Null on any failure → no shift.
   const pitchStatsRef = useRef<Record<string, Promise<{ medianMidi: number; voicedSeconds: number } | null>>>({})
   function pitchStatsOf(url: string) {
     pitchStatsRef.current[url] ??= (async () => {
@@ -1175,13 +1150,19 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     })().catch(() => null)
     return pitchStatsRef.current[url]
   }
-  async function voiceSampleUrl(voiceId: string): Promise<string | null> {
-    try {
+  // One signed link per voice for the session: the octave match and Auto Song Key read
+  // the same recording, and a fresh link per call would make pitchStatsOf analyse it twice.
+  const voiceSampleUrlRef = useRef<Record<string, Promise<string | null>>>({})
+  function voiceSampleUrl(voiceId: string): Promise<string | null> {
+    voiceSampleUrlRef.current[voiceId] ??= (async () => {
       const res = await fetch(`/api/voice-lab/sample-url?id=${voiceId}`)
       if (!res.ok) return null
       const { signedUrl } = await res.json()
       return typeof signedUrl === 'string' ? signedUrl : null
-    } catch { return null }
+    })().catch(() => null)
+    const p = voiceSampleUrlRef.current[voiceId]
+    void p.then((u) => { if (!u) delete voiceSampleUrlRef.current[voiceId] }) // a failed lookup is asked again next time
+    return p
   }
   // Auto Song Key for this song + voice (0 = Original). Worked out from the
   // LEAD vocal only: duet stems and the whole vocal track (no lead/backing
@@ -1207,42 +1188,39 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Octave shift (semitones) to bring `sourceUrl` into `voiceId`'s natural range.
   // Returns 0 (never throws) so swaps that don't clearly need a shift are unchanged.
   //
-  // Two safety layers prevent the duet octave-doubling misfire that made swaps
-  // robotic:
+  // Safety layers:
   //  1. Separated duet/gender-split stems (isDuetStem) have stripped fundamentals,
   //     so F0 detection is unreliable (reads an octave high) — never auto-shift
   //     them. The manual Pitch Shift control still applies on top.
-  //  2. For everything else, only shift when BOTH the source and target detections
-  //     are confident (>= MIN_RELIABLE_VOICED_FRAMES voiced frames). Weak detection
-  //     → 0 rather than guessing.
+  //  2. Lead vocal only (the whole vocal track reads an octave low: +12 on 2026-10-09).
+  //  3. The medians come from the Auto Song Key tracker (pitch-track.ts, whole song /
+  //     whole Voice Lab recording), and both need AUTO_KEY_MIN_VOICED_S of clear
+  //     singing. Until 2026-10-25 a quick first-60-s autocorrelation was used: it read
+  //     recordings 0.5–0.9 octave low, unevenly, and dropped "Mausam English" a whole
+  //     octave on Rock On (true gap −5 st) — the "cartoon voice". Replayed over 16
+  //     songs × 10 voices: 11 of its 13 octave shifts were wrong (true gaps −3…−8 st).
   async function autoKeyShift(sourceUrl: string, voiceId: string, isDuetStem: boolean): Promise<number> {
     if (isDuetStem) {
       console.log('[voice-swap] auto key-match skipped — duet/gender-split stem (unreliable F0)', { voiceId })
       return 0
     }
-    // The whole vocal track (lead + backing together) reads an octave low:
-    // on 2026-10-09 it gave +12 and the voice was sung far too high.
     if (!stemResult?.leadVocalsUrl || sourceUrl !== stemResult.leadVocalsUrl) {
       console.log('[voice-swap] auto key-match skipped — not the lead vocal (unreliable F0)', { voiceId })
       return 0
     }
-    const [src, tgt] = await Promise.all([getSourceF0(sourceUrl), getTargetF0(voiceId)])
-    const reliable = (r: MedianF0 | null): r is MedianF0 => r != null && r.voicedFrames >= MIN_RELIABLE_VOICED_FRAMES
-    if (!reliable(src) || !reliable(tgt)) {
-      console.log('[voice-swap] auto key-match skipped — low confidence', {
-        voiceId,
-        sourceF0: src ? Math.round(src.f0) : null, sourceFrames: src?.voicedFrames ?? 0,
-        targetF0: tgt ? Math.round(tgt.f0) : null, targetFrames: tgt?.voicedFrames ?? 0,
-        need: MIN_RELIABLE_VOICED_FRAMES,
+    const sample = await voiceSampleUrl(voiceId)
+    const [song, voice] = await Promise.all([pitchStatsOf(sourceUrl), sample ? pitchStatsOf(sample) : null])
+    if (!song || !voice || song.voicedSeconds < AUTO_KEY_MIN_VOICED_S || voice.voicedSeconds < AUTO_KEY_MIN_VOICED_S) {
+      console.log('[voice-swap] auto key-match skipped — not enough clear singing', {
+        voiceId, songSeconds: song ? Math.round(song.voicedSeconds) : null, voiceSeconds: voice ? Math.round(voice.voicedSeconds) : null, need: AUTO_KEY_MIN_VOICED_S,
       })
       return 0
     }
-    const shift = autoOctaveShiftSemitones(src.f0, tgt.f0)
+    const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12)
+    const shift = autoOctaveShiftSemitones(hz(song.medianMidi), hz(voice.medianMidi))
     console.log('[voice-swap] auto key-match', {
-      voiceId,
-      sourceF0: Math.round(src.f0), sourceFrames: src.voicedFrames,
-      targetF0: Math.round(tgt.f0), targetFrames: tgt.voicedFrames,
-      autoShift: shift,
+      voiceId, songMedian: song.medianMidi.toFixed(1), voiceMedian: voice.medianMidi.toFixed(1),
+      gap: (voice.medianMidi - song.medianMidi).toFixed(1), autoShift: shift,
     })
     return shift
   }
