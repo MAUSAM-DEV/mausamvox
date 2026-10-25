@@ -6,6 +6,18 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🎯 2026-10-25 (4) — octave fix shipped (`149752b`) + test account vs admin: the difference is the VOICE — ⚠️ founder live test pending; HD reference copy needs the founder's OK
+
+- **Founder:** re-ran Rock On on the test account (Auto key −1): still thin, not like admin. Wants the test account to sound exactly like admin.
+- **1. Was the octave fix live?** No. That run (`j1ez6q7t8n…`, 10:49 UTC) had `pitch_change −1` (no octave drop; this upload's lead read differently), so "thin" isn't the octave problem. Fix now shipped (`149752b`, everyone): the octave match uses `pitch-track.ts` (whole song / whole recording, ≥ 20 s of clear singing) instead of the first-60-s autocorrelation; the voice's signed sample link is cached per session. **Replay** (16 song leads × 10 voices, 160 pairs): old rule 13 octave shifts, **11 wrong** (true gaps −3…−8 st, one +1.6), all gone; the 2 left (high song F♯4 × "Mausam English" / "Mausam (All)", gaps −8.8 / −8.1 st) are the same under both rules (an octave down is closer to the voice). Cross-check: pitch-track vs pyin on all 26 files within 2.2 st, no octave misreads.
+- **2. "Mausam (Singing)" was NOT a Voice Lab voice:** trained 2026-10-03 (job `mvegw63gf9…`) from a hand-made dataset `voice-samples/<admin>/seedvc-test/dataset_3min.zip` = the **first 3:00** of **`~/Downloads/Mausam Vox voice test.m4a`** (3:48, AAC 62 kbps, 48 kHz; byte-identical to `seedvc-local/work/rec/source.m4a`), mild cleanup (high-pass 80 Hz + afftdn — the same kind as Voice Lab's), 18 × 10 s clips. Same trainer + settings as Voice Lab (`0397d5e2`, 50 epochs, 48k, v2, rmvpe_gpu, batch 7). Uploading that m4a in Voice Lab gives nearly the same data (Voice Lab uses all 3:48 → ~23 clips); training has randomness, so not bit-identical.
+- **3. Every difference, admin vs test account:**
+  - Hindi (Standard): **voice model** (different recording) and **Auto key** (0 vs −1 — worked out from each voice's own recording). Split now the same kind (both MVSEP leads `kmv-EINs…` / `kmv-8OiF…`; the 09:24 test run was on an old KARA_2 lead). Engine settings, finishing, mix: identical code (no admin or plan checks touch the sound; the only admin-only bits left are English HD duets, charging, plan prompts).
+  - English (HD): voice model, key, and the **SoulX reference**: admin's voice has hand-placed `hd-ref/en.wav` + `hi.wav` (10 s each); the test voice auto-picks 10 s from its recording. Admin's `en.wav` is cut from the SAME English recording as "Mausam English" (at 3:30, match r = 0.97).
+  - Voice `language` (hi vs en) only matters when a voice has no references.
+- **Blocked (needs the founder's OK):** copying admin's `en.wav` + `hi.wav` to `voice-samples/<test>/hd-ref/ed916a39…/` (makes HD's reference identical) — refused by the safety check as a production storage write.
+- Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓. Replay scripts: `seedvc-local/work/rockon/replay/`.
+
 ## 🔬 2026-10-25 (3) — "cartoon voice" on the test account = a wrong AUTO OCTAVE (−12), not Voice Lab training (evidence only, no app change, ≈ $0.10) — founder to listen; fix proposed, awaiting OK
 
 - **Founder:** step 3 live test PASSED (Voice control, English Auto → HD with key −3 and 200 charged, Hindi Auto → Standard + balancing). But "Rock On (Farhan Akhtar)" with "Mausam English" (test account) sounded like a cartoon; with "Mausam (Singing)" (admin) very good.
