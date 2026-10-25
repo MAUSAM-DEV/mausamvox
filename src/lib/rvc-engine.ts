@@ -49,8 +49,8 @@ export function rvcVersion(engine: RvcEngine = rvcEngine()): string {
   return engine === 'indexed' ? INDEXED_RVC_VERSION : engine === 'bare' ? BARE_RVC_VERSION : COVER_RVC_VERSION
 }
 
-// Our own deployment of the indexed engine (2026-10-23, fallback-wait fix): admin swaps
-// and their warm pings run here instead of the public model's shared queue, which once
+// Our own deployment of the indexed engine (2026-10-23, fallback-wait fix): swaps of
+// new-engine accounts (lib/new-engines.ts; admin only until 2026-10-25) and their warm pings run here instead of the public model's shared queue, which once
 // kept a swap waiting 26 min to start. Same version as INDEXED_RVC_VERSION, scale to zero,
 // at most 2 machines (a duet converts two singers at once). L40S since step 5 (speed):
 // a full song 31 s instead of 79 s on T4, cold start ~1.7 min instead of 1.5–4.3 min

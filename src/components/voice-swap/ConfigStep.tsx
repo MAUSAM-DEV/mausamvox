@@ -66,7 +66,7 @@ interface ConfigStepProps {
   // Pre-formatted time ranges of loud group/backing vocals (src/lib/group-vocals.ts);
   // set only when the warning applies.
   groupVocalsRanges?: string
-  // Voice engine (engine plan step 4, admin only for now): shown only when setVoiceEngine is given.
+  // Voice engine (engine plan step 4; new-engine accounts, lib/new-engines.ts): shown only when setVoiceEngine is given.
   voiceEngine?: VoiceEngineChoice
   setVoiceEngine?: (v: VoiceEngineChoice) => void
   autoVoiceEngine?: Exclude<VoiceEngineChoice, 'Auto'>   // what Auto picks for this song

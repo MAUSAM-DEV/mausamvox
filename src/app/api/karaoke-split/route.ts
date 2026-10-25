@@ -5,10 +5,11 @@ import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-tim
 import { persistStemFile } from '@/lib/stem-persist'
 import { KARAOKE_VERSION, KARAOKE_MODEL } from '@/lib/karaoke-engine'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_EMAILS } from '@/lib/admin'
+import { newEnginesFor } from '@/lib/new-engines'
 import { mvsepCreate, mvsepPoll, type MvsepFile } from '@/lib/mvsep'
 
-// ── HD engine step 2 (2026-10-22): MVSEP Karaoke split, ADMIN ACCOUNTS ONLY ──
+// ── HD engine step 2 (2026-10-22): MVSEP Karaoke split, new-engine accounts only ──
+// (lib/new-engines.ts — NEW_ENGINES off / testers / all; admin-only until 2026-10-25)
 // The founder's frozen "balanced" recipe splits lead/backing with MVSEP Karaoke
 // (BS-RoFormer 124 bands by MVSep Team: sep_type 49, add_opt1 8) instead of
 // KARA_2. For admin accounts POST starts that job and returns it as a
@@ -21,11 +22,11 @@ const MVSEP_KARAOKE_OVERLAP = '0'   // as tested (q5/mvsep.mts default)
 const MVSEP_OUTPUT_FLAC_16 = '2'    // a 5-min lead as WAV would pass the 50 MB storage cap
 const MVSEP_ID = /^mvsep_([A-Za-z0-9]{4,64})_(\d{10,15})$/
 
-async function sessionIsAdmin(): Promise<boolean> {
+async function sessionHasNewEngines(): Promise<boolean> {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    return !!user?.email && ADMIN_EMAILS.includes(user.email)
+    return newEnginesFor(user?.email)
   } catch {
     return false
   }
@@ -110,13 +111,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (await sessionIsAdmin()) {
+    if (await sessionHasNewEngines()) {
       const job = await mvsepCreate({ url: effectiveVocalsUrl, sep_type: MVSEP_KARAOKE_SEP_TYPE, add_opt1: MVSEP_KARAOKE_MODEL, add_opt2: MVSEP_KARAOKE_OVERLAP, output_format: MVSEP_OUTPUT_FLAC_16 })
       if ('hash' in job) {
-        console.log(`[karaoke-split] admin: MVSEP karaoke job ${job.hash} started`)
+        console.log(`[karaoke-split] new engines: MVSEP karaoke job ${job.hash} started`)
         return NextResponse.json({ predictionId: `mvsep_${job.hash}_${Date.now()}`, status: 'starting' })
       }
-      console.error(`[karaoke-split] admin: MVSEP karaoke didn't start (${job.error}) — using KARA_2`)
+      console.error(`[karaoke-split] new engines: MVSEP karaoke didn't start (${job.error}) — using KARA_2`)
     }
 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
@@ -154,13 +155,13 @@ export async function GET(req: NextRequest) {
 
     const mv = MVSEP_ID.exec(id)
     if (mv) {
-      if (!(await sessionIsAdmin())) return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
+      if (!(await sessionHasNewEngines())) return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
       const [, hash, startMs] = mv
       const elapsedMs = Date.now() - Number(startMs)
       const poll = await mvsepPoll(hash, elapsedMs)
       if (poll.state === 'processing') return NextResponse.json({ status: 'processing' })
       if (poll.state === 'failed') {
-        console.error(`[karaoke-split] admin: MVSEP karaoke job ${hash} failed: ${poll.error}`)
+        console.error(`[karaoke-split] new engines: MVSEP karaoke job ${hash} failed: ${poll.error}`)
         return NextResponse.json({ status: 'failed', error: poll.error })
       }
       const lead = karaokeFile(poll.files, 'vocalslead')
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
         persistStemFile('karaoke-split', `stems/kmv-${hash}-lead.flac`, lead, 'audio/flac'),
         backing ? persistStemFile('karaoke-split', `stems/kmv-${hash}-backing.flac`, backing, 'audio/flac') : Promise.resolve(null),
       ])
-      console.log(`[karaoke-split] admin: MVSEP karaoke job ${hash} done in ${Math.round(elapsedMs / 1000)}s (stored: lead ${!!persistedLead}, backing ${!!persistedBacking})`)
+      console.log(`[karaoke-split] new engines: MVSEP karaoke job ${hash} done in ${Math.round(elapsedMs / 1000)}s (stored: lead ${!!persistedLead}, backing ${!!persistedBacking})`)
       return NextResponse.json({
         status: 'succeeded',
         leadVocalsUrl: persistedLead?.url ?? lead,

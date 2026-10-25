@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { HD_FINISH_DEPLOYMENT, hdVoiceAllowed } from '@/lib/hd-voice'
+import { HD_FINISH_DEPLOYMENT } from '@/lib/hd-voice'
+import { newEnginesFor } from '@/lib/new-engines'
 
-// Song language for the engine choice (engine plan step 2, 2026-10-23) — ADMIN ONLY for now.
+// Song language for the engine choice (engine plan step 2, 2026-10-23) — new-engine accounts
+// only (lib/new-engines.ts).
 // The finishing machine (mausam-dev/hd-finish, task "language") runs Whisper-small on the
 // lead's loudest 30 s — the same rule as the HD reference pick (Urdu counts as Hindi) — and
 // prints `LANGUAGE {json}` in its logs. Asking also wakes the finishing machine early.
@@ -16,7 +18,7 @@ export const maxDuration = 15
 async function admin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  return user && hdVoiceAllowed(user.email) ? user : null
+  return user && newEnginesFor(user.email) ? user : null
 }
 
 export async function POST(req: NextRequest) {

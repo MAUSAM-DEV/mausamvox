@@ -209,6 +209,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Upload / stems
   const [userId, setUserId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  // The new engines (song language → Auto, HD Voice, Standard + finishing, the Configure
+  // "Voice" control, engine warm-ups): admins + testers, or everyone — the server decides
+  // (NEW_ENGINES, /api/engine-access) and checks again on every call.
+  const [newEngines, setNewEngines] = useState(false)
+  const newEnginesRef = useRef(false) // for long-running async work started before the answer came
+  newEnginesRef.current = newEngines
   const [stemResult, setStemResult] = useState<StemResult | null>(null)
   const [convertedVocalsUrl, setConvertedVocalsUrl] = useState<string | null>(null)
   // The saved voice_swaps row id from the latest successful persist — lets
@@ -372,6 +378,11 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const uid = data.user?.id ?? null
       setUserId(uid)
       setIsAdmin(ADMIN_EMAILS.includes(data.user?.email ?? ''))
+      if (data.user) {
+        fetch('/api/engine-access').then((r) => r.json())
+          .then((d) => setNewEngines(d?.newEngines === true))
+          .catch(() => {}) // unknown → today's engine
+      }
       if (!uid) {
         setSwapsLoading(false)
         return
@@ -897,8 +908,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           localStorage.setItem(STEM_CACHE_KEY, JSON.stringify({ result: { ...base, ...patch }, savedAt: cached?.savedAt ?? Date.now() }))
         } catch { /* ignore */ }
         console.log(`[karaoke-split] lead/backing ready for ${result.fileName}`)
-        // Song language for the engine choice (admin only for now) — background, never blocks.
-        if (isAdmin && leadVocalsPath) void detectSongLanguage(result.storagePath, leadVocalsPath, jobId)
+        // Song language for the engine choice (new-engine accounts) — background, never blocks.
+        // (Auto also starts it at Process time if this didn't run.)
+        if (newEnginesRef.current && leadVocalsPath) void detectSongLanguage(result.storagePath, leadVocalsPath, jobId)
         // Group-vocals warning — after the stems are shown, so it never delays
         // or blocks the swap. Only stored (and shown) when the warning applies.
         void checkGroupVocals(leadVocalsUrl, backingVocalsUrl).then((groupVocals) => {
@@ -1257,7 +1269,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // finishing machine and — for HD Voice, at most SOULX_WARM_MAX_MS per song — SoulX.
   const effectiveVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
   const engineWarmRef = useRef({ admin: false, engine: effectiveVoiceEngine as string, song: '', soulxSince: 0, soulxSong: '' })
-  engineWarmRef.current = { ...engineWarmRef.current, admin: isAdmin, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
+  engineWarmRef.current = { ...engineWarmRef.current, admin: newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
   useEffect(() => {
     const ws = warmRef.current, cameFromResult = ws.prevStep === 3
     ws.prevStep = step
@@ -1269,7 +1281,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     let tick = 0
     const ping = (now = false) => {
       const w = engineWarmRef.current
-      // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); admin: every ADMIN_WARM_PING_EVERY_MS
+      // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); new-engine accounts: every ADMIN_WARM_PING_EVERY_MS
       if (!w.admin && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
       fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {})
       if (!w.admin || stepRef.current === 3 || !w.song) return
@@ -1605,7 +1617,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         throw new Error('Voice conversion timed out')
       }
 
-      // Voice engine for this take. Auto (admin, `wait`): waits for the song-language check — up to
+      // Voice engine for this take. Auto (new-engine accounts, `wait`): waits for the song-language check — up to
       // LANGUAGE_WAIT_MS; still unknown → judges the song's title (English-looking → HD Voice, otherwise Standard).
       // `auto` = decide by language even if the Voice control says otherwise (duets: the control is hidden)
       const resolveEngine = async (wait: boolean, auto = voiceEngine === 'Auto') => {
@@ -1824,8 +1836,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       if (!target) prewarmResultMusic(stemResult, takeKeyShift)
       if (autoShift !== 0) showToast(`Auto key-match — ${fmtSt(autoShift)}`, 4000)
 
-      // Auto (admin, one voice): waits for the song language (resolveEngine)
-      const { engine: takeVoiceEngine, language: takeSongLanguage, source: languageSource } = await resolveEngine(isAdmin && !target)
+      // Auto (new-engine accounts, one voice): waits for the song language (resolveEngine)
+      const { engine: takeVoiceEngine, language: takeSongLanguage, source: languageSource } = await resolveEngine(newEngines && !target)
       const startConversion = async (retryOf?: string) => {
         const startRes = await fetch('/api/voice-convert', {
           method: 'POST',
@@ -2079,7 +2091,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 autotune={autotune}
                 setAutotune={setAutotune}
                 voiceEngine={voiceEngine}
-                setVoiceEngine={isAdmin && duetMode === 'one' ? setVoiceEngine : undefined}
+                setVoiceEngine={newEngines && duetMode === 'one' ? setVoiceEngine : undefined}
                 autoVoiceEngine={autoVoiceEngine}
                 songLanguageName={songLanguageName}
                 hasDuet={!!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/rate-limit'
 import { fireWarmPing, rvcEngine } from '@/lib/rvc-engine'
-import { hdVoiceAllowed } from '@/lib/hd-voice'
+import { newEnginesFor } from '@/lib/new-engines'
 
 export const maxDuration = 15
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ warmed: false, reason: 'rate limited' })
   }
 
-  // admin accounts: warm our own deployment (the one their swaps run on)
-  await fireWarmPing(new URL(req.url).origin, 'rvc-warm', hdVoiceAllowed(user.email))
+  // new-engine accounts (lib/new-engines.ts): warm our own deployment (the one their swaps run on)
+  await fireWarmPing(new URL(req.url).origin, 'rvc-warm', newEnginesFor(user.email))
   return NextResponse.json({ warmed: true })
 }

@@ -6,7 +6,8 @@ import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
 import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
-import { cancelHdVoice, hdVoiceAllowed, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
+import { cancelHdVoice, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
+import { newEnginesFor } from '@/lib/new-engines'
 import { attachSwapJob, chargeSwap, refundSwap, settleSwap } from '@/lib/swap-charges'
 import { FULL_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
 
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       // Shared by the two voices of one duet: they may run at the same time (one-swap guard).
       pairId?: string
       // HD voice (SoulX → the user's RVC voice → finishing) for this take —
-      // single-voice swaps only; used only for accounts hdVoiceAllowed() lets
+      // single-voice swaps only; used only for accounts newEnginesFor() lets
       // through. The finishing needs the song's music: its durable stem paths.
       hd?: boolean
       instrumentalPath?: string
@@ -130,6 +131,10 @@ export async function POST(req: NextRequest) {
     }
     const user = sessionUser
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
+    // New engines (lib/new-engines.ts: NEW_ENGINES off / testers / all). English HD duets stay
+    // admin-only (Duet is frozen): a non-admin duet voice always runs today's engine.
+    const newEngines = newEnginesFor(user.email)
+    const hdTake = hd && !!voiceId && newEngines && (duet !== true || isAdmin)
 
     // ── Model URL resolution ──────────────────────────────────────────────────
     // Prefer the durable Supabase copy (model_path, signed on read) so the voice
@@ -159,7 +164,7 @@ export async function POST(req: NextRequest) {
     if (!isAdmin) {
       const kind = isPreview ? 'preview' : twoVoice ? 'duet' : 'full'
       // The engine this take will start on (the same test as the HD branch below) — for the HD cap.
-      const engine = hd && voiceId && hdVoiceAllowed(user.email) && engineChoice !== 'standard' ? 'hd' : 'standard'
+      const engine = hdTake && engineChoice !== 'standard' ? 'hd' : 'standard'
       const charge = await chargeSwap({
         userId: user.id, kind, price: isPreview ? PREVIEW_CREDITS : FULL_SWAP_CREDITS,
         trackKey: trackKey ?? '', previewId: isPreview ? undefined : previewId,
@@ -205,9 +210,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── HD voice (admin accounts only, lib/hd-voice.ts). Anything that stops
-    // it from starting falls through to today's engine below.
-    if (hd && voiceId && hdVoiceAllowed(user.email)) {
+    // ── New engines (lib/hd-voice.ts): HD Voice, or Standard + balanced finishing. Anything
+    // that stops it from starting falls through to today's engine below.
+    if (hdTake && voiceId) {
       try {
         const common = {
           userId: user.id, voiceId, leadPath: vocalsPath && !vocalsPath.includes('..') ? vocalsPath : '', leadUrl: effectiveVocalsUrl,
@@ -246,8 +251,8 @@ export async function POST(req: NextRequest) {
 
     let prediction
     try {
-      // admin accounts: our own deployment (no shared queue) — rvc-engine.ts
-      prediction = await createRvcPrediction(replicate, engine, input, hdVoiceAllowed(user.email))
+      // new-engine accounts: our own deployment (no shared queue) — rvc-engine.ts
+      prediction = await createRvcPrediction(replicate, engine, input, newEngines)
     } catch (createErr) {
       // The job never started — give the charge back (a poll-time failure is
       // refunded by GET, a cancel by DELETE).
@@ -268,7 +273,7 @@ export async function POST(req: NextRequest) {
     }
     chargeId = null // handed to the job: from here GET / DELETE settle or refund it
 
-    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${hdVoiceAllowed(user.email) && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
+    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${newEngines && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining, previewCharged })
   } catch (err) {

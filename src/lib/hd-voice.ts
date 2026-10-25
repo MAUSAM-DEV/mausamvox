@@ -1,5 +1,5 @@
 // HD voice (engine plan step 3, 2026-10-22; finishing + preferred references 2026-10-23) —
-// ADMIN ACCOUNTS ONLY for now. The founder's frozen "balanced" recipe, voice part:
+// Who gets it: lib/new-engines.ts (NEW_ENGINES off / testers / all). The founder's frozen "balanced" recipe, voice part:
 //   1. SoulX-Singer on our private cloud model (L40S deployment, the tested "pieces ≤ 12 s"
 //      method). Reference: the voice's PREFERRED references when it has them
 //      (voice-samples/<owner>/hd-ref/<voiceId>/<language>.wav — the model picks the one in
@@ -43,7 +43,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { ADMIN_EMAILS } from '@/lib/admin'
 import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { refundSwap, settleSwap } from '@/lib/swap-charges'
@@ -79,11 +78,6 @@ export const HD_NOTE_FALLBACK = 'Finishing your swap…'
 export const STD_NOTE_VOICE = 'Adding your voice…'
 export const STD_NOTE_FINISH = 'Balancing and polishing…'
 
-// Kill switch without a code change: Vercel env HD_VOICE=off (then redeploy).
-export function hdVoiceAllowed(email: string | null | undefined): boolean {
-  if ((process.env.HD_VOICE ?? '').trim().toLowerCase() === 'off') return false
-  return !!email && ADMIN_EMAILS.includes(email)
-}
 
 type Stage = 'sx' | 'rvc' | 'fin' | 'fb' | 'std'
 interface Ticket {
