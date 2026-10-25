@@ -6,7 +6,20 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
-## 🔀 2026-10-25 (2) — ROLLOUT STEP 3 shipped (`ac49635`): NEW_ENGINES switch (off / testers / all) — ⚠️ founder must add `NEW_ENGINES_TESTERS` in Vercel + redeploy, then live test
+## 🔬 2026-10-25 (3) — "cartoon voice" on the test account = a wrong AUTO OCTAVE (−12), not Voice Lab training (evidence only, no app change, ≈ $0.10) — founder to listen; fix proposed, awaiting OK
+
+- **Founder:** step 3 live test PASSED (Voice control, English Auto → HD with key −3 and 200 charged, Hindi Auto → Standard + balancing). But "Rock On (Farhan Akhtar)" with "Mausam English" (test account) sounded like a cartoon; with "Mausam (Singing)" (admin) very good.
+- **Live jobs (Replicate inputs):** the test account's Standard swap `kbbfcmh4gd…` (09:24 UTC) ran today's engine with **pitch_change −12**. Its earlier 09:07 swap (`ya1bjeb06x…`, before the testers switch) ran at 0. The admin swap's inputs are already wiped (Replicate keeps them ~1 h).
+- **Where −12 comes from:** the page's auto octave match (`pitchDetect.ts` `estimateMedianF0` + `autoOctaveShiftSemitones`). Rerun in Node on the real files: Rock On lead 182 Hz, "Mausam (Singing)" recording 140 Hz (gap −0.38 octave → 0), "Mausam English" recording 113 Hz (gap −0.68 → within 0.35 of −1 octave → **−12**). Auto Song Key is capped at ±4, so it can't make −12.
+- **The detector misreads:** it uses the first 60 s and simple autocorrelation with an "octave-down" guard. Two better trackers agree on the TRUE medians: pyin = song C4 263 Hz, Singing B3 248 Hz, English A3 215 Hz; the app's own Auto Song Key tracker (`pitch-track.ts`) = D4 / C♯4 / A3. Real gap English vs song ≈ 4–5 semitones, not ~8. Both recordings are sung (46–50 % held notes, like the song).
+- **Voice Lab training is NOT the cause:** both trained by the same trainer version `0397d5e2`, 50 epochs, 48k, v2, rmvpe_gpu, batch 7 (training jobs `mvegw63gf9…` 2026-10-03, `vank6h1xqn…` 2026-10-24). English dataset 24 × 10 s clips; its index is ~1.6× the Singing one (more data, not less).
+- **Controlled test (same 0:35–2:05, key 0, live Standard settings, live finishing `hd-finish-cpu`):** both outputs follow the original melody: median offset 0.00 st, 85 % (Singing) / 83 % (English) of frames within ±0.5 st. The live −12 swap therefore sang the whole song an octave below the original: 4 semitones below even the voice's own median.
+- **Clips** (Saved Tracks, voice "Rock On test", −17.3 LUFS, same mix = finished voice + instrumental + backing): "Rock On — Mausam (Singing)" / "Rock On — Mausam English".
+- **Proposed fix (not done):** decide the octave from the accurate tracker the page already has (`pitch-track.ts`, whole song / whole recording — the one Auto Song Key uses) instead of the first-60-s autocorrelation; it gives 0 here for both voices (then Auto Song Key: English −1, Singing 0). Before shipping: replay the rule over every voice recording × the known test songs, so swaps that need ±12 (a female song for a male voice) still get it.
+- **Side note:** the Rock On lead the test used was a KARA_2 lead (`y9q23b…-lead.mp3`, from the cached admin upload at 08:35), not MVSEP — the step-3 "MVSEP for testers" check is still unconfirmed.
+- Scripts: `seedvc-local/work/rockon/` (`db.mjs`, `rep.mjs`, `fetch.mjs`, `f0.ts`, `f0b.ts`, `rec.py`, `run.mjs`, `cmp.py`).
+
+## 🔀 2026-10-25 (2) — ROLLOUT STEP 3 shipped (`ac49635`): NEW_ENGINES switch (off / testers / all) — ✅ live test PASSED (founder)
 
 - **Step 2 live test PASSED** (founder, test account): with tab 1 running, tab 2 refused "You already have a swap running…", balance 500 → 300 (charged once). An earlier try showed both tabs processing — most likely a stale tab; one charge = at most one job (the server can't start an uncharged job for a normal account).
 - **`src/lib/new-engines.ts`** (server only): `NEW_ENGINES` = `off` (nobody, admins too — kill switch) / `testers` (admins + `NEW_ENGINES_TESTERS`; also when unset or misspelt) / `all` (every signed-in account). `NEW_ENGINES_TESTERS` = comma-separated emails **in Vercel, not in code — the repo is PUBLIC**. `HD_VOICE=off` still works (= off).
