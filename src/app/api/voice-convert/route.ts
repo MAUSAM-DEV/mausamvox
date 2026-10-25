@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-timing'
-import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
+import { createRvcPrediction, rvcEngine, rvcPoolName } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { cancelHdVoice, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
@@ -251,8 +251,8 @@ export async function POST(req: NextRequest) {
 
     let prediction
     try {
-      // new-engine accounts: our own deployment (no shared queue) — rvc-engine.ts
-      prediction = await createRvcPrediction(replicate, engine, input, newEngines)
+      // new-engine accounts: our own Standard deployment (T4, no shared queue) — rvc-engine.ts
+      prediction = await createRvcPrediction(replicate, engine, input, newEngines ? 'standard' : 'public')
     } catch (createErr) {
       // The job never started — give the charge back (a poll-time failure is
       // refunded by GET, a cancel by DELETE).
@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
     }
     chargeId = null // handed to the job: from here GET / DELETE settle or refund it
 
-    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${newEngines && engine === 'indexed' ? `, on ${RVC_DEPLOYMENT.name}` : ''})`)
+    console.log(`[voice-convert] started prediction ${prediction.id} (voice=${voiceId ?? 'unknown'}, status=${prediction.status}${newEngines && engine === 'indexed' ? `, on ${rvcPoolName('standard')}` : ''})`)
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining, previewCharged })
   } catch (err) {

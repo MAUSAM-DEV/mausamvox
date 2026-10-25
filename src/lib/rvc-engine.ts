@@ -49,16 +49,25 @@ export function rvcVersion(engine: RvcEngine = rvcEngine()): string {
   return engine === 'indexed' ? INDEXED_RVC_VERSION : engine === 'bare' ? BARE_RVC_VERSION : COVER_RVC_VERSION
 }
 
-// Our own deployment of the indexed engine (2026-10-23, fallback-wait fix): swaps of
-// new-engine accounts (lib/new-engines.ts; admin only until 2026-10-25) and their warm pings run here instead of the public model's shared queue, which once
-// kept a swap waiting 26 min to start. Same version as INDEXED_RVC_VERSION, scale to zero,
-// at most 2 machines (a duet converts two singers at once). L40S since step 5 (speed):
-// a full song 31 s instead of 79 s on T4, cold start ~1.7 min instead of 1.5–4.3 min
-// (measured 2026-10-23; rvc-index-t4 stays as a spare). Other engines and everyone else:
-// the public model as before.
+// Our own deployments of the indexed engine (2026-10-23, fallback-wait fix): swaps of
+// new-engine accounts (lib/new-engines.ts) and their warm pings run there instead of the
+// public model's shared queue, which once kept a swap waiting 26 min to start. Same
+// version as INDEXED_RVC_VERSION, scale to zero. Which one (rollout step 4, Option B,
+// 2026-10-25 — cost per swap):
+//   'standard' → rvc-index-t4 (T4, $0.0135/min): Standard swaps and duet voices — a full
+//                song 79 s instead of 31 s, at a quarter of the L40S price per minute.
+//   'hd'       → rvc-index-l40s (L40S): HD Voice's RVC step and its fallback — woken when
+//                SoulX starts, so it is up by the time SoulX is done.
+//   'public'   → the public model (everyone else, and every restart).
+export type RvcPool = 'standard' | 'hd' | 'public'
 export const RVC_DEPLOYMENT = { owner: 'mausam-dev', name: 'rvc-index-l40s' }
-export function createRvcPrediction(replicate: Replicate, engine: RvcEngine, input: Record<string, unknown>, onDeployment: boolean) {
-  if (onDeployment && engine === 'indexed') return replicate.deployments.predictions.create(RVC_DEPLOYMENT.owner, RVC_DEPLOYMENT.name, { input })
+export const RVC_STANDARD_DEPLOYMENT = { owner: 'mausam-dev', name: 'rvc-index-t4' }
+export const rvcPoolName = (pool: RvcPool) => pool === 'hd' ? RVC_DEPLOYMENT.name : pool === 'standard' ? RVC_STANDARD_DEPLOYMENT.name : 'the public model'
+export function createRvcPrediction(replicate: Replicate, engine: RvcEngine, input: Record<string, unknown>, pool: RvcPool) {
+  if (pool !== 'public' && engine === 'indexed') {
+    const d = pool === 'hd' ? RVC_DEPLOYMENT : RVC_STANDARD_DEPLOYMENT
+    return replicate.deployments.predictions.create(d.owner, d.name, { input })
+  }
   return replicate.predictions.create({ version: rvcVersion(engine), input })
 }
 
@@ -72,7 +81,7 @@ export function createRvcPrediction(replicate: Replicate, engine: RvcEngine, inp
 // create call is awaited (an un-awaited promise can be frozen with the lambda);
 // every failure is swallowed — warming must never break the caller. No-op on
 // the cover engine (zsxkib's pool is kept warm by its own traffic).
-export async function fireWarmPing(origin: string, logTag: string, onDeployment = false): Promise<void> {
+export async function fireWarmPing(origin: string, logTag: string, pool: RvcPool = 'public'): Promise<void> {
   const engine = rvcEngine()
   if (engine === 'cover') return
   if (!process.env.REPLICATE_API_TOKEN) return
@@ -80,9 +89,9 @@ export async function fireWarmPing(origin: string, logTag: string, onDeployment 
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
     const ping = engine === 'indexed'
       // warm_only boots the instance and returns the input untouched.
-      ? await createRvcPrediction(replicate, engine, { input_audio: `${origin}/warm-ping.wav`, warm_only: true }, onDeployment)
+      ? await createRvcPrediction(replicate, engine, { input_audio: `${origin}/warm-ping.wav`, warm_only: true }, pool)
       : await replicate.predictions.create({ version: BARE_RVC_VERSION, input: { input_audio: `${origin}/warm-ping.wav`, pitch_change: 0, output_format: 'mp3' } })
-    console.log(`[${logTag}] warm-ping fired (${ping.id}${onDeployment && engine === 'indexed' ? ` on ${RVC_DEPLOYMENT.name}` : ''})`)
+    console.log(`[${logTag}] warm-ping fired (${ping.id}${pool !== 'public' && engine === 'indexed' ? ` on ${rvcPoolName(pool)}` : ''})`)
   } catch (err) {
     console.warn(`[${logTag}] warm-ping failed (caller unaffected):`, err instanceof Error ? err.message : String(err))
   }

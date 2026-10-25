@@ -21,7 +21,7 @@
 // RVC_START_TIMEOUT_MS, landed on a machine without a working GPU (its log says "use CPU
 // for inference" — seen 2026-10-23, 5+ min for a song instead of ~1), or is still running
 // RVC_RUN_TIMEOUT_MS after starting, is cancelled and started once more — on the OTHER
-// pool: voice-engine steps run on our own deployment (rvc-engine.ts RVC_DEPLOYMENT), and a
+// pool: voice-engine steps run on our own deployments (rvc-engine.ts RvcPool: Standard on T4, HD on L40S), and a
 // restart goes to the public model (a broken machine stays up and would get the job again).
 //
 // No database or storage state: POST returns a signed ticket ("hd.<payload>.<mac>")
@@ -43,7 +43,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { createRvcPrediction, rvcEngine, RVC_DEPLOYMENT } from '@/lib/rvc-engine'
+import { createRvcPrediction, fireWarmPing, rvcEngine, rvcPoolName } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { refundSwap, settleSwap } from '@/lib/swap-charges'
 
@@ -60,6 +60,10 @@ export const HD_MIN_OUTPUT_BYTES = 50_000          // a SoulX WAV smaller than t
 export const HD_RESTARTS = 1                       // restarts per stage (input fetch error / stuck / no GPU)
 export const RVC_START_TIMEOUT_MS = 3 * 60 * 1000  // a voice-engine step not started after this: cancelled, started once more
 export const RVC_RUN_TIMEOUT_MS = 5 * 60 * 1000    // … or still running this long after starting (a full song takes ~0.5–1.5 min)
+// Speed (rollout step 4, Option B, 2026-10-25): while SoulX sings (~2 min), the L40S voice machine is woken
+// (boot ~1.7 min) and kept up with a ping this often — an idle machine shuts down in under a minute — so the
+// RVC step starts at once. Not at SoulX's creation: SoulX itself can take 1–4.5 min to start.
+export const HD_RVC_WAKE_EVERY_MS = 40 * 1000
 const NO_GPU_LOG = 'use CPU for inference'         // the RVC engine's own message when the machine's GPU isn't usable
 // "couldn't fetch an input" as Cog reports it, e.g. "404 Client Error: Not Found for url: …" or
 // "HTTPSConnectionPool(host=…): Max retries exceeded with url: …" (seen 2026-10-23)
@@ -103,6 +107,7 @@ interface Ticket {
   m?: 'std'       // Standard + finishing flow (absent = HD)
   rid?: string    // fin stage of the Standard flow: the Standard prediction (delivered if finishing fails)
   nf?: 1          // 2-voice duet (2026-10-24, admin): no finishing — the RVC step's voice is delivered (today's duet mix)
+  wk?: number     // sx stage: when the L40S voice machine was last woken, ms (step 4, Option B)
 }
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url')
@@ -217,11 +222,11 @@ export async function startStandardVoice(opts: {
     ...(opts.chargeId ? { ch: opts.chargeId } : {}),
   }
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-  const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), true)
+  const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), 'standard')
   t.id = pred.id
   // wake the finishing machine now, so it's up when the voice is done (only the create is awaited)
   if (opts.instrumentalPath) await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
-  console.log(`[hd-voice] start STANDARD + finishing: voice ${opts.voiceId} key ${t.p} → today's engine ${pred.id} on ${RVC_DEPLOYMENT.name}${opts.instrumentalPath ? '' : ' (no studio instrumental: no finishing)'} (${Date.now() - t0} ms)`)
+  console.log(`[hd-voice] start STANDARD + finishing: voice ${opts.voiceId} key ${t.p} → today's engine ${pred.id} on ${rvcPoolName('standard')}${opts.instrumentalPath ? '' : ' (no studio instrumental: no finishing)'} (${Date.now() - t0} ms)`)
   return sign(t)
 }
 
@@ -264,7 +269,7 @@ async function restart(t: Ticket, replicate: Replicate, origin: string, why: str
     })).id
   } else {
     // the other pool: the public model (our deployment's machine may be the problem)
-    id = (await createRvcPrediction(replicate, t.s === 'rvc' ? 'indexed' : rvcEngine(), await rvcStepInput(t, origin, t.s === 'rvc' ? 'rvc' : 'fb'), false)).id
+    id = (await createRvcPrediction(replicate, t.s === 'rvc' ? 'indexed' : rvcEngine(), await rvcStepInput(t, origin, t.s === 'rvc' ? 'rvc' : 'fb'), 'public')).id
   }
   const where = t.s === 'rvc' || t.s === 'fb' || t.s === 'std' ? ' on the public model' : ''
   console.log(`[hd-voice] RESTART ${t.s === 'sx' ? 'SoulX' : t.s === 'fin' ? 'finishing' : t.s === 'rvc' ? 'RVC step' : "today's engine"}: ${why} (at ${secs(now - t.t0)} from start) → ${id}${where}`)
@@ -289,8 +294,8 @@ function rvcStuck(pred: { status: string; logs?: string | null }, now: number, c
 async function fallback(t: Ticket, replicate: Replicate, origin: string, reason: string): Promise<Reply> {
   const now = Date.now()
   try {
-    const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, origin, 'fb'), true)
-    console.log(`[hd-voice] FALLBACK to today's engine: ${reason} (at ${secs(now - t.t0)} from start) → ${pred.id} on ${RVC_DEPLOYMENT.name}`)
+    const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, origin, 'fb'), 'hd')  // the L40S woken at SoulX start
+    console.log(`[hd-voice] FALLBACK to today's engine: ${reason} (at ${secs(now - t.t0)} from start) → ${pred.id} on ${rvcPoolName('hd')}`)
     return { status: 'processing', nextId: sign({ ...t, s: 'fb', id: pred.id, ts: now, fr: reason, r: 0 }), note: HD_NOTE_FALLBACK }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -345,8 +350,8 @@ async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; stat
       console.log(`[hd-voice] SoulX done ${t.id}: waited ${Number.isFinite(started) ? secs(started - created) : 'n/a'} to start, ran ${pred.metrics?.predict_time?.toFixed(0) ?? 'n/a'} s | ${logLine(pred.logs, 'LANGUAGE')} | ${logLine(pred.logs, 'REFERENCE')} | ${logLine(pred.logs, 'TIMING song')} | ${logLine(pred.logs, 'CHECK')}`)
       try {
         const next: Ticket = { ...t, s: 'rvc', so: out, r: 0 }
-        const rvc = await createRvcPrediction(replicate, 'indexed', await rvcStepInput(next, origin, 'rvc'), true)
-        console.log(`[hd-voice] RVC started ${rvc.id} on ${RVC_DEPLOYMENT.name} (your voice: protect 0.2, index 0.3, ${HD_RVC_F0_METHOD}, pitch ${HD_RVC_PITCH})`)
+        const rvc = await createRvcPrediction(replicate, 'indexed', await rvcStepInput(next, origin, 'rvc'), 'hd')
+        console.log(`[hd-voice] RVC started ${rvc.id} on ${rvcPoolName('hd')} (your voice: protect 0.2, index 0.3, ${HD_RVC_F0_METHOD}, pitch ${HD_RVC_PITCH})`)
         // wake the finishing machine now, so it's up when the RVC step is done (only the create is awaited)
         if (!t.nf) await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, { input: { warm: true } }).catch(() => {})
         return { body: { status: 'processing', nextId: sign({ ...next, id: rvc.id, ts: now }), note: HD_NOTE_VOICE }, status: 200 }
@@ -375,6 +380,10 @@ async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; stat
     if (Number.isFinite(started) && now - started > HD_RUN_TIMEOUT_MS) {
       await replicate.predictions.cancel(t.id).catch(() => {})
       return { body: await fallback(t, replicate, origin, `SoulX not finished ${secs(now - started)} after starting`), status: 200 }
+    }
+    if (Number.isFinite(started) && (!t.wk || now - t.wk > HD_RVC_WAKE_EVERY_MS)) {
+      await fireWarmPing(origin, 'hd-voice', 'hd')
+      return { body: { status: 'processing', nextId: sign({ ...t, wk: now }), note: HD_NOTE_SINGING }, status: 200 }
     }
     return { body: { status: 'processing', note: Number.isFinite(started) ? HD_NOTE_SINGING : HD_NOTE_STARTING }, status: 200 }
   }

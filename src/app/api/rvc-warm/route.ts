@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/rate-limit'
-import { fireWarmPing, rvcEngine } from '@/lib/rvc-engine'
+import { fireWarmPing, rvcEngine, type RvcPool } from '@/lib/rvc-engine'
 import { newEnginesFor } from '@/lib/new-engines'
 
 export const maxDuration = 15
@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ warmed: false, reason: 'rate limited' })
   }
 
-  // new-engine accounts (lib/new-engines.ts): warm our own deployment (the one their swaps run on)
-  await fireWarmPing(new URL(req.url).origin, 'rvc-warm', newEnginesFor(user.email))
+  // new-engine accounts (lib/new-engines.ts): warm the deployment their swap will run on —
+  // Standard: the T4. HD Voice: nothing here (its L40S is woken while SoulX sings, lib/hd-voice.ts).
+  let body: { engine?: string } = {}
+  try { body = await req.json() } catch { /* no body: as before */ }
+  const pool: RvcPool | null = !newEnginesFor(user.email) ? 'public' : body.engine === 'HD Voice' ? null : 'standard'
+  if (!pool) return NextResponse.json({ warmed: false, reason: 'HD Voice: the voice machine is woken while SoulX sings' })
+  await fireWarmPing(new URL(req.url).origin, 'rvc-warm', pool)
   return NextResponse.json({ warmed: true })
 }

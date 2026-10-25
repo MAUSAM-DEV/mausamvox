@@ -63,10 +63,12 @@ const DUET_CLEAN_NOTE = 'Separating the two singers more cleanly…'
 // WARM_MAX_MS from the start at the latest (founder, 2026-10-23: after one swap the pings ran ~25 min).
 const WARM_PING_EVERY_MS = 60_000
 const WARM_MAX_MS = 10 * 60_000
-// Speed (engine plan step 5, admin only): SoulX's L40S is warmed for at most this long per song
-// while HD Voice is the chosen engine (≈ $0.06 per minute it stays up).
-const SOULX_WARM_MAX_MS = 5 * 60_000
-// …and admin pings come every 30 s: our deployments shut an idle machine down in under a minute
+// New-engine accounts (rollout step 4, Option B, 2026-10-25 — cost per swap): ONE warm-up per song,
+// starting when a voice is picked on Configure, for at most this long: the Standard voice machine (T4)
+// + the finishing machine, or SoulX (L40S, ≈ $0.06/min) + the finishing machine for HD Voice. At most
+// ≈ $0.18 (HD) / $0.04 (Standard) per song. A second take of the same song starts cold.
+const NEW_ENGINE_WARM_MAX_MS = 3 * 60_000
+// …and their pings come every 30 s: our deployments shut an idle machine down in under a minute
 // (measured 2026-10-23), so a 60 s gap let them go cold between pings.
 const ADMIN_WARM_PING_EVERY_MS = 30_000
 // Format a semitone offset for a toast, e.g. -12 → "-12 st", 0 → "0 st".
@@ -1243,32 +1245,38 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // went cold in the 96 s between the upload's ping and Configure → the
   // conversion waited 58 s; 60 s pings gave 0 s waits everywhere else).
   const songIn = !!stemResult
-  // Admin (engine plan step 5): with a song in and before the Result screen, also wake the
-  // finishing machine and — for HD Voice, at most SOULX_WARM_MAX_MS per song — SoulX.
+  // New-engine accounts (step 4, Option B): only on Configure once a voice is picked, ONE window of
+  // NEW_ENGINE_WARM_MAX_MS per song — the voice machine for the chosen engine + the finishing machine
+  // (+ SoulX for HD Voice). Everyone else: as before (Upload with a song in + Configure, WARM_MAX_MS).
   const effectiveVoiceEngine = voiceEngine === 'Auto' ? autoVoiceEngine : voiceEngine
-  const engineWarmRef = useRef({ admin: false, engine: effectiveVoiceEngine as string, song: '', soulxSince: 0, soulxSong: '' })
-  engineWarmRef.current = { ...engineWarmRef.current, admin: newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
+  const voicePicked = !!selectedVoiceId
+  const engineWarmRef = useRef({ newEngines: false, engine: effectiveVoiceEngine as string, song: '' })
+  engineWarmRef.current = { ...engineWarmRef.current, newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '' }
+  const newWarmRef = useRef({ song: '', since: 0 })
   useEffect(() => {
     const ws = warmRef.current, cameFromResult = ws.prevStep === 3
     ws.prevStep = step
-    // Result = the swap is delivered: no more pings
-    if (step !== 2 && !(step === 1 && songIn)) return
     const song = engineWarmRef.current.song
-    if (ws.song !== song || cameFromResult || !ws.since) { ws.song = song; ws.since = Date.now() }
-    const capped = () => Date.now() - ws.since > WARM_MAX_MS
+    let capped: () => boolean
+    if (newEngines) {
+      if (step !== 2 || !voicePicked || !song) return
+      const nw = newWarmRef.current
+      if (nw.song !== song) { nw.song = song; nw.since = Date.now(); console.log(`[warm] started: up to ${NEW_ENGINE_WARM_MAX_MS / 60_000} min for this song`) }
+      capped = () => Date.now() - nw.since > NEW_ENGINE_WARM_MAX_MS
+    } else {
+      // Result = the swap is delivered: no more pings
+      if (step !== 2 && !(step === 1 && songIn)) return
+      if (ws.song !== song || cameFromResult || !ws.since) { ws.song = song; ws.since = Date.now() }
+      capped = () => Date.now() - ws.since > WARM_MAX_MS
+    }
     let tick = 0
     const ping = (now = false) => {
       const w = engineWarmRef.current
       // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); new-engine accounts: every ADMIN_WARM_PING_EVERY_MS
-      if (!w.admin && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
-      fetch('/api/rvc-warm', { method: 'POST' }).catch(() => {})
-      if (!w.admin || stepRef.current === 3 || !w.song) return
-      let soulx = false
-      if (w.engine === 'HD Voice') {
-        if (w.soulxSong !== w.song) { w.soulxSong = w.song; w.soulxSince = Date.now() }
-        soulx = Date.now() - w.soulxSince < SOULX_WARM_MAX_MS
-      }
-      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx }) }).catch(() => {})
+      if (!w.newEngines && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
+      fetch('/api/rvc-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine: w.engine }) }).catch(() => {})
+      if (!w.newEngines || stepRef.current !== 2 || !w.song) return
+      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx: w.engine === 'HD Voice' }) }).catch(() => {})
     }
     // Hidden tab = the user left: no pings (back within the cap: one at once, then on schedule)
     const onVisible = () => { if (document.visibilityState === 'visible' && !capped()) ping(true) }
@@ -1277,7 +1285,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     let logged = false
     const id = setInterval(() => {
       if (capped()) {
-        if (!logged) { logged = true; console.log(`[warm] stopped: ${WARM_MAX_MS / 60_000}-minute cap`) }
+        if (!logged) { logged = true; console.log(`[warm] stopped: ${(newEngines ? NEW_ENGINE_WARM_MAX_MS : WARM_MAX_MS) / 60_000}-minute cap`) }
         return
       }
       if (document.visibilityState === 'visible') ping()
@@ -1286,7 +1294,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [step, songIn])
+  }, [step, songIn, newEngines, voicePicked])
 
   // Diagnostics (2026-10-10): twice the page stopped checking on a running
   // conversion for ~70 s although the Mac's display stayed on. Log every gap

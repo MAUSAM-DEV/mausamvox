@@ -5,11 +5,11 @@ import { rateLimit } from '@/lib/rate-limit'
 import { HD_FINISH_DEPLOYMENT, HD_SOULX_DEPLOYMENT } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
 
-// Speed (engine plan step 5, 2026-10-23) — new-engine accounts only (lib/new-engines.ts). While a song is in and
-// Configure is open, the page calls this every 60 s next to /api/rvc-warm (which warms the
-// voice engine): it wakes the finishing machine (CPU, cheap) and — only when the chosen
-// engine is HD Voice and the page's 5-minute SoulX allowance per song isn't used up —
-// SoulX's L40S (≈ $0.06 per minute it stays up). Each ping is a `warm` job that does no work.
+// Speed (engine plan step 5, 2026-10-23; Option B since 2026-10-25) — new-engine accounts only
+// (lib/new-engines.ts). During the page's one 3-minute warm-up per song (Configure, a voice
+// picked), it calls this every 30 s next to /api/rvc-warm (which warms the Standard voice
+// machine): it wakes the finishing machine (CPU, cheap) and — when the chosen engine is HD
+// Voice — SoulX's L40S (≈ $0.06 per minute it stays up). Each ping is a `warm` job that does no work.
 // Always 200; a failed warm-up never touches a swap. Vercel logs: search "[engine] warm".
 export const maxDuration = 15
 
