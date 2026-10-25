@@ -20,7 +20,7 @@ import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 import { titleLooksEnglish } from '@/lib/title-language'
 import { refreshStemUrls } from '@/lib/stem-urls'
-import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS } from '@/lib/swap-prices'
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS, HD_SWAP_CREDITS } from '@/lib/swap-prices'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -90,6 +90,7 @@ type UnsavedTake = {
   stemResult: StemResult; at: number
   finishedVoice?: boolean // finished on the server (balanced finishing) — the Result screen uses the finished-voice mix
   hdVoice?: boolean       // older name of finishedVoice (takes saved before 2026-10-23)
+  hd?: boolean            // made with HD Voice (SoulX) — a preview then saves at the HD price (step 5)
   // 2-voice duet (since 2026-10-24): the second voice (female singer) is stored next to the first
   duet?: { mode: 'both-split' | 'both-same'; voiceId2: string; voiceName2: string }
   gentleMaster?: boolean
@@ -230,10 +231,12 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // 200 − what the preview already cost, so a user never pays twice.
   // local = its converted voice is held in the page (never expires); otherwise
   // it's Replicate's copy, deleted ~1 h after the conversion ran.
-  const lastPreviewRef = useRef<{ key: string; predictionId: string; charged: number; at: number; saved: boolean; local: boolean } | null>(null)
+  // price = the full-swap price of the engine the preview was made with (HD_SWAP_CREDITS / FULL_SWAP_CREDITS)
+  const lastPreviewRef = useRef<{ key: string; predictionId: string; charged: number; price: number; at: number; saved: boolean; local: boolean } | null>(null)
   // Page-held copies (blob: URLs) of the converted voice(s) on the Result screen.
   const localVocalUrlsRef = useRef<string[]>([])
   const [previewSaveCost, setPreviewSaveCost] = useState<number | null>(null)
+  const [previewFullPrice, setPreviewFullPrice] = useState(FULL_SWAP_CREDITS)
   // Fingerprint of the last take SAVED as a full swap (preview-saved or converted).
   // Same settings again would produce the same sound → never charge for it.
   const lastSavedKeyRef = useRef<string | null>(null)
@@ -1400,8 +1403,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setSelectedVoiceId(t.voiceId); setPitchShift(t.pitchShift); setKeyAuto(false); setManualKey(t.keyShift); setAutotune(t.autotune)
       persistContextRef.current = { predictionId: r.predictionId, songName: t.songName, voiceUsed: duet ? `${t.voiceName} + ${duet.voiceName2}` : t.voiceName }
       if (t.type === 'preview') {
-        lastPreviewRef.current = { key: t.key, predictionId: r.predictionId, charged: t.charged, at: Date.now(), saved: false, local: true }
-        setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - t.charged))
+        const price = t.hd ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS
+        lastPreviewRef.current = { key: t.key, predictionId: r.predictionId, charged: t.charged, price, at: Date.now(), saved: false, local: true }
+        setPreviewSaveCost(Math.max(0, price - t.charged)); setPreviewFullPrice(price)
         setArmMixUpload(false)
       } else {
         lastPreviewRef.current = null
@@ -1452,7 +1456,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   async function savePreviewAsFull(): Promise<boolean> {
     const p = savablePreview()
     if (!p) return false
-    const cost = Math.max(0, FULL_SWAP_CREDITS - p.charged)
+    const cost = Math.max(0, p.price - p.charged)
     if (!isAdmin && creditsRemaining !== null && creditsRemaining < cost) {
       showToast(`Saving this swap costs ${cost} credits, and you don't have enough. Top up to continue.`)
       return true
@@ -1569,7 +1573,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // lib/hd-voice.ts) moves through stages: the server hands back `nextId` to
       // poll from then on, and a `note` to show while it works.
       // On a give-up (timeout / lost contact) the job is cancelled so its charge comes back.
-      const pollJob = async (firstId: string): Promise<{ url: string; id: string; finished: boolean }> => {
+      const pollJob = async (firstId: string): Promise<{ url: string; id: string; finished: boolean; hd: boolean }> => {
         const live = { id: firstId }
         try {
           return await pollJobInner(live)
@@ -1578,7 +1582,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           throw err
         }
       }
-      const pollJobInner = async (live: { id: string }): Promise<{ url: string; id: string; finished: boolean }> => {
+      const pollJobInner = async (live: { id: string }): Promise<{ url: string; id: string; finished: boolean; hd: boolean }> => {
         let predictionId = live.id
         const POLL_INTERVAL_MS = 5000
         const MAX_ATTEMPTS = 300 // ~25 minutes — shared GPU queues can push RVC past 14 min
@@ -1603,7 +1607,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           }
           pollErrors = 0
           if (Date.now() - t0 > 8000) clientTiming('poll-slow', { ms: Date.now() - t0, failed: 0 })
-          if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId, finished: (data.finished ?? data.hd) === true }
+          if (data.status === 'succeeded') return { url: data.convertedVocalsUrl as string, id: data.predictionId ?? predictionId, finished: (data.finished ?? data.hd) === true, hd: data.hd === true }
           if (data.status === 'failed' || data.status === 'canceled') {
             console.error('[voice-swap] RVC job failed:', { predictionId, status: data.status, error: data.error })
             if (typeof (data as { creditsRemaining?: unknown }).creditsRemaining === 'number') setCreditsRemaining((data as { creditsRemaining: number }).creditsRemaining)
@@ -1886,15 +1890,16 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       // different one than it started with) — save and "Recent — not saved" use it.
       let deliveredId: string
       let deliveredFinished: boolean
+      let deliveredHd: boolean // SoulX was used (HD Voice) — not on a fallback
       try {
-        ({ url: remoteUrl, id: deliveredId, finished: deliveredFinished } = await pollJob(startData.predictionId as string))
+        ({ url: remoteUrl, id: deliveredId, finished: deliveredFinished, hd: deliveredHd } = await pollJob(startData.predictionId as string))
       } catch (err) {
         if (!(err instanceof EngineJobFailed)) throw err
         // The engine itself failed: retry once, quietly and for free.
         console.warn('[voice-swap] engine failed — retrying once:', err.message)
         setOverlayNote('The voice engine hiccuped — trying once more…')
         startData = await startConversion(startData.predictionId as string)
-        ;({ url: remoteUrl, id: deliveredId, finished: deliveredFinished } = await pollJob(startData.predictionId as string))
+        ;({ url: remoteUrl, id: deliveredId, finished: deliveredFinished, hd: deliveredHd } = await pollJob(startData.predictionId as string))
       }
       setOverlayNote(null)
 
@@ -1916,8 +1921,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       setStep(3)
       if (type === 'preview') {
         const charged = previewCost
-        lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: deliveredId, charged, at: Date.now(), saved: false, local: kept.local }
-        setPreviewSaveCost(Math.max(0, FULL_SWAP_CREDITS - charged))
+        const price = deliveredHd ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS
+        lastPreviewRef.current = { key: takeKey(takeKeyShift), predictionId: deliveredId, charged, price, at: Date.now(), saved: false, local: kept.local }
+        setPreviewSaveCost(Math.max(0, price - charged)); setPreviewFullPrice(price)
       } else {
         lastPreviewRef.current = null
         setPreviewSaveCost(null)
@@ -1932,7 +1938,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           type, charged: type === 'preview' ? previewCost : 0, key: takeKey(takeKeyShift),
           songName: stemResult.fileName?.replace(/\.[^.]+$/, '') ?? 'Unknown Track',
           voiceId: voice.id, voiceName: voice.name, pitchShift, keyShift: takeKeyShift, autotune, duetSinger,
-          stemResult, at: Date.now(), finishedVoice: deliveredFinished,
+          stemResult, at: Date.now(), finishedVoice: deliveredFinished, hd: deliveredHd,
         }
         void fetch('/api/unsaved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ predictionId: deliveredId, take }) }).catch(() => {})
         setRecentUnsaved(null)
@@ -2121,6 +2127,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                 ].filter(Boolean).join(' + ') || null}
                 persistedSwapId={persistedSwapId}
                 previewSaveCost={savablePreview() ? previewSaveCost : null}
+                previewFullPrice={previewFullPrice}
                 saveInfo={saveInfo}
                 onSaveUpdate={updateSave}
                 saveRequested={saveRequested}
@@ -2143,6 +2150,13 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           {step !== 3 && (() => {
             const hasDuetStems = !!(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl)
             const isDualMode = hasDuetStems && (duetMode === 'both-split' || duetMode === 'both-same')
+            // What a full swap costs (step 5): HD Voice 800 (200 if it falls back to Standard), Standard 200.
+            // Auto with the language not known yet → both, it's decided at Process. Duet stems: Standard.
+            const hdTakeUnknown = newEngines && !hasDuetStems && voiceEngine === 'Auto' && !stemResult?.songLanguage
+            const hdTake = newEngines && !hasDuetStems && effectiveVoiceEngine === 'HD Voice' && !hdTakeUnknown
+            const fullSwapCostLabel = hdTakeUnknown
+              ? `${FULL_SWAP_CREDITS} cr (Standard) or ${HD_SWAP_CREDITS} cr (HD Voice, English songs)`
+              : hdTake ? `${HD_SWAP_CREDITS} cr (HD Voice; ${FULL_SWAP_CREDITS} cr if it falls back to Standard)` : `${FULL_SWAP_CREDITS} cr`
             const isDuetGated = isDuet && !hasDuetStems && !genderSplitting
             // Configure: wait for the lead/backing split — a swap started before
             // it lands converts the whole vocal track (backing too) and Auto Key
@@ -2196,7 +2210,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
               <span className="vs-credit-hint">
                 {isDualMode
                   ? 'Full swap ~400 cr (2 voices)'
-                  : 'Preview free (first 2 per song), then 50 cr · Full swap 200 cr — a paid preview counts toward it'}
+                  : `Preview free (first 2 per song), then 50 cr · Full swap ${fullSwapCostLabel} — a paid preview counts toward it`}
               </span>
               <div className="vs-action-btns">
                 <button
@@ -2236,7 +2250,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                       ? '⏳ Finding the lead vocal…'
                       : savablePreview()
                       ? `💾 Save to library · ${previewSaveCost ?? FULL_SWAP_CREDITS} cr`
-                      : guided ? '🎤 Generate My Cover' : '⚡ Process Full Track'}
+                      : guided ? '🎤 Generate My Cover' : `⚡ Process Full Track${isAdmin || isDualMode ? '' : ` · ${hdTakeUnknown ? `${FULL_SWAP_CREDITS}–${HD_SWAP_CREDITS}` : hdTake ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS} cr`}`}
                   </button>
                 )}
               </div>

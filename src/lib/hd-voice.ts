@@ -45,7 +45,8 @@ import Replicate from 'replicate'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { createRvcPrediction, fireWarmPing, rvcEngine, rvcPoolName } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
-import { refundSwap, settleSwap } from '@/lib/swap-charges'
+import { downgradeToStandard, refundSwap, setChargeEngine, settleSwap } from '@/lib/swap-charges'
+import { FULL_SWAP_CREDITS } from '@/lib/swap-prices'
 
 export const HD_SOULX_DEPLOYMENT = { owner: 'mausam-dev', name: 'soulx-l40s' } // private model mausam-dev/soulx-svc
 export const HD_FINISH_DEPLOYMENT = { owner: 'mausam-dev', name: 'hd-finish-cpu' } // private model mausam-dev/hd-finish
@@ -98,6 +99,8 @@ interface Ticket {
   t0: number      // HD start, ms
   ts: number      // this stage's start, ms
   ch?: string     // the swap's charge (swap_charges id) — absent for admins (never charged)
+  hp?: 1          // that charge was taken at the HD price (a full swap): a fallback re-prices it to Standard
+  pv?: string     // the paid preview counted toward it (kept when it's re-priced)
   fr?: string     // fallback reason
   r?: number      // restarts used in this stage (fetch retry / start timeout)
   so?: string     // SoulX output URL (rvc stage — to restart the RVC step)
@@ -189,7 +192,7 @@ async function soulxInput(t: Ticket): Promise<{ input: Record<string, unknown>; 
 // POST side. Throws when SoulX can't be started (the caller then runs today's engine).
 export async function startHdVoice(opts: {
   userId: string; voiceId: string; leadPath: string; leadUrl: string; instrumentalPath: string; backingPath: string
-  pitch: number; autotune: number; chargeId?: string; origin?: string; test?: string
+  pitch: number; autotune: number; chargeId?: string; hdPriced?: boolean; previewId?: string; origin?: string; test?: string
   noFinish?: boolean   // 2-voice duet: SoulX → RVC only (the founder's English duet pick, 2026-10-24)
 }): Promise<string> {
   const t0 = Date.now()
@@ -199,6 +202,7 @@ export async function startHdVoice(opts: {
     s: 'sx', id: '', u: opts.userId, v: opts.voiceId, lp: opts.leadPath, lu: opts.leadPath ? '' : opts.leadUrl,
     ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0,
     ...(opts.chargeId ? { ch: opts.chargeId } : {}),
+    ...(opts.chargeId && opts.hdPriced ? { hp: 1 as const, ...(opts.previewId ? { pv: opts.previewId } : {}) } : {}),
     ...(opts.test ? { tf: opts.test, o: opts.origin } : {}),
     ...(opts.noFinish ? { nf: 1 as const } : {}),
   }
@@ -296,7 +300,12 @@ async function fallback(t: Ticket, replicate: Replicate, origin: string, reason:
   try {
     const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, origin, 'fb'), 'hd')  // the L40S woken at SoulX start
     console.log(`[hd-voice] FALLBACK to today's engine: ${reason} (at ${secs(now - t.t0)} from start) → ${pred.id} on ${rvcPoolName('hd')}`)
-    return { status: 'processing', nextId: sign({ ...t, s: 'fb', id: pred.id, ts: now, fr: reason, r: 0 }), note: HD_NOTE_FALLBACK }
+    // Today's engine = the Standard price (step 5): an HD-priced charge is re-priced; a preview is
+    // marked Standard so saving it costs the Standard price.
+    let ch = t.ch
+    if (t.ch && t.hp) ch = (await downgradeToStandard(t.u, t.ch, FULL_SWAP_CREDITS, t.pv)) ?? undefined
+    else if (t.ch) await setChargeEngine(t.ch, 'standard')
+    return { status: 'processing', nextId: sign({ ...t, s: 'fb', id: pred.id, ts: now, fr: reason, r: 0, ch, hp: undefined, pv: undefined }), note: HD_NOTE_FALLBACK }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[hd-voice] FAILED: ${reason}; today's engine didn't start either (${msg})`)

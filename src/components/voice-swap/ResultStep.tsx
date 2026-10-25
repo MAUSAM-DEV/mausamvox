@@ -60,6 +60,7 @@ interface ResultStepProps {
   // Set while the result is an UNSAVED preview that can be saved as the full
   // swap without re-converting: the credits it will cost (200 − paid preview).
   previewSaveCost?: number | null
+  previewFullPrice?: number   // the full-swap price the preview counts toward (HD Voice 800 / Standard 200)
   onSavePreview?: () => void
   // Key change chosen on Configure for THIS take (semitones). The voice was
   // converted in the new key; the music (not drums) is shifted here to match.
@@ -544,7 +545,7 @@ function PolishKnob({
 export function ResultStep({
   onNewSwap, onToast,
   convertedVocalsUrl, convertedVocalsUrl2, stemResult, duetUntouchedVocalsUrl,
-  persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, onSavePreview,
+  persistMix, onFullMixReady, onInstrumentalReady, onPolishResave, voiceName, persistedSwapId, previewSaveCost, previewFullPrice = 200, onSavePreview,
   keyShift = 0, autotuneLabel, convertedSourceUrls, saveInfo, onSaveUpdate, saveRequested, onSaveRequestHandled,
   finishedVoice = false, gentleMaster = false,
 }: ResultStepProps) {
@@ -1504,7 +1505,7 @@ export function ResultStep({
               <div className="vs-save-preview-txt">
                 <strong>Not saved yet.</strong>{' '}
                 {payFirst
-                  ? <>This is a preview. Saving keeps this exact take — no re-conversion{previewSaveCost! < 200 ? <>, and the {200 - previewSaveCost!} cr you paid for the preview counts toward it</> : null}.</>
+                  ? <>This is a preview. Saving keeps this exact take — no re-conversion{previewSaveCost! < previewFullPrice ? <>, and the {previewFullPrice - previewSaveCost!} cr you paid for the preview counts toward it</> : null}.</>
                   : <>Press Save to keep this swap in your library.</>}
               </div>
               {saveBtn(label)}

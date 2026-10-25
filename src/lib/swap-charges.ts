@@ -91,6 +91,34 @@ export async function settleSwap(userId: string, by: { chargeId?: string; jobId?
   return data === 'delivered' || data === 'refunded' ? data : 'none'
 }
 
+// HD Voice fell back to Standard: the HD charge is refunded and the Standard price taken
+// instead, as one new charge (so the swap costs FULL_SWAP_CREDITS, at most once). Returns the
+// new charge id to carry on with, or null when it couldn't (the voice is then delivered
+// uncharged — logged; a refund that failed leaves the HD charge in place, also logged).
+export async function downgradeToStandard(userId: string, chargeId: string, price: number, previewId?: string): Promise<string | null> {
+  const back = await refundSwap(userId, { chargeId }, 'HD fell back to Standard')
+  if (back === null) return chargeId  // nothing refunded (already settled/refunded, or an error) → keep the old charge
+  const again = await chargeSwap({ userId, kind: 'full', price, previewId })
+  if (!again.ok) {
+    console.error(`[charge] HD fell back to Standard: re-charge at ${price} cr failed — delivered without charge`)
+    return null
+  }
+  return again.chargeId
+}
+
+// Mark a charge's engine (a preview that fell back from HD saves at the Standard price).
+export async function setChargeEngine(chargeId: string, engine: 'hd' | 'standard'): Promise<void> {
+  const { error } = await supabaseAdmin.from('swap_charges').update({ engine }).eq('id', chargeId)
+  if (error) console.error(`[charge] engine update for ${chargeId} failed: ${error.message}`)
+}
+
+// The engine a charge was taken for ('hd' / 'standard' / '' — older rows), null if not found.
+export async function chargeEngineFor(userId: string, deliveredId: string, kind: ChargeKind): Promise<string | null> {
+  const { data, error } = await supabaseAdmin.from('swap_charges').select('engine').eq('user_id', userId).eq('kind', kind).eq('delivered_id', deliveredId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (error) { console.error(`[charge] engine lookup for ${deliveredId} failed: ${error.message}`); return null }
+  return data ? String(data.engine ?? '') : null
+}
+
 // true / false, or null when it couldn't be checked.
 export async function swapPaid(userId: string, predictionId: string): Promise<boolean | null> {
   const { data, error } = await supabaseAdmin.rpc('swap_paid', { p_user: userId, p_prediction: predictionId })
