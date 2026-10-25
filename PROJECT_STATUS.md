@@ -6,6 +6,21 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 💰 2026-10-25 (8) — ROLLOUT STEP 5 shipped (`b28d732`, pricing) + English thin spots explained (evidence) — ⚠️ founder live test pending
+
+- **Founder:** fixes live test PASSED: Hindi duet ticked → "Split duet · 250 cr", Process locked until split; Mausam Hindi + original female sounds good (10 min 25 s). English HD (Mausam English, key −3) OK to good but thin / "clacking" at 3:32–3:35, 3:44–3:45, 4:26, 4:29 (12 min). For later: the upload/split part takes ~4 min — look for ways to cut it before beta.
+- **Thin spots (evidence, test 16:43 UTC, SoulX `j618z1zx…` key −3, reference 210 s):** "Mausam English" recording range: median A3, 95 % C♯4, 99 % D♯4.
+  - 3:32–3:35: original G♯4 → F4 at −3 (only 0.7 % of the recording that high); SoulX itself off the note 70 %; final 69 % off + 24 % silent.
+  - 4:29: original A4 → F♯4 (0.6 %); SoulX 32 % off; final 32 % silent.
+  - 3:44–3:45: A♯3 (inside the range); SoulX on the note (0 % off) → the RVC voice step cracks (32 % off).
+  - 4:26: B3 (inside the range); final 22 % silent (dropouts in the voice step).
+  - **Key −4 wouldn't avoid them:** the two high spots stay above the recording (E4 0.8 %, F4 0.7 %); the other two aren't range problems. Worth comparing the same song with "Mausam Hindi" (its recording reaches higher).
+  - Also seen: that run's finishing took 150 s (usual ~30 s; 287 s on the duet) and its RVC step ran twice.
+- **Step 5 (`b28d732`):** `HD_SWAP_CREDITS = 800` for a full swap that starts on HD Voice (Standard 200). HD falling back to today's engine (SoulX didn't start / fallback stage) → the HD charge is refunded and 200 taken instead (`downgradeToStandard`, ticket `hp`/`pv`); an HD preview that falls back is marked Standard. Saving a preview = the full price of its engine (800 / 200) − what the preview cost (`charge-preview` reads the preview's engine from the ledger; the page tracks it, also in "Recent — not saved"). Configure: action bar + Process button show 200 / 800 (both while Auto doesn't know the language); the 402 for HD suggests Standard.
+- **Pricing page:** Starter $9 / 6,000 (India ₹499 / 3,000), Pro $24 / 20,000 (₹999 / 8,000), Studio $59 / 55,000 (₹2,499 / 22,000), monthly as before. "Unlimited voice swaps" → "Up to 30 voice swaps/month"; "Unlimited HD swaps" → "Up to 25 HD Voice swaps/month"; "Unlimited credits" → "55,000 credits/month" + "Up to 68 HD Voice swaps/month"; "Priority GPU queue" removed. Still listed but not built: Style marketplace (Pro), API access / DAW plugin / Team workspace (Studio).
+- **Not changed:** previews — 2 free per uploaded song, then 50, on whichever engine the take uses (an HD preview runs SoulX: ≈ $0.10–0.30 each).
+- Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 🎭 2026-10-25 (7) — duet split for everyone (beta) + no unsplit duets + SoulX warmed early (`591027a`) — ⚠️ founder live test pending; step 5 on hold
 
 - **Founder:** OK for both fixes; re-saved the Replicate limits — confirmed live: soulx-l40s 3, rvc-index-l40s 4, rvc-index-t4 4, hd-finish-cpu 3.
