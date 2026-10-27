@@ -5,6 +5,8 @@ import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-tim
 import { persistStemFile } from '@/lib/stem-persist'
 import { fireWarmPing } from '@/lib/rvc-engine'
 import { fireKaraokeWarmPing } from '@/lib/karaoke-engine'
+import { createClient } from '@/lib/supabase/server'
+import { newEnginesFor } from '@/lib/new-engines'
 import { replicateClient } from '@/lib/replicate-client'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
@@ -147,12 +149,18 @@ export async function POST(req: NextRequest) {
     // runs. The GET success handler below re-pings RVC when the stems land, as
     // the pool re-chills in under 7 min (2026-07-05 acceptance).
     const origin = new URL(req.url).origin
-    await fireWarmPing(origin, 'stem-split')
-    // Also warm the karaoke (UVR KARA_2) pool NOW: the real karaoke-split fires
-    // the instant these stems land (~120-155s of Demucs = the cold-boot runway),
-    // so — unlike RVC — this is a ONE-shot ping (a GET-time ping would race the
-    // real job). Best-effort; never blocks or breaks the pipeline. (speed step 2)
-    await fireKaraokeWarmPing(origin, 'stem-split')
+    // New-engine accounts (lib/new-engines.ts) split the lead with MVSEP and convert on our own
+    // deployments, so neither the KARA_2 pool nor the public RVC pool is used — no warm-up for
+    // them (2026-10-27: the KARA_2 ping was a 34 s L40S job, ≈ $0.03 per upload, never used).
+    const { data: { user: warmUser } } = await (await createClient()).auth.getUser()
+    if (!newEnginesFor(warmUser?.email)) {
+      await fireWarmPing(origin, 'stem-split')
+      // Also warm the karaoke (UVR KARA_2) pool NOW: the real karaoke-split fires
+      // the instant these stems land (~120-155s of Demucs = the cold-boot runway),
+      // so — unlike RVC — this is a ONE-shot ping (a GET-time ping would race the
+      // real job). Best-effort; never blocks or breaks the pipeline. (speed step 2)
+      await fireKaraokeWarmPing(origin, 'stem-split')
+    }
 
     return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
   } catch (err) {
@@ -208,7 +216,8 @@ export async function GET(req: NextRequest) {
       // minutes of here, and the pool re-chills faster than the POST-time ping
       // alone can cover (observed <7 min on 2026-07-05). The client polls stop
       // at 'succeeded', so this fires once per split.
-      await fireWarmPing(new URL(req.url).origin, 'stem-split')
+      const { data: { user: warmUser } } = await (await createClient()).auth.getUser()
+      if (!newEnginesFor(warmUser?.email)) await fireWarmPing(new URL(req.url).origin, 'stem-split')
       return NextResponse.json({
         status: 'succeeded',
         ...stems,
