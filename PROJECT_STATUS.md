@@ -6,6 +6,13 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 📋 2026-10-27 (5) — PLAN (awaiting OK): private beta + Paddle review — step 7 DONE (founder set `NEW_ENGINES=all`)
+
+- **Paddle (checked live 2026-10-27):** domain review wants a product description, pricing, key features, Terms + Refund + Privacy "clearly accessible via navigation", the company / sole proprietor's (legal) name in the Terms, HTTPS, AUP compliance, and may ask for a test account for login products. AUP (updated 13 Apr 2026) lists under content generation **"Voice Impersonations"** and **"content generation using a person's likeness without that person's explicit consent"**, and prohibits products that **"enable the infringement upon copyrights"** — the AI-cover use (users re-singing commercial songs) is the biggest review risk; consent + rights checkboxes and terms reduce it, they can't remove it.
+- **Found:** Terms + Privacy pages exist (July, short; contact hello@mausamvox.com); no Refund page; the Footer is only on the landing page; no "existing refund draft" anywhere on disk (only "7-day refund" claims on the landing page / PRD). Landing "Why us" still claims live chat with human agents, a 24/7 AI support bot and UPI support.
+- **Plan items:** 1 legal pages (Draft — lawyer review) · 2 footer everywhere · 3 consent checkboxes (stored server-side) · 4 own-voice check (speaker match of a random phrase vs the training recording, calibrated on the founder + wife recordings, soft gate first) · 5 Voice Lab guidance + language labels + Configure suggestion · 6 free-credit protection options · 7 licence brief (Desktop). Paddle-relevant: 1, 2, 3, 4 (+ landing claims cleanup, reviewer account). Not Paddle: 5, 6, 7.
+- **Cost found while sizing item 6:** an upload ≈ $0.15 of machines (Demucs ≈ $0.03 + two MVSEP splits ≈ 8 credits ≈ $0.12 at the $30 pack — Assumed: ~1 credit per audio minute per split) vs 50 cr ≈ $0.05–0.07 of revenue → uploads sell below cost.
+
 ## 🚀 2026-10-27 (4) — READY for step 7 (`NEW_ENGINES=all`) — founder's live test PASSED; switch + 48 h watch in chat
 
 - **Founder:** migrations applied, `hd-finish-cpu` on `1da33866`; upload charged 50 at split start; Lehanga + Mausam Hindi → Auto key −4, Standard, sounds good; Thinking Out Loud + Mausam Hindi → −1, HD, good; balance 2,000 → 1,950 → 1,750 → 1,700 → 900 correct. Replicate auto-reload isn't allowed for his Indian card → manual $30–50 buffer.
