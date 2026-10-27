@@ -10,8 +10,13 @@ import { cancelHdVoice, isHdTicket, pollHdVoice, startHdVoice, startStandardVoic
 import { newEnginesFor } from '@/lib/new-engines'
 import { attachSwapJob, chargeSwap, downgradeToStandard, refundSwap, settleSwap } from '@/lib/swap-charges'
 import { FULL_SWAP_CREDITS, HD_PREVIEW_CREDITS, HD_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
+import { friendlyEngineError, replicateClient } from '@/lib/replicate-client'
 
 export const maxDuration = 30
+
+// What the page shows when a voice job fails (the raw engine error goes to the log; the
+// failed job's credits are refunded by the poll that reports it).
+const JOB_FAILED_MESSAGE = "The voice engine couldn't finish this swap — you haven't been charged for it. Please try again."
 
 // Charging (2026-10-24, engine rollout step 1 — lib/swap-charges.ts): every swap of a
 // non-admin account is charged by POST below BEFORE any machine starts (can't afford
@@ -261,7 +266,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
 
     // Engine inputs (fixed server-side settings + this take's pitch and
     // auto-tune) — shared with Compare keys, lib/rvc-convert.ts.
@@ -279,7 +284,7 @@ export async function POST(req: NextRequest) {
       chargeId = null
       const msg = createErr instanceof Error ? createErr.message : String(createErr)
       console.error('[voice-convert] prediction create failed:', msg)
-      return NextResponse.json({ error: msg }, { status: 502 })
+      return NextResponse.json({ error: friendlyEngineError(createErr) }, { status: 502 })
     }
 
     // The ledger must know this job, or its refund / delivery can't be matched to the
@@ -300,7 +305,7 @@ export async function POST(req: NextRequest) {
     console.error('[voice-convert] unhandled error:', msg)
     // Charged but no job started → give it back.
     if (chargeId && chargeUser) await refundSwap(chargeUser, { chargeId }, 'error before the job started')
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: friendlyEngineError(err) }, { status: 500 })
   }
 }
 
@@ -326,7 +331,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(r.body, { status: r.status })
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id)
 
     // A failed job gives its charge back (at most once — repeat polls find nothing to refund).
@@ -340,7 +345,8 @@ export async function GET(req: NextRequest) {
       logReplicateStageTiming('rvc', prediction)
       const convertedVocalsUrl = toUrlString(prediction.output)
       if (!convertedVocalsUrl) {
-        return failed('failed', `Could not parse Replicate output. Shape: ${safeStringify(prediction.output)}`, 502)
+        console.error(`[voice-convert] could not parse output of ${id}: ${safeStringify(prediction.output)}`)
+        return failed('failed', JOB_FAILED_MESSAGE, 502)
       }
       // Handing the voice over: its charge can't be refunded from now on. A job the
       // page cancelled (refunded) is never handed over; a database hiccup → ask again.
@@ -351,14 +357,15 @@ export async function GET(req: NextRequest) {
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
-      return failed(prediction.status, safeStringify(prediction.error))
+      console.error(`[voice-convert] job ${id} ${prediction.status}: ${safeStringify(prediction.error)}`)
+      return failed(prediction.status, JOB_FAILED_MESSAGE)
     }
 
     return NextResponse.json({ status: prediction.status })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-convert] poll error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: friendlyEngineError(err) }, { status: 500 })
   }
 }
 
@@ -378,7 +385,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json(r.body, { status: r.status })
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id).catch(() => null)
     if (prediction?.status === 'succeeded') {
       await settleSwap(sessionUser.id, { jobId: id }, id)
@@ -390,6 +397,6 @@ export async function DELETE(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[voice-convert] cancel error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: friendlyEngineError(err) }, { status: 500 })
   }
 }

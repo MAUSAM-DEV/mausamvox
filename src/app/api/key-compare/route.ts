@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 import { rvcEngine, rvcVersion } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { KEY_COMPARE_ENABLED, KEY_COMPARE_MAX, songTag } from '@/lib/key-compare-shared'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Compare keys (Configure → Song Key): three short conversions of the same
 // ~15 s chorus excerpt in three keys, so the user can hear which sounds most
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     if (!signed?.signedUrl) return NextResponse.json({ error: 'Could not read the excerpt' }, { status: 500 })
 
     // ── Three conversions; if one can't start, cancel the others.
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const engine = rvcEngine()
     const ids: string[] = []
     try {

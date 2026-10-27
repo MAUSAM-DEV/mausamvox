@@ -4,6 +4,7 @@
 // rvc-engine.ts). See PROJECT_STATUS §6 (speed step 2) for the cold-start data.
 
 import Replicate from 'replicate'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Version hash captured from the live Replicate API; confirm with
 // replicate.models.get before shipping if it ever changes.
@@ -26,7 +27,7 @@ export const KARAOKE_MODEL = 'UVR_MDXNET_KARA_2.onnx'
 export async function fireKaraokeWarmPing(origin: string, logTag: string): Promise<void> {
   if (!process.env.REPLICATE_API_TOKEN) return
   try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const ping = await replicate.predictions.create({
       version: KARAOKE_VERSION,
       input: {

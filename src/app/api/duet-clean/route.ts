@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { HD_FINISH_DEPLOYMENT } from '@/lib/hd-voice'
 import { rateLimit } from '@/lib/rate-limit'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Duet clean-up before a 2-voice swap (2026-10-23; every user's duets since 2026-10-24). The finishing machine
 // (mausam-dev/hd-finish, task "duetclean") takes the male singer's leftovers out of the female
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   const [female, male] = await Promise.all([sign(body.femalePath), sign(body.malePath)])
   if (!female || !male) return NextResponse.json({ error: 'Could not sign the stems' }, { status: 500 })
   try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const p = await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, {
       input: { task: 'duetclean', lead: female, other: male },
     })
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
   if (!(await signedIn())) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   const id = req.nextUrl.searchParams.get('id') ?? ''
   if (!/^[a-z0-9]{8,64}$/.test(id)) return NextResponse.json({ error: 'id is required' }, { status: 400 })
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const p = await replicate.predictions.get(id)
   // only clean-up jobs — never another job's output
   if ((p.input as { task?: string } | undefined)?.task !== 'duetclean') return NextResponse.json({ error: 'Not found' }, { status: 404 })

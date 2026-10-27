@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { HD_FINISH_DEPLOYMENT } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Song language for the engine choice (engine plan step 2, 2026-10-23) — new-engine accounts
 // only (lib/new-engines.ts).
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const { data: signed } = await supabaseAdmin.storage.from('audio-uploads').createSignedUrl(leadPath, 21600)
   if (!signed?.signedUrl) return NextResponse.json({ error: 'Could not sign the lead' }, { status: 500 })
   try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const p = await replicate.deployments.predictions.create(HD_FINISH_DEPLOYMENT.owner, HD_FINISH_DEPLOYMENT.name, {
       input: { task: 'language', lead: signed.signedUrl },
     })
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   if (!(await admin())) return NextResponse.json({ error: 'Not allowed' }, { status: 403 })
   const id = req.nextUrl.searchParams.get('id') ?? ''
   if (!/^[a-z0-9]{8,64}$/.test(id)) return NextResponse.json({ error: 'id is required' }, { status: 400 })
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const p = await replicate.predictions.get(id)
   if (p.status === 'succeeded') {
     const line = String(p.logs ?? '').split('\n').find((l) => l.startsWith('LANGUAGE ')) ?? ''

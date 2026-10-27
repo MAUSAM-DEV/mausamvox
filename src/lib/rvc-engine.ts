@@ -12,6 +12,7 @@
 //             song-cover pipeline. RVC_ENGINE=cover.
 
 import Replicate from 'replicate'
+import { replicateClient } from '@/lib/replicate-client'
 
 export const BARE_RVC_VERSION = 'd18e2e0a6a6d3af183cc09622cebba8555ec9a9e66983261fc64c8b1572b7dce'
 export const COVER_RVC_VERSION = '0a9c7c558af4c0f20667c1bd1260ce32a2879944a0b9e44e1398660c077b1550'
@@ -86,7 +87,7 @@ export async function fireWarmPing(origin: string, logTag: string, pool: RvcPool
   if (engine === 'cover') return
   if (!process.env.REPLICATE_API_TOKEN) return
   try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const ping = engine === 'indexed'
       // warm_only boots the instance and returns the input untouched.
       ? await createRvcPrediction(replicate, engine, { input_audio: `${origin}/warm-ping.wav`, warm_only: true }, pool)

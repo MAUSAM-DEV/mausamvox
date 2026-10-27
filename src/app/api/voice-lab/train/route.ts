@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
+import { replicateClient } from '@/lib/replicate-client'
 
 // 60s (not 30) because the GET completion-poll now also persists the trained
 // model durably: it downloads the ~116 MB model zip from replicate.delivery and
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest) {
 
     // ── 4. Start the Replicate training prediction ───────────────────────────
     const epoch = clone.type === 'express' ? EXPRESS_EPOCH : STUDIO_EPOCH
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.create({
       version: TRAIN_RVC_VERSION,
       input: {
@@ -294,7 +295,7 @@ export async function GET(req: NextRequest) {
       let freshUrl = clone.model_url
       if (clone.training_prediction_id) {
         try {
-          const healReplicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+          const healReplicate = replicateClient()
           const p = await healReplicate.predictions.get(clone.training_prediction_id)
           const u = toUrlString(p.output)
           if (u) freshUrl = u
@@ -312,7 +313,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Ask Replicate for the live status.
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(clone.training_prediction_id)
 
     if (prediction.status === 'succeeded') {

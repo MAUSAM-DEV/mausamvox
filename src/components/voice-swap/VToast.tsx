@@ -2,6 +2,19 @@
 
 // Shared toast. Sits ABOVE the pages' bottom action bars (2026-10-27: at 24 px it covered the
 // Preview / Process buttons) and wraps long messages instead of running off a phone screen.
+//
+// Never shows a raw technical error (founder, 2026-10-27: a Replicate "429 Too Many Requests …"
+// reached a user): anything that looks like one is replaced by a plain sentence. The full
+// message still goes to the browser console.
+const TECHNICAL = /https?:\/\/|\bstatus \d{3}\b|\b[45]\d\d (Too Many|Internal|Bad|Service|Gateway|Not Found)|ApiError|Traceback|TypeError|SyntaxError|ReferenceError|Unexpected token|is not valid JSON|fetch failed|ECONN|ETIMEDOUT|NetworkError|Failed to fetch|[{}<>]/i
+export function friendlyToast(message: string): string {
+  if (!TECHNICAL.test(message)) return message
+  console.warn('[toast] technical message hidden from the user:', message)
+  return /429|too many|rate limit|less than \$?5/i.test(message)
+    ? 'Our servers are very busy right now — please try again in a minute.'
+    : 'Something went wrong on our side — please try again in a minute.'
+}
+
 export function VToast({ visible, message }: { visible: boolean; message: string }) {
   return (
     <div
@@ -42,7 +55,7 @@ export function VToast({ visible, message }: { visible: boolean; message: string
           display: 'inline-block',
         }}
       />
-      {message}
+      {visible && message ? friendlyToast(message) : message}
     </div>
   )
 }

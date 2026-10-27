@@ -5,6 +5,7 @@ import { logReplicateTiming, logReplicateStageTiming } from '@/lib/replicate-tim
 import { persistStemFile } from '@/lib/stem-persist'
 import { fireWarmPing } from '@/lib/rvc-engine'
 import { fireKaraokeWarmPing } from '@/lib/karaoke-engine'
+import { replicateClient } from '@/lib/replicate-client'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
 // on success it now also buffers ALL FOUR stems from Replicate into Supabase
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 2. Start Demucs (fire and return — client polls GET) ─────────
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.create({
       version: DEMUCS_VERSION,
       input: {
@@ -174,7 +175,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { swapPaid } from '@/lib/swap-charges'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Allow up to 60 s: normally a storage-side copy (~2 s); the fallback downloads
 // and re-uploads the file.
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Fetch the Replicate prediction to get the output URL ─────────────────
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   let resultUrl = ''
   try {
     const prediction = await replicate.predictions.get(predictionId)

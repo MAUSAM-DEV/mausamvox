@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Replicate from 'replicate'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/rate-limit'
 import { HD_FINISH_DEPLOYMENT, HD_SOULX_DEPLOYMENT } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Speed (engine plan step 5, 2026-10-23; Option B since 2026-10-25) — new-engine accounts only
 // (lib/new-engines.ts). During the page's one 3-minute warm-up per song (Configure, a voice
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!rateLimit(user.id, 'engine-warm', { max: 6, windowMs: 60_000 }).allowed) return NextResponse.json({ warmed: [], reason: 'rate limited' })
   let body: { soulx?: boolean } = {}
   try { body = await req.json() } catch { /* defaults */ }
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const targets = [HD_FINISH_DEPLOYMENT, ...(body.soulx ? [HD_SOULX_DEPLOYMENT] : [])]
   const warmed: string[] = []
   await Promise.all(targets.map(async (d) => {

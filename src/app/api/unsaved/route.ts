@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 import { withTimeout } from '@/lib/storage-transfer'
+import { replicateClient } from '@/lib/replicate-client'
 
 // "Recent — not saved" (2026-10-10): the user's most recent UNSAVED swap stays
 // recoverable for 24 h. Everything else a Result screen needs is already in
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
   if (!take || typeof take !== 'object' || takeJson.length > MAX_TAKE_CHARS) return NextResponse.json({ error: 'Bad take' }, { status: 400 })
 
   try {
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     // The converted voice(s), from Replicate (deleted there ~1 h after the run)
     const fetchVoice = async (id: string): Promise<Buffer | NextResponse> => {
       const prediction = await replicate.predictions.get(id)

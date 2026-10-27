@@ -26,6 +26,7 @@ import { composeSongElevenLabs } from '@/lib/song-engine-elevenlabs'
 import { buildMiniMaxInput, MINIMAX_MAX_LYRICS_CHARS, MINIMAX_VERSION, MINIMAX_26_VERSION } from '@/lib/song-engine-minimax'
 import { buildLyriaPrompt, isLyriaBlocked, LYRIA_BLOCKED_MSG, LYRIA_MODEL, LYRIA_VERSION } from '@/lib/song-engine-lyria'
 import { normalizeLoudness } from '@/lib/loudness'
+import { replicateClient } from '@/lib/replicate-client'
 
 // Song Studio: AI full-song generation — engine selected by SONG_ENGINE (see
 // song-engine.ts): 'lyria' (Google Lyria 3 Pro), 'minimax' / 'minimax26'
@@ -313,7 +314,7 @@ export async function POST(req: NextRequest) {
     // ── Replicate engines (lyria / minimax / minimax26 / acestep) ───────────
     // One prediction per song. A started job owns its charge (GET refunds it
     // if the job fails); a job that fails to START is refunded right here.
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const { version, input } =
       engine === 'lyria'
         ? { version: LYRIA_VERSION, input: { prompt: buildLyriaPrompt({ style: finalStyle, lyrics, instrumental, targetSeconds }) } }
@@ -441,7 +442,7 @@ export async function GET(req: NextRequest) {
       ? Math.round(targetRaw) : null
     const isAdmin = ADMIN_EMAILS.includes(user.email ?? '')
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
+import { replicateClient } from '@/lib/replicate-client'
 
 export const maxDuration = 30
 
@@ -283,7 +284,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Could not sign the vocal stem: ${signErr?.message ?? 'unknown'}` }, { status: 500 })
   }
 
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   // Pinned: the cog also offers task 'translate' — never use it. NOTE this
   // pin can't stop translation when the language hint mismatches the sung
   // language: hint = Whisper's DECODE language, so 'english' on a Hindi
@@ -327,7 +328,7 @@ export async function GET(req: NextRequest) {
 
   // Poll path.
   if (!process.env.REPLICATE_API_TOKEN) return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const prediction = await replicate.predictions.get(id)
 
   if (prediction.status === 'failed' || prediction.status === 'canceled') {

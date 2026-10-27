@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin, adminConfigured } from '@/lib/supabase/admin'
 import { ADMIN_EMAILS } from '@/lib/admin'
 import { logReplicateTiming } from '@/lib/replicate-timing'
+import { replicateClient } from '@/lib/replicate-client'
 import {
   LYRICS_GEN_VERSION,
   LYRICS_GEN_CREDITS,
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       `Structure: ${structure.instruction}`,
     ].filter(Boolean).join('\n')
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     let prediction = await replicate.predictions.create({
       version: LYRICS_GEN_VERSION,
       input: {

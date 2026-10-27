@@ -7,6 +7,7 @@ import { KARAOKE_VERSION, KARAOKE_MODEL } from '@/lib/karaoke-engine'
 import { createClient } from '@/lib/supabase/server'
 import { newEnginesFor } from '@/lib/new-engines'
 import { mvsepCreate, mvsepPoll, type MvsepFile } from '@/lib/mvsep'
+import { replicateClient } from '@/lib/replicate-client'
 
 // ── HD engine step 2 (2026-10-22): MVSEP Karaoke split, new-engine accounts only ──
 // (lib/new-engines.ts — NEW_ENGINES off / testers / all; admin-only until 2026-10-25)
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
       console.error(`[karaoke-split] new engines: MVSEP karaoke didn't start (${job.error}) — using KARA_2`)
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
 
     const prediction = await replicate.predictions.create({
       version: KARAOKE_VERSION,
@@ -185,7 +186,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 })
     }
 
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+    const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id)
 
     if (prediction.status === 'succeeded') {

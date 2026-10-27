@@ -47,6 +47,7 @@ import { createRvcPrediction, fireWarmPing, rvcEngine, rvcPoolName } from '@/lib
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { downgradeToStandard, refundSwap, setChargeEngine, settleSwap } from '@/lib/swap-charges'
 import { FULL_SWAP_CREDITS, PREVIEW_CREDITS } from '@/lib/swap-prices'
+import { replicateClient } from '@/lib/replicate-client'
 
 export const HD_SOULX_DEPLOYMENT = { owner: 'mausam-dev', name: 'soulx-l40s' } // private model mausam-dev/soulx-svc
 export const HD_FINISH_DEPLOYMENT = { owner: 'mausam-dev', name: 'hd-finish-cpu' } // private model mausam-dev/hd-finish
@@ -75,6 +76,8 @@ const SOULX_CHECK_ERROR = /quick check failed/i
 const TEST_MISSING_FILE = '/__hd-test-missing.wav'
 const SIGNED_URL_TTL_S = 21600
 
+// What the page shows when every path failed (the reasons are in the [hd-voice] log lines; the charge is refunded — so the user isn't charged).
+const HD_FAILED_MESSAGE = "The voice engine couldn't finish this swap — you haven't been charged for it. Please try again."
 export const HD_NOTE_STARTING = 'HD voice — getting the singing engine ready…'
 export const HD_NOTE_SINGING = 'HD voice — shaping the singing (about 2–3 min)…'
 export const HD_NOTE_VOICE = 'HD voice — adding your voice…'
@@ -209,7 +212,7 @@ export async function startHdVoice(opts: {
     ...(opts.noFinish ? { nf: 1 as const } : {}),
   }
   const { input, note, language } = await soulxInput(t)
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const pred = await replicate.deployments.predictions.create(HD_SOULX_DEPLOYMENT.owner, HD_SOULX_DEPLOYMENT.name, { input })
   t.id = pred.id
   console.log(`[hd-voice] start: voice ${opts.voiceId} key ${t.p} language ${language || '?'} | reference: ${note} → SoulX ${pred.id} on ${HD_SOULX_DEPLOYMENT.name} (${Date.now() - t0} ms)${t.tf ? ` | TEST ${t.tf}` : ''}`)
@@ -227,7 +230,7 @@ export async function startStandardVoice(opts: {
     ip: opts.instrumentalPath, bp: opts.backingPath, p: Math.round(opts.pitch), a: opts.autotune, t0, ts: t0, r: 0,
     ...(opts.chargeId ? { ch: opts.chargeId } : {}),
   }
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const pred = await createRvcPrediction(replicate, rvcEngine(), await rvcStepInput(t, opts.origin, 'fb'), 'standard')
   t.id = pred.id
   // wake the finishing machine now, so it's up when the voice is done (only the create is awaited)
@@ -313,7 +316,7 @@ async function fallback(t: Ticket, replicate: Replicate, origin: string, reason:
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[hd-voice] FAILED: ${reason}; today's engine didn't start either (${msg})`)
     await refundIfCharged(t)
-    return { status: 'failed', error: `Voice conversion failed (${reason})` }
+    return { status: 'failed', error: HD_FAILED_MESSAGE }
   }
 }
 
@@ -339,7 +342,7 @@ export async function cancelHdVoice(id: string, userId: string): Promise<{ body:
   const t = verify(id)
   if (!t) return { body: { error: 'Bad HD voice ticket' }, status: 400 }
   if (t.u !== userId) return { body: { error: 'Not allowed' }, status: 403 }
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   await replicate.predictions.cancel(t.id).catch(() => {})
   const credits = t.ch ? await refundSwap(t.u, { chargeId: t.ch }, 'hd-voice: cancelled by the page') : null
   console.log(`[hd-voice] cancelled by the page at stage ${t.s} (${t.id})${credits !== null ? ' — refunded' : ''}`)
@@ -347,7 +350,7 @@ export async function cancelHdVoice(id: string, userId: string): Promise<{ body:
 }
 
 async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; status: number }> {
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
+  const replicate = replicateClient()
   const pred = await replicate.predictions.get(t.id)
   const now = Date.now()
   const created = Date.parse(pred.created_at ?? '') || t.ts
@@ -485,7 +488,7 @@ async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; stat
       }
       console.error(`[hd-voice] FAILED: STANDARD today's engine ${why}`)
       await refundIfCharged(t)
-      return { body: { status: 'failed', error: `Voice conversion failed (${why})` }, status: 200 }
+      return { body: { status: 'failed', error: HD_FAILED_MESSAGE }, status: 200 }
     }
     const stuck = rvcStuck(pred, now, created, started)
     if (stuck && (t.r ?? 0) < HD_RESTARTS) {
@@ -512,7 +515,7 @@ async function pollStage(t: Ticket, origin: string): Promise<{ body: Reply; stat
     }
     console.error(`[hd-voice] FAILED: today's engine ${why} after fallback (${t.fr}) — every path failed`)
     await refundIfCharged(t)
-    return { body: { status: 'failed', error: `Voice conversion failed (${why})` }, status: 200 }
+    return { body: { status: 'failed', error: HD_FAILED_MESSAGE }, status: 200 }
   }
   const stuck = rvcStuck(pred, now, created, started)
   if (stuck && (t.r ?? 0) < HD_RESTARTS) {   // no restart left: let it finish, slow or not
