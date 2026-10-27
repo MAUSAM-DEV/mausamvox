@@ -264,8 +264,8 @@ export function SettingsPage() {
                   <button className="set-btn set-btn-danger" onClick={handleSignOut}>Sign Out</button>
                 </div>
                 <div className="set-danger-note">
-                  Account deletion isn’t self-serve yet — it’s coming once we can wipe your
-                  audio and voice models safely in one step.
+                  Account deletion isn’t self-serve yet. To delete your account and all its
+                  audio and voice models, email support@mausamvox.com from this account’s email.
                 </div>
               </section>
             </>
