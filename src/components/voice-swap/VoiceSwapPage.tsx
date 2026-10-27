@@ -21,6 +21,7 @@ import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 import { titleLooksEnglish } from '@/lib/title-language'
 import { refreshStemUrls } from '@/lib/stem-urls'
 import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS, HD_PREVIEW_CREDITS, HD_SWAP_CREDITS } from '@/lib/swap-prices'
+import { detectVoiceLanguage } from '@/lib/voice-language-client'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -509,6 +510,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           // community-voice preselect.
           const libRequested = new URLSearchParams(window.location.search).has('libVoice')
           if (mapped.length > 0 && !selectedVoiceId && !libRequested && !guided) setSelectedVoiceId(mapped[0].id)
+          // Each own voice's language, from its recording (HD Voice's reference pick uses it) — once per
+          // session per voice, in the background; already-detected voices answer at once (2026-10-27).
+          if (newEnginesRef.current) for (const c of clones) if (c.status === 'ready') detectVoiceLanguage(c.id)
         }
         setVoicesLoading(false)
       })

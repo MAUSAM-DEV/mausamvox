@@ -6,6 +6,7 @@ import { ProRecordPanel } from './ProRecordPanel'
 import { UploadRecordingPanel } from './UploadRecordingPanel'
 import { MIN_DURATION_SEC, extFromMimeType } from './audioUtils'
 import { RECORDING_SCRIPTS, nextScript } from './recordingScripts'
+import { detectVoiceLanguage } from '@/lib/voice-language-client'
 
 type Mode = 'quick' | 'pro' | 'upload'
 type CloneType = 'express' | 'studio'
@@ -104,6 +105,8 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
       if (!createRes.ok) throw new Error(createData.error ?? 'Could not save voice')
 
       onSaved(createData.voice as SavedVoice)
+      // its language, from the recording, in the background (Voice Lab has no language choice) — 2026-10-27
+      if ((createData.voice as SavedVoice | undefined)?.id) detectVoiceLanguage((createData.voice as SavedVoice).id)
       onToast('Voice sample saved — it now shows up in My Voices')
       setCaptured(null)
     } catch (err) {

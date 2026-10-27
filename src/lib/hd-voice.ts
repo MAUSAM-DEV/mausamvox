@@ -174,7 +174,12 @@ async function soulxInput(t: Ticket): Promise<{ input: Record<string, unknown>; 
   // The user's OWN voice only (its references / Voice Lab recording).
   const { data: voice } = await supabaseAdmin.from('voice_clones').select('sample_path, language').eq('id', t.v).eq('user_id', t.u).maybeSingle()
   if (!voice) throw new Error('not the user\'s own voice')
-  const language = String(voice.language ?? '')
+  // Trust the stored language only once it was detected from the recording (2026-10-27): Voice Lab
+  // stored every voice as 'en', and the picker then looked for English words in Hindi singing. Not
+  // detected yet → '' = Whisper decides per window (read separately: the column may not exist yet).
+  const { data: flag } = await supabaseAdmin.from('voice_clones').select('language_detected').eq('id', t.v).maybeSingle()
+  const detected = (flag as { language_detected?: boolean } | null)?.language_detected === true
+  const language = detected ? String(voice.language ?? '') : ''
   const refs = await preferredRefs(t.u, t.v)
   let refInput: Record<string, string>, refNote: string
   if (refs.length) {
