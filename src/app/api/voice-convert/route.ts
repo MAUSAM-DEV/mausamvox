@@ -245,7 +245,8 @@ export async function POST(req: NextRequest) {
           pitch: pitchShift, autotune: Number(autotune) || 0, chargeId: chargeId ?? undefined,
           hdPriced: chargePrice === HD_SWAP_CREDITS, previewId: !isPreview && typeof previewId === 'string' ? previewId : undefined,
           hdPreviewTrack: isPreview && chargePrice === HD_PREVIEW_CREDITS ? trackKey ?? '' : undefined,
-          origin: new URL(req.url).origin, test: typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
+          // live-test switch (?hdtest=…): admin accounts only (2026-10-27 — testers could force a fallback)
+          origin: new URL(req.url).origin, test: isAdmin && typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
           noFinish: duet === true,
         })
         chargeId = null
