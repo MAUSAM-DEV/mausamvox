@@ -9,12 +9,12 @@ import { AudioPlayer } from '@/components/voice-swap/AudioPlayer'
 import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
-import { uploadAudioToStorage } from '@/lib/audio-upload'
+import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
 
 const STEM_SPLIT_COST = 50 // same price the Voice Swap flow charges for this exact operation
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
-const MAX_BYTES = 75 * 1024 * 1024 // 75 MB — same cap as the Voice Swap upload
+// Size limits: lib/audio-upload.ts — the same as the Voice Swap upload.
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 
@@ -36,10 +36,7 @@ function validateFile(file: File): string | null {
   if (!ACCEPTED_EXTS.includes(ext)) {
     return `Only MP3, WAV, and M4A files are supported (got .${ext || 'unknown'}).`
   }
-  if (file.size > MAX_BYTES) {
-    return `File must be 75 MB or smaller (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`
-  }
-  return null
+  return uploadSizeError(file)
 }
 
 export function StemStudioPage() {
@@ -241,7 +238,7 @@ export function StemStudioPage() {
                   <div className="ss-dz-ico">✂️</div>
                   <div className="ss-dz-title">Drop your track here</div>
                   <div className="ss-dz-hint">or click to browse</div>
-                  <div className="ss-dz-formats">MP3 · WAV · M4A · max 75 MB</div>
+                  <div className="ss-dz-formats">{UPLOAD_LIMIT_TEXT}</div>
                 </div>
                 <input
                   ref={fileInputRef}

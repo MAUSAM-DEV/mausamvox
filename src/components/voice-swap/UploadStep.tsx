@@ -4,7 +4,7 @@ import { pollUntil, fetchRetry, waitOrVisible } from '@/lib/poll'
 import { useState, useRef, useEffect } from 'react'
 import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
-import { uploadAudioToStorage } from '@/lib/audio-upload'
+import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
 import { clientTiming } from '@/lib/client-timing'
 import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS } from '@/lib/swap-prices'
 
@@ -14,9 +14,7 @@ type StemCategory = 'vocals' | 'instrumental' | 'bass' | 'drums' | 'other' | 'un
 type ItemStatus = 'uploading' | 'done' | 'error'
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
-// Product cap. The storage bucket's own limit is lower (50 MiB on the current
-// Supabase plan) — uploadAudioToStorage compresses WAVs above it to MP3.
-const MAX_BYTES = 75 * 1024 * 1024 // 75 MB
+// Size limits: lib/audio-upload.ts (MP3/M4A 50 MB, WAV 75 MB — compressed to MP3 above 50 MB).
 
 const CATEGORY_META: Record<StemCategory, { label: string; icon: string; required: boolean }> = {
   vocals:       { label: 'Vocals',       icon: '🎤', required: true },
@@ -220,10 +218,7 @@ function validateFile(file: File): string | null {
   if (!ACCEPTED_EXTS.includes(ext)) {
     return `Only MP3, WAV, and M4A files are supported (got .${ext || 'unknown'}).`
   }
-  if (file.size > MAX_BYTES) {
-    return `File must be 75 MB or smaller (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`
-  }
-  return null
+  return uploadSizeError(file)
 }
 
 function formatSize(bytes: number) {
@@ -697,8 +692,8 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
         <div className="vs-panel-title">Upload Your Track</div>
         <div className="vs-panel-sub">
           {uploadMode === 'full'
-            ? 'MP3, WAV, M4A — up to 75 MB · Stems separated automatically'
-            : 'MP3, WAV, M4A — up to 75 MB per stem · Vocals and instrumental required'}
+            ? `${UPLOAD_LIMIT_TEXT} · Stems separated automatically`
+            : `${UPLOAD_LIMIT_TEXT} per stem · Vocals and instrumental required`}
         </div>
 
         {/* ── idle ─────────────────────────────────────────────── */}
@@ -731,7 +726,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                   <div className="vs-uz-icon">🎵</div>
                   <div className="vs-uz-title">Drop your track here</div>
                   <div className="vs-uz-sub">or click to browse files</div>
-                  <div className="vs-uz-formats">MP3 · WAV · M4A · max 75 MB</div>
+                  <div className="vs-uz-formats">{UPLOAD_LIMIT_TEXT}</div>
                 </div>
 
                 {/* Duet declaration — pre-upload toggle that routes to gender-split
@@ -778,7 +773,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                       select a folder
                     </span>
                   </div>
-                  <div className="vs-uz-formats">Vocals + Instrumental required · MP3 · WAV · M4A · max 75 MB each</div>
+                  <div className="vs-uz-formats">Vocals + Instrumental required · {UPLOAD_LIMIT_TEXT} each</div>
                 </div>
 
                 {items.length > 0 && (
@@ -1062,7 +1057,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
           {['MP3', 'WAV', 'M4A'].map((fmt) => (
             <span key={fmt} className="vs-fmt-chip">{fmt}</span>
           ))}
-          <span className="vs-fmt-chip">MAX 75 MB</span>
+          <span className="vs-fmt-chip">MP3/M4A 50 MB · WAV 75 MB</span>
         </div>
       </div>
 

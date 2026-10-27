@@ -19,6 +19,21 @@ import { Mp3Encoder } from '@breezystack/lamejs'
 // Used only if /api/upload-stem/presign couldn't read the bucket's limit.
 export const STORAGE_FALLBACK_MAX_BYTES = 50 * 1024 * 1024
 
+// What a song upload may be (2026-10-27: the pages said "up to 75 MB" for everything).
+// The storage bucket takes 50 MB per file, so MP3 / M4A over that can't be stored; a WAV
+// over 50 MB is compressed to a 320 kbps MP3 in the browser first (uploadAudioToStorage),
+// which works up to UPLOAD_MAX_WAV_BYTES. If the bucket limit is ever raised (Supabase
+// dashboard), raise UPLOAD_MAX_COMPRESSED_BYTES with it.
+export const UPLOAD_MAX_COMPRESSED_BYTES = 50 * 1024 * 1024   // MP3, M4A
+export const UPLOAD_MAX_WAV_BYTES = 75 * 1024 * 1024          // WAV (compressed in the browser above 50 MB)
+export const UPLOAD_LIMIT_TEXT = 'MP3 · M4A up to 50 MB · WAV up to 75 MB'
+export function uploadSizeError(file: File): string | null {
+  const isWav = /\.wav$/i.test(file.name)
+  const max = isWav ? UPLOAD_MAX_WAV_BYTES : UPLOAD_MAX_COMPRESSED_BYTES
+  if (file.size <= max) return null
+  return `${isWav ? 'WAV files' : 'MP3 and M4A files'} can be up to ${Math.round(max / 1024 / 1024)} MB (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).${isWav ? '' : ' Try a shorter file or a lower bitrate.'}`
+}
+
 // 320 kbps CBR = 40,000 bytes/s → a 75 MB CD-quality WAV (~7.4 min) lands at
 // ~17 MB. Highest standard MP3 bitrate; only applied to WAVs that are too big
 // to upload as-is (smaller files are never touched).
