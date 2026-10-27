@@ -5,7 +5,7 @@ import { LogoFull } from '@/components/ui/Logo'
 // header + narrow readable column + a draft notice + footer cross-linking them.
 // Server component — no interactivity needed.
 //
-// Operator, as the founder asked (2026-10-27): his name + trading name + town only — no GSTIN
+// Operator, as the founder asked (2026-10-27): the founder's name + trading name + town only — no GSTIN
 // or street address on the site (the repo is public).
 export const LEGAL_OPERATOR = 'Mausam Kemprai, sole proprietor, trading as MausamLabs, Haflong, Assam, India'
 export const SUPPORT_EMAIL = 'support@mausamvox.com'
@@ -17,9 +17,8 @@ export function LegalPage({ title, updated, children }: {
   return (
     <div className="lg-shell">
       <header className="lg-head">
-        <Link href="/" style={{ textDecoration: 'none' }}>
-          <LogoFull size={30} />
-        </Link>
+        {/* LogoFull is itself a link home — wrapping it in another <a> broke hydration. */}
+        <LogoFull size={30} />
       </header>
 
       <main className="lg-main">
@@ -40,7 +39,7 @@ export function LegalPage({ title, updated, children }: {
         </span>
       </footer>
 
-      <style>{`
+      <style suppressHydrationWarning>{`
         body { background: #05050F; }
         .lg-shell {
           min-height: 100vh;

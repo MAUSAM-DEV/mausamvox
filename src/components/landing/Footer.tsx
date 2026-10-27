@@ -1,12 +1,15 @@
 'use client'
 
 import { LogoFull } from '@/components/ui/Logo'
+import { SUPPORT_EMAIL } from '@/components/legal/LegalPage'
 
-// Only links that actually exist — Support / API Docs / Discord / Twitter were
-// removed as dead '#' placeholders; re-add each when its destination is real.
+// Only links that actually exist — API Docs / Discord / Twitter were removed as dead '#'
+// placeholders; re-add each when its destination is real.
 const footerLinks = [
-  { label: 'Privacy', href: '/privacy' },
   { label: 'Terms', href: '/terms' },
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Refund', href: '/refund' },
+  { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
 ]
 
 export function Footer() {
@@ -26,10 +29,10 @@ export function Footer() {
       <LogoFull size={30} />
 
       <p style={{ fontSize: '12px', color: '#9494BC' }}>
-        © 2026 MausamVox. Any Voice. Any Language. Any Song.
+        © 2026 MausamVox by MausamLabs. Any Voice. Any Language. Any Song.
       </p>
 
-      <div style={{ display: 'flex', gap: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px' }}>
         {footerLinks.map((link) => (
           <a
             key={link.label}
