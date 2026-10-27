@@ -6,6 +6,12 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🚀 2026-10-27 (4) — READY for step 7 (`NEW_ENGINES=all`) — founder's live test PASSED; switch + 48 h watch in chat
+
+- **Founder:** migrations applied, `hd-finish-cpu` on `1da33866`; upload charged 50 at split start; Lehanga + Mausam Hindi → Auto key −4, Standard, sounds good; Thinking Out Loud + Mausam Hindi → −1, HD, good; balance 2,000 → 1,950 → 1,750 → 1,700 → 900 correct. Replicate auto-reload isn't allowed for his Indian card → manual $30–50 buffer.
+- **Final sweep:** no swap charge left in the page; every swap / upload / preview / save / duet split charged on the server; guards (one swap at a time, 5 HD / 24 h) in the database; no raw errors. **Only 2 accounts exist** (admin + test; sign-ups closed, 16 on the waitlist) → `NEW_ENGINES=all` changes nothing for anyone else today.
+- **Before opening sign-ups (`NEXT_PUBLIC_SIGNUPS_OPEN`), not before step 7:** each new account gets 500 free credits = up to 10 uploads with 2 free full-length previews each (≈ $0.2–0.3 of machines per upload) with no billing wired; Vercel Hobby (non-commercial terms — Likely, unverified; runtime logs ~1 h); Replicate balance kept by hand; MVSEP balance unknown; upload → Configure ≈ 4 min; the 12-month credit validity is stated but not enforced.
+
 ## 🔧 2026-10-27 (3) — step 7 blockers + cost leaks + Auto key (`019b572`, `1e0bbea`, `d28dc1a`, `f676859`, `f3daedd`) — ⚠️ founder: 2 migrations + finishing deployment switch, then live test
 
 - **`019b572` Warm-up:** while Auto doesn't know the song's language, only the Standard machine (T4) is warmed; SoulX the moment the song is known to be English.
