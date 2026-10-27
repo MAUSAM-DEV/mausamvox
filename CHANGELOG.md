@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-27
+
+- **`1104751`** one-time credit packs, 500 free credits once, 12-month validity stated, no plan labels · **`028af7f`** sidebar shows "750 credits" · **`11bddce`** short bottom bar, buttons always visible (phones too), toasts above it · **`c42c79c`** Gender Lock only on split duets · **`2844cb9`** upload limits: MP3/M4A 50 MB, WAV 75 MB · **`e69ef0a`** "Coming soon" on unbuilt pricing features · **`41dd74c`** HD previews 100 cr (count toward the HD swap; Standard previews still 2 free). Step 5 live test passed.
+
 ## 2026-10-25
 
 - **`b28d732` Rollout step 5, pricing:** HD Voice 800 cr (200 if it falls back to Standard, re-priced once); preview saves at its engine's price; costs shown on Configure; pricing page = founder's packs (6,000 / 20,000 / 55,000; India 3,000 / 8,000 / 22,000), "Unlimited" claims and "Priority GPU queue" removed. English thin spots: two notes above the "Mausam English" recording's range (key −4 doesn't fix them), two voice-step cracks/dropouts inside it.

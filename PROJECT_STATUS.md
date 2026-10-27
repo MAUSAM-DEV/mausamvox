@@ -6,6 +6,19 @@ _Last updated: 2026-10-24 · Branch: `main` · Status: Active development (**pre
 
 **Quick orientation:** see [START_HERE.md](START_HERE.md) (one-page map of engines, open items, launch checklist — refreshed `cfa4380`). This file stays the source of truth.
 
+## 🧾 2026-10-27 — 7 fixes after the step 5 test (`1104751` … `41dd74c`) — ⚠️ founder live test pending; then step 6 (4-song test)
+
+- **Step 5 live test PASSED** (founder, test account): English duet split, one singer male, Mausam English → 200; Sukoon Hindi (Mausam Hindi) → 200, smooth and good; credits 1,500 → 1,450 → 1,200 → 1,000 → 950 → 750 correct. English crackle at 3:19–3:25 noted (likely high notes; no fix now).
+- **`1104751` One-time packs:** pricing page has no "/mo" / "/month"; "How credits work": no subscription, nothing renews, 500 free credits once for new accounts, **purchased credits valid 12 months from purchase**, Standard 200 / HD 800. Free card: "500 free credits — once", "Enough for 2 voice swaps" (dropped "1 watermarked swap" and "No HD quality" — no watermark exists). "Prorated upgrades…" removed (Pricing subtitle, WhyUs). No plan name in the sidebars or Settings. (Expiry is stated only — billing isn't wired, nothing enforces it yet.)
+- **`028af7f` Credits:** sidebars show "750 credits" (no "/ 500", no fill bar).
+- **`11bddce` Bottom bar:** "Standard 200 cr · HD 800 cr · 2 free previews" (shrinks with an ellipsis; buttons never shrink); phones: price line on its own row, Preview / Process side by side, equal width, wrap if needed. Checked on a test page with the bar's CSS at 1280 / 768 / 375 / 320 px: both buttons inside the screen, no sideways scroll. Shared toast now 92 px up (above bottom bars) and wraps.
+- **`c42c79c` Gender Lock:** only for a split duet in one-singer mode (on solo songs it did nothing).
+- **`2844cb9` Upload limits:** "MP3 · M4A up to 50 MB · WAV up to 75 MB" (storage takes 50 MB; WAV over 50 MB is compressed in the browser). MP3/M4A over 50 MB refused up front (they used to fail mid-upload). Voice Swap + Stem Studio, shared in `lib/audio-upload.ts`.
+- **`e69ef0a` Coming soon:** Style marketplace, API access, DAW plugin, Team workspace dimmed with a "Coming soon" tag.
+- **`41dd74c` HD previews 100 cr:** every HD Voice preview, own counter (`hd:<track>`, no free ones) — the 2 free Standard previews per song are untouched; counts toward the full HD swap / saving it (800 − 100 = 700). An HD preview that falls back is re-charged as a Standard preview (free / 50). Page: "Preview · 100 cr", "HD preview 100 cr".
+- Note: the `?hdtest=soulx-download` switch works for any new-engine account (testers too) — restrict to admins before `NEW_ENGINES=all`.
+- Fresh copy `npm ci` ✓, `tsc --noEmit` ✓, `npm run build` ✓.
+
 ## 💰 2026-10-25 (8) — ROLLOUT STEP 5 shipped (`b28d732`, pricing) + English thin spots explained (evidence) — ⚠️ founder live test pending
 
 - **Founder:** fixes live test PASSED: Hindi duet ticked → "Split duet · 250 cr", Process locked until split; Mausam Hindi + original female sounds good (10 min 25 s). English HD (Mausam English, key −3) OK to good but thin / "clacking" at 3:32–3:35, 3:44–3:45, 4:26, 4:29 (12 min). For later: the upload/split part takes ~4 min — look for ways to cut it before beta.
