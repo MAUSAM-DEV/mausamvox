@@ -2210,7 +2210,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             )}
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
-                {isDualMode ? '2 voices · 400 cr' : `Standard ${FULL_SWAP_CREDITS} cr · HD ${HD_SWAP_CREDITS} cr · ${hdTake ? `HD preview ${HD_PREVIEW_CREDITS} cr` : '2 free previews'}`}
+                {isDualMode ? '2 voices · 400 cr' : `Standard ${FULL_SWAP_CREDITS} cr · HD ${HD_SWAP_CREDITS} cr · ${hdTake ? `HD preview ${HD_PREVIEW_CREDITS} cr` : '1 free preview'}`}
               </span>
               <div className="vs-action-btns">
                 <button

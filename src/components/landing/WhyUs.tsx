@@ -11,7 +11,7 @@ const reasons = [
   {
     num: '02',
     title: 'Hear it before you spend a single credit',
-    desc: 'Your first 2 previews on every song are free. Hear your voice on the track and A/B it against the original before you pay for the full swap — and if a song has loud group vocals, we tell you where before you start.',
+    desc: 'Your first preview of every song is free. Hear your voice on the track and A/B it against the original before you pay for the full swap — and if a song has loud group vocals, we tell you where before you start.',
   },
   {
     num: '03',

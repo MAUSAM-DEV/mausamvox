@@ -3,6 +3,11 @@
 import Link from 'next/link'
 import { useReveal } from './useReveal'
 import { SIGNUPS_OPEN } from '@/lib/signups'
+import { FULL_SWAP_CREDITS, HD_SWAP_CREDITS, SIGNUP_CREDITS, SPLIT_CREDITS } from '@/lib/swap-prices'
+
+// Swap counts include the song's upload: Standard = SPLIT_CREDITS + FULL_SWAP_CREDITS per song,
+// HD = SPLIT_CREDITS + HD_SWAP_CREDITS (each song's first preview is free).
+const songs = (credits: number, swap: number) => Math.floor(credits / (SPLIT_CREDITS + swap))
 
 // soon = announced but not built yet: shown dimmed with a "Coming soon" tag (2026-10-27)
 type PlanFeature = { text: string; dim?: boolean; soon?: boolean }
@@ -26,8 +31,8 @@ const plans: Plan[] = [
     price: '$0',
     desc: 'Try before you buy',
     features: [
-      { text: '500 free credits — once, when you sign up' },
-      { text: 'Enough for 2 voice swaps' },
+      { text: `${SIGNUP_CREDITS} free credits — once, when you sign up` },
+      { text: `Enough for ${songs(SIGNUP_CREDITS, FULL_SWAP_CREDITS)} song swap` },
       { text: '1 express voice clone' },
       { text: '4-stem split' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
@@ -45,7 +50,7 @@ const plans: Plan[] = [
     desc: 'Also ₹499 in India · 3,000 credits',
     features: [
       { text: '6,000 credits' },
-      { text: 'Up to 30 voice swaps' },
+      { text: `Up to ${songs(6000, FULL_SWAP_CREDITS)} song swaps` },
       { text: '1 studio voice clone' },
       { text: '4-stem split' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
@@ -64,7 +69,7 @@ const plans: Plan[] = [
     desc: 'Also ₹999 in India · 8,000 credits',
     features: [
       { text: '20,000 credits' },
-      { text: 'Up to 25 HD Voice swaps' },
+      { text: `Up to ${songs(20000, HD_SWAP_CREDITS)} HD Voice song swaps` },
       { text: '3 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
@@ -83,7 +88,7 @@ const plans: Plan[] = [
     desc: 'Also ₹2,499 in India · 22,000 credits',
     features: [
       { text: '55,000 credits' },
-      { text: 'Up to 68 HD Voice swaps' },
+      { text: `Up to ${songs(55000, HD_SWAP_CREDITS)} HD Voice song swaps` },
       { text: '10 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
@@ -144,8 +149,9 @@ export function Pricing() {
 
       <p style={{ fontSize: '14px', color: '#9494BC', lineHeight: 1.7, marginTop: '28px', maxWidth: '760px' }}>
         <strong style={{ color: '#C4C4E0' }}>How credits work:</strong> every pack is a one-time purchase — no subscription, nothing renews.
-        New accounts get 500 free credits once. <strong style={{ color: '#C4C4E0' }}>Purchased credits are valid for 12 months from the date of purchase.</strong>{' '}
-        A Standard voice swap uses 200 credits, an HD Voice swap 800.
+        New accounts get {SIGNUP_CREDITS} free credits once. <strong style={{ color: '#C4C4E0' }}>Purchased credits are valid for 12 months from the date of purchase.</strong>{' '}
+        Uploading a song uses {SPLIT_CREDITS} credits and includes 1 free preview; a Standard voice swap then uses {FULL_SWAP_CREDITS} credits,
+        an HD Voice swap {HD_SWAP_CREDITS}.
       </p>
 
       <style>{`

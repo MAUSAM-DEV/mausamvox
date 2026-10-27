@@ -1,5 +1,7 @@
 'use client'
 
+import { PREVIEW_CREDITS } from '@/lib/swap-prices'
+
 export type StepStatus = 'pending' | 'active' | 'done'
 
 // Only steps that really happen here (2026-10-27): "Mixing stems back together" and "Scoring
@@ -71,7 +73,7 @@ export function ProcessingOverlay({ visible, type, steps, note, engine = '', pre
 
       <div style={{ fontSize: '12px', color: '#8E8EB4', marginBottom: '28px' }}>
         {type === 'preview'
-          ? previewCost ?? 'First 2 previews of a song are free · 50 credits after'
+          ? previewCost ?? `First preview of a song is free · ${PREVIEW_CREDITS} credits after`
           : engine || 'Choosing the engine…'}
       </div>
 

@@ -79,7 +79,7 @@ function WaveCanvas() {
 // on every output" (feature removed), "Live support 24/7" (no support channel).
 const trustItems = [
   'Free trial — no card',
-  '2 free previews per track',
+  '1 free preview per track',
   'Your voice stays private',
 ]
 

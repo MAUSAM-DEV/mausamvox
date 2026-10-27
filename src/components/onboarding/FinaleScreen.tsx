@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Persona } from './OnboardingPage'
+import { SIGNUP_CREDITS } from '@/lib/swap-prices'
 
 // Every line and chip here must describe something the app really delivers
 // today — this screen used to claim a demo clone, a share feature, and
@@ -18,8 +19,8 @@ const FINALE_SUB: Record<Persona, string> = {
 }
 
 const UNLOCKS = [
-  { value: '500', label: 'free credits added' },
-  { value: '2',   label: 'free previews per track' },
+  { value: String(SIGNUP_CREDITS), label: 'free credits added' },
+  { value: '1',   label: 'free preview per track' },
   { value: '3',   label: 'creator tools unlocked' },
 ]
 

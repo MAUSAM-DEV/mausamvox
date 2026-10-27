@@ -70,7 +70,7 @@ export function QualitySection() {
           </p>
           <div style={{ marginTop: '36px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {[
-              'Free previews — first 2 on every track',
+              'Free preview — the first one on every track',
               'A/B player — compare original vs swapped',
               'Polish matched to the song — adjust it free, anytime',
             ].map((item) => (
