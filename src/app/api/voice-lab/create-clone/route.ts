@@ -38,11 +38,17 @@ export async function POST(req: NextRequest) {
 
     // ── 3. Parse and validate request body ───────────────────────────────────
     const body = await req.json()
-    const { name, cloneType, path, mime } = body as {
+    const { name, cloneType, path, mime, ownVoiceConsent } = body as {
       name: string
       cloneType: string
       path: string
       mime: string
+      ownVoiceConsent?: boolean
+    }
+
+    // "This is my own voice" is required for every voice (2026-10-27, Terms §5)
+    if (ownVoiceConsent !== true) {
+      return NextResponse.json({ error: 'Please confirm this is your own voice before saving it.' }, { status: 400 })
     }
 
     if (!name?.trim()) {
@@ -67,18 +73,19 @@ export async function POST(req: NextRequest) {
     // trains with fewer epochs — see /api/voice-lab/train). The old express
     // path that marked rows instantly 'ready' with no model produced voices
     // that couldn't actually convert anything.
-    const { data: row, error: insertError } = await supabaseAdmin
+    const now = new Date().toISOString()
+    const fields = { user_id: user.id, name: name.trim(), type, status: 'pending', sample_path: path, created_at: now }
+    const insert = (extra: Record<string, string>) => supabaseAdmin
       .from('voice_clones')
-      .insert({
-        user_id: user.id,
-        name: name.trim(),
-        type,
-        status: 'pending',
-        sample_path: path,
-        created_at: new Date().toISOString(),
-      })
+      .insert({ ...fields, ...extra })
       .select('id, name, type, status, model_url, sample_url, created_at')
       .single()
+    let { data: row, error: insertError } = await insert({ own_voice_consent_at: now })
+    // Before migration 20261027000003 the consent column doesn't exist — save the voice anyway
+    if (insertError && ['42703', 'PGRST204'].includes(insertError.code ?? '')) {
+      console.warn('[voice-lab/create-clone] own_voice_consent_at missing (migration not run) — saved without it')
+      ;({ data: row, error: insertError } = await insert({}))
+    }
 
     if (insertError) {
       console.error(

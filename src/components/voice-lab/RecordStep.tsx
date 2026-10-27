@@ -51,6 +51,8 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
   const [name, setName] = useState('My Voice')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // "This is my own voice" — required for every voice (2026-10-27); the server refuses without it
+  const [ownVoice, setOwnVoice] = useState(false)
   // Read-aloud passage shown above Quick/Pro capture. Starts on the first script;
   // the "New script" button advances through the list.
   const [script, setScript] = useState(RECORDING_SCRIPTS[0])
@@ -66,7 +68,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
     setSaveError('')
   }
 
-  const canSave = captured && captured.durationSec >= MIN_DURATION_SEC && name.trim().length > 0
+  const canSave = captured && captured.durationSec >= MIN_DURATION_SEC && name.trim().length > 0 && ownVoice
 
   async function handleSave() {
     if (!captured) return
@@ -99,7 +101,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
       const createRes = await fetch('/api/voice-lab/create-clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), cloneType, path: stored.path, mime: stored.mime }),
+        body: JSON.stringify({ name: name.trim(), cloneType, path: stored.path, mime: stored.mime, ownVoiceConsent: ownVoice }),
       })
       const createData = await createRes.json()
       if (!createRes.ok) throw new Error(createData.error ?? 'Could not save voice')
@@ -174,6 +176,14 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
             <button className="vlrec-save-btn" onClick={handleSave} disabled={!canSave || saving}>
               {saving ? 'Saving…' : 'Save to My Voices'}
             </button>
+            <label className="vlrec-consent">
+              <input type="checkbox" checked={ownVoice} onChange={(e) => setOwnVoice(e.target.checked)} />
+              <span>
+                This is <strong>my own voice</strong>, and I agree to MausamVox making an AI model of it.
+                I won&rsquo;t use MausamVox to imitate anyone else.{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+              </span>
+            </label>
           </div>
         )}
 
@@ -271,6 +281,13 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         }
         .vlrec-save-btn:hover:not(:disabled) { box-shadow: 0 8px 24px rgba(157,92,255,.4); transform: translateY(-1px); }
         .vlrec-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .vlrec-consent {
+          flex-basis: 100%; display: flex; align-items: flex-start; gap: 10px;
+          font-size: 12.5px; color: #C8C8E8; line-height: 1.45; cursor: pointer;
+        }
+        .vlrec-consent input { margin-top: 2px; accent-color: #9D5CFF; flex-shrink: 0; }
+        .vlrec-consent strong { color: #F0F0FF; }
+        .vlrec-consent a { color: #A78BFA; }
         .vlrec-save-error { padding: 0 24px 16px; font-size: 12px; color: #F87171; }
 
         @media (max-width: 700px) {

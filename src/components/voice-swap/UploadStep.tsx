@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
 import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
+import { UploadRightsCheck, useUploadRights } from '@/components/UploadRightsCheck'
 import { clientTiming } from '@/lib/client-timing'
 import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, SPLIT_CREDITS } from '@/lib/swap-prices'
 
@@ -297,6 +298,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
   const [dragging, setDragging] = useState(false)
+  const rights = useUploadRights() // "I own this audio…" — once per account, before the first upload
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   // 0..100 while an oversize WAV is being compressed to MP3; null otherwise.
@@ -551,6 +553,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
   }
 
   function handleStemsFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!rights.ready()) { e.target.value = ''; return }
     handleStemFiles(Array.from(e.target.files ?? []))
     e.target.value = ''
   }
@@ -558,6 +561,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
   async function handleStemsDrop(e: React.DragEvent) {
     e.preventDefault()
     setStemsDragging(false)
+    if (!rights.ready()) return
     const files = await getDroppedFiles(e.dataTransfer)
     handleStemFiles(files)
   }
@@ -643,6 +647,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragging(false)
+    if (!rights.ready()) return
     const file = e.dataTransfer.files[0]
     if (file) processFile(file)
   }
@@ -728,13 +733,14 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                   onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
                   onDragLeave={() => setDragging(false)}
                   onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => { if (rights.ready()) fileInputRef.current?.click() }}
                 >
                   <div className="vs-uz-icon">🎵</div>
                   <div className="vs-uz-title">Drop your track here</div>
                   <div className="vs-uz-sub">or click to browse files</div>
                   <div className="vs-uz-formats">{UPLOAD_LIMIT_TEXT}</div>
                 </div>
+                <UploadRightsCheck rights={rights} />
 
                 {/* Duet declaration — pre-upload toggle that routes to gender-split
                     (MVSEP male/female) instead of karaoke-split (KARA_2). KARA_2
@@ -767,7 +773,7 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                   onDragOver={(e) => { e.preventDefault(); setStemsDragging(true) }}
                   onDragLeave={() => setStemsDragging(false)}
                   onDrop={handleStemsDrop}
-                  onClick={() => stemsFileInputRef.current?.click()}
+                  onClick={() => { if (rights.ready()) stemsFileInputRef.current?.click() }}
                 >
                   <div className="vs-uz-icon">🎵</div>
                   <div className="vs-uz-title">Drop your stems folder or files here</div>
@@ -775,13 +781,14 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
                     or click to browse files ·{' '}
                     <span
                       className="vs-uz-folder-link"
-                      onClick={(e) => { e.stopPropagation(); stemsFolderInputRef.current?.click() }}
+                      onClick={(e) => { e.stopPropagation(); if (rights.ready()) stemsFolderInputRef.current?.click() }}
                     >
                       select a folder
                     </span>
                   </div>
                   <div className="vs-uz-formats">Vocals + Instrumental required · {UPLOAD_LIMIT_TEXT} each</div>
                 </div>
+                <UploadRightsCheck rights={rights} />
 
                 {items.length > 0 && (
                   <div className="vs-detected-card">

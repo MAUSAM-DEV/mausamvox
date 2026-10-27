@@ -11,6 +11,7 @@ import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
 import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
 import { SPLIT_CREDITS } from '@/lib/swap-prices'
+import { UploadRightsCheck, useUploadRights } from '@/components/UploadRightsCheck'
 
 // Charged by the server (/api/stem-split) before the split starts, refunded if it fails (2026-10-27).
 const STEM_SPLIT_COST = SPLIT_CREDITS
@@ -55,6 +56,7 @@ export function StemStudioPage() {
   const [compressPct, setCompressPct] = useState<number | null>(null)
   const [stems, setStems] = useState<Stems | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const rights = useUploadRights() // "I own this audio…" — once per account, before the first upload
   const [elapsed, setElapsed] = useState(0)
   const [karaokeOpen, setKaraokeOpen] = useState(false)
   const [performOpen, setPerformOpen] = useState(false)
@@ -170,6 +172,7 @@ export function StemStudioPage() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
+    if (!rights.ready()) return
     const f = e.dataTransfer.files?.[0]
     if (f) void processFile(f)
   }
@@ -214,7 +217,7 @@ export function StemStudioPage() {
                 )}
                 <div
                   className={`ss-dropzone${dragOver ? ' ss-dropzone--over' : ''}`}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => { if (rights.ready()) fileInputRef.current?.click() }}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={handleDrop}
@@ -224,6 +227,7 @@ export function StemStudioPage() {
                   <div className="ss-dz-hint">or click to browse</div>
                   <div className="ss-dz-formats">{UPLOAD_LIMIT_TEXT}</div>
                 </div>
+                <UploadRightsCheck rights={rights} />
                 <input
                   ref={fileInputRef}
                   type="file"

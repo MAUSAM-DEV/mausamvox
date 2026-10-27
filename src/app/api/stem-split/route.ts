@@ -8,6 +8,7 @@ import { fireKaraokeWarmPing } from '@/lib/karaoke-engine'
 import { createClient } from '@/lib/supabase/server'
 import { newEnginesFor } from '@/lib/new-engines'
 import { ADMIN_EMAILS } from '@/lib/admin'
+import { UPLOAD_RIGHTS_REFUSED, uploadRightsBlocked } from '@/lib/consent'
 import { attachSwapJob, chargeSplit, refundSwap, settleSwap } from '@/lib/swap-charges'
 import { SPLIT_CREDITS } from '@/lib/swap-prices'
 import { replicateClient } from '@/lib/replicate-client'
@@ -120,6 +121,8 @@ export async function POST(req: NextRequest) {
     let chargedHere = false // false when /api/hq-split already charged this song (its MVSEP job is running)
     let creditsRemaining: number | null = null
     if (!ADMIN_EMAILS.includes(user.email ?? '')) {
+      // "I own this audio or have the rights" must be on record first (2026-10-27)
+      if (await uploadRightsBlocked(user.id)) return NextResponse.json({ error: UPLOAD_RIGHTS_REFUSED }, { status: 403 })
       const charge = await chargeSplit(user.id, storagePath, SPLIT_CREDITS)
       if (!charge.ok) {
         if (charge.insufficient) return NextResponse.json({ error: `Not enough credits — uploading a song costs ${SPLIT_CREDITS} credits and you have ${charge.creditsRemaining}.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })

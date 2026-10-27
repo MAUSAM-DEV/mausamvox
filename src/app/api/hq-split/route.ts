@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { persistStemFile } from '@/lib/stem-persist'
 import { mvsepCreate, mvsepPoll, mvsepFile } from '@/lib/mvsep'
 import { ADMIN_EMAILS } from '@/lib/admin'
+import { UPLOAD_RIGHTS_REFUSED, uploadRightsBlocked } from '@/lib/consent'
 import { chargeSplit } from '@/lib/swap-charges'
 import { SPLIT_CREDITS } from '@/lib/swap-prices'
 
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
     // The upload is charged once per song before any machine starts (2026-10-27) — here or in
     // /api/stem-split, whichever comes first (the other finds it paid). Admins: never.
     if (!ADMIN_EMAILS.includes(user.email ?? '')) {
+      // "I own this audio or have the rights" must be on record first (2026-10-27)
+      if (await uploadRightsBlocked(user.id)) return NextResponse.json({ error: UPLOAD_RIGHTS_REFUSED }, { status: 403 })
       const charge = await chargeSplit(user.id, storagePath, SPLIT_CREDITS)
       if (!charge.ok) {
         if (charge.insufficient) return NextResponse.json({ error: `Not enough credits — uploading a song costs ${SPLIT_CREDITS} credits and you have ${charge.creditsRemaining}.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
