@@ -30,7 +30,7 @@ const LIBRARY: { emoji: string; label: string; href: string | null }[] = [
 
 interface VSidebarProps {
   creditsRemaining: number | null
-  creditsTotal: number | null
+  creditsTotal?: number | null // no longer shown (2026-10-27: just the balance) — callers may still pass it
   // No longer shown (2026-10-27: one-time credit packs, no plans) — callers may still pass it.
   plan?: string | null
   // Which tool this sidebar instance highlights — the sidebar is shared by
@@ -43,7 +43,7 @@ function fmtN(n: number) {
 }
 
 
-export function VSidebar({ creditsRemaining, creditsTotal, activeTool = 'Voice Swap' }: VSidebarProps) {
+export function VSidebar({ creditsRemaining, activeTool = 'Voice Swap' }: VSidebarProps) {
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
@@ -72,9 +72,8 @@ export function VSidebar({ creditsRemaining, creditsTotal, activeTool = 'Voice S
     })
   }, [])
 
-  const hasCredits = creditsRemaining !== null && creditsTotal !== null && creditsTotal > 0
-  // Bar fill = remaining fraction; empty when data is unavailable (never a full bar on failure)
-  const remainingPct = hasCredits ? Math.min(100, Math.max(0, (creditsRemaining / creditsTotal) * 100)) : 0
+  // Just the balance (2026-10-27): with one-time credit packs there is no "of N" to show.
+  const hasCredits = creditsRemaining !== null
   return (
     <>
       <aside className="vs-sidebar">
@@ -135,22 +134,11 @@ export function VSidebar({ creditsRemaining, creditsTotal, activeTool = 'Voice S
         {/* Footer */}
         <div className="vs-sb-foot">
           <div className="vs-credits-box">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '11px', color: '#8E8EB4' }}>Credits</span>
               <span style={{ fontSize: '11px', fontWeight: 600, color: hasCredits ? '#C4C4E0' : '#8E8EB4' }}>
-                {creditsRemaining === null ? '…' : fmtN(creditsRemaining)} / {creditsTotal === null ? '…' : fmtN(creditsTotal)}
+                {creditsRemaining === null ? '…' : `${fmtN(creditsRemaining)} credits`}
               </span>
-            </div>
-            <div style={{ height: '4px', background: '#2E2E56', borderRadius: '2px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${remainingPct}%`,
-                  borderRadius: '2px',
-                  background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)',
-                  transition: 'width 0.4s ease',
-                }}
-              />
             </div>
           </div>
 
