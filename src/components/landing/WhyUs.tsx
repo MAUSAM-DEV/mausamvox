@@ -5,8 +5,8 @@ import { useReveal } from './useReveal'
 const reasons = [
   {
     num: '01',
-    title: 'The AI follows your instructions',
-    desc: 'Gender lock, accent selector, style intensity slider — hard controls that the model actually respects. Ask for a male vocal, get a male vocal. Ask for British accent, get British accent. Every time.',
+    title: 'Controls that do what they say',
+    desc: 'Pick the song key (or let Auto key fit the song to your range), choose Standard or HD, and on duets lock which singer becomes you. You see the credit cost before anything runs.',
   },
   {
     num: '02',
@@ -15,13 +15,13 @@ const reasons = [
   },
   {
     num: '03',
-    title: 'Support that actually responds',
-    desc: 'Live chat (human agents weekdays) + AI support bot 24/7. Every billing issue, broken output, or question gets a response in under 2 hours. Not a week. Not never.',
+    title: 'Real people behind the support inbox',
+    desc: 'Billing issue, broken output or a question? Email support@mausamvox.com and a person who builds MausamVox answers. If a job fails on our side, its credits come back automatically.',
   },
   {
     num: '04',
     title: 'Fair billing — no nasty surprises',
-    desc: '7-day satisfaction guarantee with no-questions refund. One-time credit packs — no subscription, nothing renews; credits stay valid for 12 months. India pricing with UPI support for the global South.',
+    desc: 'One-time credit packs — no subscription, nothing renews; credits stay valid for 12 months. An unused pack can be refunded within 14 days. Lower India pricing for the same packs.',
   },
   {
     num: '05',

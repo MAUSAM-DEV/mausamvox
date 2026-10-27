@@ -94,7 +94,7 @@ export function OnboardingPage() {
         </div>
 
         <div className="ob-foot-note">
-          No credit card needed · <b>7-day refund</b> on every paid plan · Your voice stays private
+          No credit card needed · Unused packs <b>refundable within 14 days</b> · Your voice stays private
         </div>
       </div>
 

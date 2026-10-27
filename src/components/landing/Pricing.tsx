@@ -130,7 +130,7 @@ export function Pricing() {
         Simple, honest pricing.<br />Global &amp; India tiers.
       </h2>
       <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
-        One-time credit packs — no subscription, nothing renews. 7-day refund. UPI + card support. No surprises.
+        One-time credit packs — no subscription, nothing renews. Unused packs refundable within 14 days. No surprises.
       </p>
 
       <div
