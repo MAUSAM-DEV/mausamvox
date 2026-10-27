@@ -66,7 +66,7 @@ const WARM_MAX_MS = 10 * 60_000
 // New-engine accounts (rollout step 4, Option B, 2026-10-25 — cost per swap): ONE warm-up per song,
 // starting when a voice is picked on Configure, for at most this long: the Standard voice machine (T4)
 // + the finishing machine, or SoulX (L40S, ≈ $0.06/min) + the finishing machine for HD Voice (Auto with the
-// language still unknown: both, until it's known — then at once only the engine Auto picks). At most
+// language still unknown: only the Standard machine until it's known — then at once the one Auto picks). At most
 // ≈ $0.18 (HD) / $0.04 (Standard) per song. A second take of the same song starts cold.
 const NEW_ENGINE_WARM_MAX_MS = 3 * 60_000
 // …and their pings come every 30 s: our deployments shut an idle machine down in under a minute
@@ -1258,9 +1258,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const voicePicked = !!selectedVoiceId
   const warmLanguage = stemResult?.songLanguage ?? ''
   const engineWarmRef = useRef({ newEngines: false, engine: effectiveVoiceEngine as string, song: '', languageUnknown: false })
-  // Auto with the song's language not known yet (it lands ~20–60 s after the lead split): warm BOTH
-  // the Standard voice machine and SoulX, inside the same window — once it's known only the one Auto
-  // picks (2026-10-25: the warm-up warmed Standard, the song came back English, SoulX started cold).
+  // Auto with the song's language not known yet (it lands ~20–60 s after the lead split): warm only the
+  // Standard voice machine (cheap) — SoulX's L40S only once the song is known to be English (the page
+  // pings at once when the language lands). 2026-10-27: warming both cost ≈ $0.14 per Hindi song for a
+  // SoulX that was never used.
   engineWarmRef.current = { ...engineWarmRef.current, newEngines, engine: effectiveVoiceEngine, song: stemResult?.storagePath ?? '', languageUnknown: voiceEngine === 'Auto' && !stemResult?.songLanguage }
   const newWarmRef = useRef({ song: '', since: 0 })
   useEffect(() => {
@@ -1284,10 +1285,10 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const w = engineWarmRef.current
       // users: every WARM_PING_EVERY_MS as before (arrival / waking up: at once); new-engine accounts: every ADMIN_WARM_PING_EVERY_MS
       if (!w.newEngines && !now && ++tick % Math.round(WARM_PING_EVERY_MS / ADMIN_WARM_PING_EVERY_MS) !== 0) return
-      const both = w.newEngines && w.languageUnknown
-      fetch('/api/rvc-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine: both ? 'Standard' : w.engine }) }).catch(() => {})
+      const unknown = w.newEngines && w.languageUnknown
+      fetch('/api/rvc-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine: unknown ? 'Standard' : w.engine }) }).catch(() => {})
       if (!w.newEngines || stepRef.current !== 2 || !w.song) return
-      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx: both || w.engine === 'HD Voice' }) }).catch(() => {})
+      fetch('/api/engine-warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ soulx: !unknown && w.engine === 'HD Voice' }) }).catch(() => {})
     }
     // Hidden tab = the user left: no pings (back within the cap: one at once, then on schedule)
     const onVisible = () => { if (document.visibilityState === 'visible' && !capped()) ping(true) }
