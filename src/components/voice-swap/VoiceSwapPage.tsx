@@ -2154,9 +2154,6 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             // Auto with the language not known yet → both, it's decided at Process. Duet stems: Standard.
             const hdTakeUnknown = newEngines && !hasDuetStems && voiceEngine === 'Auto' && !stemResult?.songLanguage
             const hdTake = newEngines && !hasDuetStems && effectiveVoiceEngine === 'HD Voice' && !hdTakeUnknown
-            const fullSwapCostLabel = hdTakeUnknown
-              ? `${FULL_SWAP_CREDITS} cr (Standard) or ${HD_SWAP_CREDITS} cr (HD Voice, English songs)`
-              : hdTake ? `${HD_SWAP_CREDITS} cr (HD Voice; ${FULL_SWAP_CREDITS} cr if it falls back to Standard)` : `${FULL_SWAP_CREDITS} cr`
             const isDuetGated = isDuet && !hasDuetStems && !genderSplitting
             // Configure: wait for the lead/backing split — a swap started before
             // it lands converts the whole vocal track (backing too) and Auto Key
@@ -2208,9 +2205,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             )}
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
-                {isDualMode
-                  ? 'Full swap ~400 cr (2 voices)'
-                  : `Preview free (first 2 per song), then 50 cr · Full swap ${fullSwapCostLabel} — a paid preview counts toward it`}
+                {isDualMode ? '2 voices · 400 cr' : `Standard ${FULL_SWAP_CREDITS} cr · HD ${HD_SWAP_CREDITS} cr · 2 free previews`}
               </span>
               <div className="vs-action-btns">
                 <button
@@ -2338,15 +2333,22 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         .vs-lead-fail-txt { font-size: 12px; color: #FCD34D; line-height: 1.5; flex: 1 1 320px; }
         .vs-lead-fail-txt strong { color: #FDE68A; }
         .vs-lead-fail-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+        /* The hint may shrink (ellipsis) — the buttons never do, so they always stay on screen
+           (2026-10-27: a long price sentence pushed Preview / Process off the edge). */
         .vs-credit-hint {
           font-size: 12px;
           color: #8E8EB4;
-          flex-shrink: 0;
+          flex: 1 1 auto;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .vs-action-btns {
           display: flex;
           gap: 8px;
           flex-shrink: 0;
+          margin-left: auto;
         }
         .vs-btn-ghost {
           padding: 9px 18px;
@@ -2400,19 +2402,22 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           }
           .vs-action-bar {
             flex-wrap: wrap;
-            padding: 12px 14px !important;
+            padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
             position: sticky;
             bottom: 0;
             z-index: 50;
+            gap: 6px 12px;
           }
-          .vs-credit-hint { display: none; }
-          .vs-action-btns { width: 100%; justify-content: flex-end; }
+          /* phones: the short price line on its own row above the buttons */
+          .vs-credit-hint { flex-basis: 100%; font-size: 11px; text-align: center; }
+          .vs-action-btns { width: 100%; justify-content: stretch; margin-left: 0; }
+          .vs-action-btns > button { flex: 1 1 0; min-width: 0; }
         }
 
         @media (max-width: 420px) {
           .vs-workspace { padding: 12px !important; }
-          .vs-action-bar { padding: 10px 12px !important; }
-          .vs-btn-solid, .vs-btn-ghost { padding: 9px 14px; font-size: 12px; }
+          .vs-action-bar { padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) !important; }
+          .vs-btn-solid, .vs-btn-ghost { padding: 10px 10px; font-size: 12px; white-space: normal; line-height: 1.25; }
         }
       `}</style>
     </>
