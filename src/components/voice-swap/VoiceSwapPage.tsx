@@ -14,7 +14,8 @@ import { RightPanel, VoiceSwap } from './RightPanel'
 import { ProcessingOverlay, StepStatus } from './ProcessingOverlay'
 import { VToast } from './VToast'
 import { detectGroupVocals, formatGroupVocalRanges } from '@/lib/group-vocals'
-import { autoOctaveShiftSemitones, autoKeySemitones, AUTO_KEY_MIN_VOICED_S } from './pitchDetect'
+import { autoOctaveShiftSemitones, autoKeyFromRange, AUTO_KEY_MIN_VOICED_S } from './pitchDetect'
+import type { PitchStats } from '@/lib/audio-dsp/pitch-track'
 import { dspPitchStats } from './dspClient'
 import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
@@ -533,7 +534,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   const [pitchShift, setPitchShift] = useState(0)
   // Key change (voice + music) and Auto-tune — part of the conversion.
   // Song Key: 'Auto' (default) fits the song to the chosen voice's range
-  // (pitchDetect.autoKeySemitones); − / + switch to a manual value.
+  // (pitchDetect.autoKeyFromRange — the song's high notes); − / + switch to a manual value.
   const [keyAuto, setKeyAuto] = useState(true)
   const [manualKey, setManualKey] = useState(0)
   const [autoKey, setAutoKey] = useState<{ id: string; value: number | null }>({ id: '', value: null })
@@ -1151,7 +1152,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // ── Auto key-match helpers ──────────────────────────────────────────────────
   // Median sung note of a recording (whole song / whole sample), cached per URL —
   // used by both the octave match and Auto Song Key. Null on any failure → no shift.
-  const pitchStatsRef = useRef<Record<string, Promise<{ medianMidi: number; voicedSeconds: number } | null>>>({})
+  const pitchStatsRef = useRef<Record<string, Promise<PitchStats | null>>>({})
   function pitchStatsOf(url: string) {
     pitchStatsRef.current[url] ??= (async () => {
       const res = await fetch(url)
@@ -1188,8 +1189,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       const sample = await voiceSampleUrl(voiceId)
       const [song, voice, octave] = await Promise.all([pitchStatsOf(sourceUrl), sample ? pitchStatsOf(sample) : null, autoKeyShift(sourceUrl, voiceId, false)])
       if (!song || !voice || song.voicedSeconds < AUTO_KEY_MIN_VOICED_S || voice.voicedSeconds < AUTO_KEY_MIN_VOICED_S) return 0
-      const key = autoKeySemitones(song.medianMidi, voice.medianMidi, octave)
-      console.log('[voice-swap] auto song key', { voiceId, songMedian: song.medianMidi.toFixed(1), voiceMedian: voice.medianMidi.toFixed(1), octave, key })
+      // From the song's high notes (2026-10-27): its top 10 % must fit the voice's recorded range.
+      const key = autoKeyFromRange(song, voice, octave)
+      console.log('[voice-swap] auto song key', { voiceId, songMedian: song.medianMidi.toFixed(1), voiceMedian: voice.medianMidi.toFixed(1), songTop10: song.p90Midi.toFixed(1), voiceTop10: voice.p90Midi.toFixed(1), octave, key })
       return key
     })().catch(() => 0)
     return autoKeyRef.current[`${sourceUrl}|${voiceId}`]

@@ -171,6 +171,26 @@ export function autoOctaveShiftSemitones(sourceF0: number | null, targetF0: numb
 // reach the band's edge. Careful by design (2026-10-09: a −4 from a misread
 // octave sent the voice +8 and it sounded thin): an octave shift in play, or
 // a gap so big the key would pass AUTO_KEY_MAX, means a reading is off → 0.
+// High-note rule (founder, 2026-10-27 — "Lehanga" sounded like the original singer: its median was
+// inside the comfort band, so Auto kept key 0, but 64 % of its singing was above the voice's
+// recorded range). The song's top 10 % (its p90) must fit the voice's recorded range (the voice
+// recording's p90 — both from pitch-track.ts, octave misreads folded): lower the key just enough,
+// at most AUTO_KEY_HIGH_MAX. A song that already fits keeps key 0; songs far BELOW the voice still
+// use the median rule below (raise up to AUTO_KEY_MAX). AUTO_KEY_FIT_TOLERANCE absorbs tracker
+// noise (≤ 1 st over the voice's p90 = fits).
+export const AUTO_KEY_HIGH_MAX = 5
+export const AUTO_KEY_FIT_TOLERANCE = 1
+export function autoKeyFromRange(
+  song: { medianMidi: number; p90Midi: number },
+  voice: { medianMidi: number; p90Midi: number },
+  octaveShift: number,
+): number {
+  if (!Number.isFinite(song.p90Midi) || !Number.isFinite(voice.p90Midi) || octaveShift !== 0) return 0
+  const over = song.p90Midi - voice.p90Midi
+  if (over > AUTO_KEY_FIT_TOLERANCE) return -Math.min(AUTO_KEY_HIGH_MAX, Math.ceil(over - AUTO_KEY_FIT_TOLERANCE))
+  return Math.max(0, autoKeySemitones(song.medianMidi, voice.medianMidi, octaveShift)) // low songs: raise as before
+}
+
 export const AUTO_KEY_MAX = 4
 export const AUTO_KEY_COMFORT = 4
 export const AUTO_KEY_MIN_VOICED_S = 20 // less clear singing than this → Original key

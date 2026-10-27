@@ -6,6 +6,7 @@ import type { ShiftOptions } from '@/lib/audio-dsp/stretch'
 import type { KeyEstimate } from '@/lib/audio-dsp/key-detect'
 import type { HarmonyMode, HarmonyVoices } from '@/lib/audio-dsp/harmony-mode'
 import type { Filter } from '@/lib/audio-dsp/tone-match'
+import type { PitchStats } from '@/lib/audio-dsp/pitch-track'
 
 type ShiftReq = { op: 'shift'; channels: Float32Array[]; sampleRate: number; options: ShiftOptions }
 type KeyReq = { op: 'key'; mono: Float32Array; sampleRate: number }
@@ -24,7 +25,7 @@ export type MasterMs = { search: number; limit: number }
 type AnyReq = ShiftReq | KeyReq | HarmonyReq | DoublesReq | PitchStatsReq | PolishReq | AirShareReq | LufsReq | MasterReq | SpectrumReq | FiltersReq | AlignReq
 export type DspRequest = AnyReq & { id: number }
 export type DspResponse =
-  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: { medianMidi: number; voicedSeconds: number }; value?: number; ms?: MasterMs; nums?: number[] }
+  | { id: number; ok: true; channels?: Float32Array[]; key?: KeyEstimate; mode?: HarmonyMode; stats?: PitchStats; value?: number; ms?: MasterMs; nums?: number[] }
   | { id: number; ok: false; error: string }
 
 let worker: Worker | null = null
@@ -132,8 +133,8 @@ export async function dspRemoveDoubles(channels: Float32Array[], sampleRate: num
   return r.channels
 }
 
-// Median sung note + seconds of clear pitch (Auto Song Key).
-export async function dspPitchStats(mono: Float32Array, sampleRate: number): Promise<{ medianMidi: number; voicedSeconds: number }> {
+// Median + top-10 % sung note + seconds of clear pitch (Auto Song Key, octave match).
+export async function dspPitchStats(mono: Float32Array, sampleRate: number): Promise<PitchStats> {
   const r = await call({ op: 'pitchStats', mono, sampleRate }, [mono.buffer])
   if (!r.ok || !r.stats) throw new Error('Pitch analysis failed')
   return r.stats

@@ -56,9 +56,26 @@ export function trackPitch(mono: Float32Array, sampleRate: number): PitchTrack {
   return { midi, hopSeconds: HOP / rate }
 }
 
-// Median sung note (MIDI) and seconds of clear pitch — for the Auto Song Key.
-export function pitchStats(mono: Float32Array, sampleRate: number): { medianMidi: number; voicedSeconds: number } {
+// Sung-note statistics of a whole recording: the median, the note 90 % of the singing stays at or
+// below (p90 — Auto Song Key compares a song's high notes with a voice's recorded range,
+// 2026-10-27), and seconds of clear pitch.
+// p90 is taken after folding octave-up misreads down (a frame more than 9 semitones above the
+// median of its ±1 s neighbourhood counts an octave lower): this tracker's upper tail has them —
+// checked against pyin on 12 voices + 7 songs, the raw p90 / p95 read up to ~an octave high
+// (a male voice's p95 at D♯5), the folded p90 matched pyin on every song and within ~1 st on voices.
+export interface PitchStats { medianMidi: number; p90Midi: number; voicedSeconds: number }
+export function pitchStats(mono: Float32Array, sampleRate: number): PitchStats {
   const { midi, hopSeconds } = trackPitch(mono, sampleRate)
   const v = Array.from(midi).filter((m) => !Number.isNaN(m)).sort((a, b) => a - b)
-  return { medianMidi: v.length ? v[Math.floor(v.length / 2)] : NaN, voicedSeconds: v.length * hopSeconds }
+  const at = (a: number[], q: number) => (a.length ? a[Math.min(a.length - 1, Math.floor(a.length * q))] : NaN)
+  const w = Math.max(1, Math.round(1 / hopSeconds)), folded: number[] = []
+  for (let i = 0; i < midi.length; i++) {
+    if (Number.isNaN(midi[i])) continue
+    const nb: number[] = []
+    for (let j = Math.max(0, i - w); j <= Math.min(midi.length - 1, i + w); j++) if (!Number.isNaN(midi[j])) nb.push(midi[j])
+    nb.sort((a, b) => a - b)
+    folded.push(midi[i] - nb[Math.floor(nb.length / 2)] > 9 ? midi[i] - 12 : midi[i])
+  }
+  folded.sort((a, b) => a - b)
+  return { medianMidi: at(v, 0.5), p90Midi: at(folded, 0.9), voicedSeconds: v.length * hopSeconds }
 }
