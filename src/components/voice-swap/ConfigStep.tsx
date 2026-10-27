@@ -300,9 +300,10 @@ export function ConfigStep({
         <div className="vs-section-lbl">Swap Controls</div>
 
         <div className="vs-controls-grid">
-          {/* Gender Lock only picks which singer ONE voice replaces — both 2-voice modes convert both
-              singers and never read it (2026-10-23), so it's hidden there. */}
-          {!(hasDuet && activeDuetMode !== 'one') && (
+          {/* Gender Lock only picks which singer ONE voice replaces in a split duet: shown only for a
+              split duet in one-singer mode. Both 2-voice modes convert both singers and never read it
+              (2026-10-23); on solo songs it did nothing (2026-10-27, founder: hide it and its warning). */}
+          {hasDuet && activeDuetMode === 'one' && (
           <div className="vs-ctrl-group">
             <label className="vs-ctrl-lbl">Gender Lock</label>
             <SegControl<Gender>
@@ -311,9 +312,7 @@ export function ConfigStep({
               onChange={setGender}
             />
             {gender !== 'Neutral' && (
-              hasDuet
-                ? <div className="vs-gl-status vs-gl-status--active">✓ Converts only the {gender.toLowerCase()} singer's isolated stem</div>
-                : <div className="vs-gl-status vs-gl-status--soft">No effect until you run Duet Split — it only routes stems, doesn't change the output voice's gender</div>
+              <div className="vs-gl-status vs-gl-status--active">✓ Converts only the {gender.toLowerCase()} singer's isolated stem</div>
             )}
           </div>
           )}
