@@ -82,7 +82,7 @@ export const HD_NOTE_STARTING = 'HD voice — getting the singing engine ready�
 export const HD_NOTE_SINGING = 'HD voice — shaping the singing (about 2–3 min)…'
 export const HD_NOTE_VOICE = 'HD voice — adding your voice…'
 export const HD_NOTE_FINISH = 'HD voice — balancing and polishing…'
-export const HD_NOTE_FALLBACK = 'Finishing your swap…'
+export const HD_NOTE_FALLBACK = 'HD Voice couldn’t run this time — finishing with Standard (charged as Standard)…'
 export const STD_NOTE_VOICE = 'Adding your voice…'
 export const STD_NOTE_FINISH = 'Balancing and polishing…'
 

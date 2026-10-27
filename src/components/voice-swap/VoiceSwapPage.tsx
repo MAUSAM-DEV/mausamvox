@@ -584,7 +584,9 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
   // Processing overlay
   const [processing, setProcessing] = useState(false)
   const [processingType, setProcessingType] = useState<'preview' | 'full'>('full')
-  const [ovSteps, setOvSteps] = useState<StepStatus[]>(['pending', 'pending', 'pending', 'pending'])
+  const [ovSteps, setOvSteps] = useState<StepStatus[]>(['pending', 'pending'])
+  // The engine shown on the processing screen ('' until it's decided — Auto may wait for the language)
+  const [ovEngine, setOvEngine] = useState('')
   const [overlayNote, setOverlayNote] = useState<string | null>(null)
 
   // Toast
@@ -1562,7 +1564,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     persistContextRef.current = null
     setArmMixUpload(false)
     // Vocals are already isolated during upload, so step 1 starts done.
-    setOvSteps(['done', 'active', 'pending', 'pending'])
+    setOvSteps(['done', 'active'])
+    setOvEngine('')
 
     try {
       const hasDuetStems = !!(stemResult.maleVocalsUrl && stemResult.femaleVocalsUrl)
@@ -1694,6 +1697,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
           hd: true, engine: 'hd', duet: true, engineChoice: 'Duet Auto',
           songLanguage: duetLang.language, languageSource: duetLang.source,
         } : {}
+        setOvEngine(hdDuet ? 'HD Voice · 2 voices' : 'Standard · 2 voices')
         if (duetLang) console.log(`[duet] song language ${duetLang.language ?? `unknown (title: ${duetLang.source})`} → ${hdDuet ? 'HD Voice for both voices' : "today's duet path"}`)
         const duetPairId = crypto.randomUUID()
         const startJob = (vocalsUrl: string | undefined, vocalsPath: string | undefined, voiceId: string, pitch: number) =>
@@ -1753,11 +1757,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         replaceLocalVocals([keptA, keptB])
         const urlA = keptA.url, urlB = keptB.url
 
-        setOvSteps(['done', 'done', 'active', 'pending'])
-        await new Promise((r) => setTimeout(r, 350))
-        setOvSteps(['done', 'done', 'done', 'active'])
-        await new Promise((r) => setTimeout(r, 350))
-        setOvSteps(['done', 'done', 'done', 'done'])
+        setOvSteps(['done', 'done'])
 
         setSaveInfo(NEW_TAKE_SAVE)
         setSaveRequested(false)
@@ -1840,6 +1840,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
 
       // Auto (new-engine accounts, one voice): waits for the song language (resolveEngine)
       const { engine: takeVoiceEngine, language: takeSongLanguage, source: languageSource } = await resolveEngine(newEngines && !target)
+      setOvEngine(newEngines && !target ? takeVoiceEngine : 'Standard')
       const startConversion = async (retryOf?: string) => {
         const startRes = await fetch('/api/voice-convert', {
           method: 'POST',
@@ -1907,11 +1908,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
       replaceLocalVocals([kept])
       const convertedUrl = kept.url
 
-      setOvSteps(['done', 'done', 'active', 'pending'])
-      await new Promise((r) => setTimeout(r, 350))
-      setOvSteps(['done', 'done', 'done', 'active'])
-      await new Promise((r) => setTimeout(r, 350))
-      setOvSteps(['done', 'done', 'done', 'done'])
+      setOvSteps(['done', 'done'])
 
       setSaveInfo(NEW_TAKE_SAVE)
       setSaveRequested(false)
@@ -2263,6 +2260,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
         type={processingType}
         steps={ovSteps}
         note={overlayNote}
+        engine={ovEngine}
+        previewCost={newEngines && effectiveVoiceEngine === 'HD Voice' && !(stemResult?.maleVocalsUrl && stemResult?.femaleVocalsUrl) ? `HD Voice preview · ${HD_PREVIEW_CREDITS} credits` : undefined}
       />
       <VToast visible={toast.visible} message={toast.message} />
 

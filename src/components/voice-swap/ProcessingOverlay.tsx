@@ -2,11 +2,12 @@
 
 export type StepStatus = 'pending' | 'active' | 'done'
 
+// Only steps that really happen here (2026-10-27): "Mixing stems back together" and "Scoring
+// output quality" were 0.35 s animations — the mix is built on the Result screen and nothing
+// scores the output. The server's progress line (note) says what the voice step is doing.
 const STEP_LABELS = [
-  'Isolating vocals — Studio Engine',
-  'Applying your voice clone',
-  'Mixing stems back together',
-  'Scoring output quality',
+  'Lead vocal separated',
+  'Adding your voice',
 ]
 
 interface ProcessingOverlayProps {
@@ -15,9 +16,13 @@ interface ProcessingOverlayProps {
   steps: StepStatus[]
   // Extra status line, e.g. "Warming up the voice engine…"
   note?: string | null
+  // The engine this take runs on: "HD Voice", "Standard", "Standard · 2 voices" … ('' = not decided yet)
+  engine?: string
+  // What this preview costs, e.g. "HD Voice preview · 100 credits"
+  previewCost?: string
 }
 
-export function ProcessingOverlay({ visible, type, steps, note }: ProcessingOverlayProps) {
+export function ProcessingOverlay({ visible, type, steps, note, engine = '', previewCost }: ProcessingOverlayProps) {
   return (
     <div
       style={{
@@ -66,8 +71,8 @@ export function ProcessingOverlay({ visible, type, steps, note }: ProcessingOver
 
       <div style={{ fontSize: '12px', color: '#8E8EB4', marginBottom: '28px' }}>
         {type === 'preview'
-          ? 'First 2 previews of a track are free · 50 credits after'
-          : 'Studio Engine · Studio Clone'}
+          ? previewCost ?? 'First 2 previews of a song are free · 50 credits after'
+          : engine || 'Choosing the engine…'}
       </div>
 
       {note && (
