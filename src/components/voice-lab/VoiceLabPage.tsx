@@ -11,6 +11,7 @@ import { TestStep } from './TestStep'
 import { VLRightPanel } from './VLRightPanel'
 import { useStudioTraining } from './useTraining'
 import { VToast } from '@/components/voice-swap/VToast'
+import { loadVoiceLanguages } from '@/lib/voice-language-client'
 
 type Step = 1 | 2 | 3 | 4
 type CloneType = 'express' | 'studio'
@@ -63,6 +64,10 @@ export function VoiceLabPage() {
               return p ? { ...v, published: !!p.published, library_bio: p.library_bio } : v
             }))
           })
+        // Language labels (detected from each recording) — also best-effort and separate
+        void loadVoiceLanguages(supabase, uid).then((langs) => {
+          if (langs.size) setVoices((prev) => prev.map((v) => (langs.has(v.id) ? { ...v, language: langs.get(v.id) } : v)))
+        })
         // Reconcile any voice still marked 'training': training may have finished
         // while nobody was polling, so the row's status can be stale. One GET per
         // such voice self-heals the row and refreshes the badge to the truth.

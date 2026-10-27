@@ -5,7 +5,6 @@ import { QuickRecordPanel } from './QuickRecordPanel'
 import { ProRecordPanel } from './ProRecordPanel'
 import { UploadRecordingPanel } from './UploadRecordingPanel'
 import { MIN_DURATION_SEC, extFromMimeType } from './audioUtils'
-import { RECORDING_SCRIPTS, nextScript } from './recordingScripts'
 import { detectVoiceLanguage } from '@/lib/voice-language-client'
 
 type Mode = 'quick' | 'pro' | 'upload'
@@ -23,6 +22,8 @@ export interface SavedVoice {
   // columns arrive with migration 20260713000000, so they're optional here).
   published?: boolean
   library_bio?: string | null
+  // Language detected from the recording (separate best-effort query, 2026-10-27), e.g. 'hi'
+  language?: string
 }
 
 interface RecordStepProps {
@@ -53,9 +54,6 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
   const [saveError, setSaveError] = useState('')
   // "This is my own voice" — required for every voice (2026-10-27); the server refuses without it
   const [ownVoice, setOwnVoice] = useState(false)
-  // Read-aloud passage shown above Quick/Pro capture. Starts on the first script;
-  // the "New script" button advances through the list.
-  const [script, setScript] = useState(RECORDING_SCRIPTS[0])
 
   function handleModeChange(next: Mode) {
     setMode(next)
@@ -135,29 +133,23 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         </div>
 
         <div className="vlrec-body">
-          {/* Read-aloud script — guidance on what to say. Shown for the two live
-              capture modes (Quick/Pro); the Upload mode has no live recording. */}
-          {(mode === 'quick' || mode === 'pro') && (
-            <div className="vlrec-script">
-              <div className="vlrec-script-head">
-                <span className="vlrec-script-label">Read this aloud (or sing across your range):</span>
-                {RECORDING_SCRIPTS.length > 1 && (
-                  <button
-                    type="button"
-                    className="vlrec-script-shuffle"
-                    onClick={() => setScript((s) => nextScript(s.id))}
-                  >
-                    ↻ New script
-                  </button>
-                )}
-              </div>
-              <p className="vlrec-script-text">{script.text}</p>
-              <p className="vlrec-script-tip">
-                🎤 For singing clones, don&apos;t read flatly — go <strong>low and high</strong>, and
-                <strong> soft and loud</strong>, so the clone captures your full range.
-              </p>
+          {/* How to record (founder 2026-10-27). Replaces the old read-aloud script: a voice
+              trained on speech sings thin, and a voice sings best in the language it was
+              recorded in — so one voice per language. Shown for every mode (uploads too). */}
+          <div className="vlrec-script">
+            <div className="vlrec-script-head">
+              <span className="vlrec-script-label">How to record a voice that sings well</span>
             </div>
-          )}
+            <ul className="vlrec-guide">
+              <li><strong>Sing, don&rsquo;t speak.</strong> A voice made from talking sounds thin when it sings.</li>
+              <li><strong>Sing in the language you&rsquo;ll swap.</strong> Hindi songs → sing in Hindi; English songs → sing in English.</li>
+              <li><strong>Make one voice per language</strong> — for example &ldquo;My Voice Hindi&rdquo; and &ldquo;My Voice English&rdquo;.</li>
+            </ul>
+            <p className="vlrec-script-tip">
+              🎤 Go <strong>low and high</strong>, <strong>soft and loud</strong>, in a quiet room with no music
+              playing — just your voice.
+            </p>
+          </div>
 
           {mode === 'quick' && <QuickRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
           {mode === 'pro' && <ProRecordPanel onCaptured={(blob, mimeType, durationSec) => setCaptured({ blob, mimeType, durationSec })} onReset={handleReset} />}
@@ -245,15 +237,8 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
           font-family: var(--font-grotesk), 'Space Grotesk', sans-serif;
           font-size: 12px; font-weight: 600; color: #A78BFA; letter-spacing: 0.2px;
         }
-        .vlrec-script-shuffle {
-          border: 1px solid #3C3C6A; background: transparent; color: #9D5CFF;
-          font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
-          cursor: pointer; transition: all 0.2s; white-space: nowrap;
-        }
-        .vlrec-script-shuffle:hover { background: rgba(157,92,255,.1); border-color: rgba(157,92,255,.5); }
-        .vlrec-script-text {
-          margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: #E2E2F5;
-        }
+        .vlrec-guide { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: #D4D4EC; line-height: 1.6; }
+        .vlrec-guide strong { color: #F0F0FF; }
         .vlrec-script-tip {
           margin: 0; font-size: 11.5px; line-height: 1.45; color: #8585A8;
           border-top: 1px solid #1A1A30; padding-top: 8px;

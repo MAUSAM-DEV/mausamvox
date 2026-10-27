@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import type { SavedVoice } from './RecordStep'
+import { languageName } from '@/lib/voice-language-client'
 
 interface VLRightPanelProps {
   onToast: (m: string) => void
@@ -176,7 +177,7 @@ export function VLRightPanel({ onToast, voices, voicesLoading, onOpenVoice, onDe
                   <div className="vlrp-vi-av">🎤</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="vlrp-vi-name">{v.name}</div>
-                    <div className="vlrp-vi-type">Saved {formatDate(v.created_at)}</div>
+                    <div className="vlrp-vi-type">Saved {formatDate(v.created_at)}{v.language ? ` · ${languageName(v.language)}` : ''}</div>
                   </div>
                   <span className={`vlrp-vi-badge vlrp-vi-badge--${v.type === 'studio' ? 'studio' : 'express'}`}>
                     {v.type === 'studio' ? 'Studio' : 'Express'}

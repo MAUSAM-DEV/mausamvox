@@ -2,6 +2,7 @@
 
 import { KeyCompare } from './KeyCompare'
 import Link from 'next/link'
+import { languageName, sameLanguage } from '@/lib/voice-language-client'
 
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
 type Gender = 'Male' | 'Female' | 'Neutral'
@@ -29,6 +30,8 @@ export interface VoiceOption {
   // /api/voice-convert — modelUrl stays undefined on purpose (never leaked
   // to the browser), so the "sample-only" client gates must not apply.
   isLibrary?: boolean
+  // Own voices: the language detected from the recording (voice_clones.language_detected), e.g. 'hi'
+  language?: string
 }
 
 interface ConfigStepProps {
@@ -71,6 +74,7 @@ interface ConfigStepProps {
   setVoiceEngine?: (v: VoiceEngineChoice) => void
   autoVoiceEngine?: Exclude<VoiceEngineChoice, 'Auto'>   // what Auto picks for this song
   songLanguageName?: string | null                      // detected song language, e.g. "Hindi"
+  songLanguage?: string                                 // its code, e.g. 'hi' — to suggest the matching voice
 }
 
 export type VoiceEngineChoice = 'Auto' | 'HD Voice' | 'Standard'
@@ -112,6 +116,47 @@ const DUET_MODES: { id: DuetMode; icon: string; label: string; sub: string }[] =
   { id: 'both-same',  icon: '🔄', label: 'Both · Same Voice', sub: 'One voice replaces both singers' },
 ]
 
+// A voice sings best in the language it was recorded in (founder 2026-10-27: one voice per
+// language). When the song's language is known and the chosen own voice was recorded in another
+// one, point at the matching voice — or say to record one. Never switches by itself.
+function LanguageHint({ voices, selectedVoiceId, setSelectedVoiceId, songLanguage }: {
+  voices: VoiceOption[]
+  selectedVoiceId: string | null
+  setSelectedVoiceId: (id: string) => void
+  songLanguage?: string
+}) {
+  const selected = voices.find((v) => v.id === selectedVoiceId)
+  if (!songLanguage || !selected || selected.isLibrary || !selected.language) return null
+  if (sameLanguage(selected.language, songLanguage)) return null
+  const song = languageName(songLanguage)
+  const match = voices.find((v) => !v.isLibrary && v.modelUrl && sameLanguage(v.language, songLanguage))
+  const box: React.CSSProperties = {
+    marginTop: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(245,158,11,.35)',
+    background: 'rgba(245,158,11,.06)', fontSize: 13, color: '#E6E6F5', lineHeight: 1.5,
+  }
+  if (match) {
+    return (
+      <div style={box}>
+        This song is in {song}, and &ldquo;{selected.name}&rdquo; was recorded in {languageName(selected.language)}.{' '}
+        &ldquo;{match.name}&rdquo; was recorded in {song}, so it will sound more like you here.{' '}
+        <button
+          type="button"
+          onClick={() => setSelectedVoiceId(match.id)}
+          style={{ marginLeft: 4, padding: '3px 10px', borderRadius: 7, border: '1px solid #9D5CFF', background: 'transparent', color: '#C4B5FD', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Use {match.name}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div style={box}>
+      This song is in {song}, but &ldquo;{selected.name}&rdquo; was recorded in {languageName(selected.language)}.
+      For the best result, <Link href="/voice-lab" style={{ color: '#C4B5FD' }}>record a voice singing in {song}</Link>.
+    </div>
+  )
+}
+
 function VoiceGrid({
   voices, voicesLoading, selectedVoiceId, setSelectedVoiceId, libraryMode = false,
 }: {
@@ -139,7 +184,7 @@ function VoiceGrid({
             {selectedVoiceId === v.id && <div className="vs-va-check">✓</div>}
             <div className="vs-va-avatar" style={{ background: v.avatarBg }}>{v.icon ?? '🎤'}</div>
             <div className="vs-va-name">{v.name}</div>
-            <div className="vs-va-sub">{v.sub}{sampleOnly ? ' · sample only' : ''}</div>
+            <div className="vs-va-sub">{v.sub}{v.language ? ` · ${languageName(v.language)}` : ''}{sampleOnly ? ' · sample only' : ''}</div>
           </div>
         )
       })}
@@ -166,7 +211,7 @@ export function ConfigStep({
   pitchShift, setPitchShift, keyShift, setKeyShift, keyAuto, autoKeyPending, setKeyAuto, keyCompare, autotune, setAutotune,
   hasDuet, duetMode, setDuetMode, duetSinger, setDuetSinger,
   selectedVoiceId2, setSelectedVoiceId2, guided = false, groupVocalsRanges,
-  voiceEngine = 'Auto', setVoiceEngine, autoVoiceEngine = 'Standard', songLanguageName,
+  voiceEngine = 'Auto', setVoiceEngine, autoVoiceEngine = 'Standard', songLanguageName, songLanguage,
 }: ConfigStepProps) {
   const activeDuetMode = duetMode ?? 'one'
 
@@ -260,6 +305,7 @@ export function ConfigStep({
           setSelectedVoiceId={setSelectedVoiceId}
           libraryMode={voiceTab === 'Library'}
         />
+        <LanguageHint voices={voices} selectedVoiceId={selectedVoiceId} setSelectedVoiceId={setSelectedVoiceId} songLanguage={songLanguage} />
 
         {/* Second voice section — Mode 2 only */}
         {hasDuet && activeDuetMode === 'both-split' && setSelectedVoiceId2 && (
