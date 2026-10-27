@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useReveal } from './useReveal'
 import { SIGNUPS_OPEN } from '@/lib/signups'
 
-type PlanFeature = { text: string; dim?: boolean }
+// soon = announced but not built yet: shown dimmed with a "Coming soon" tag (2026-10-27)
+type PlanFeature = { text: string; dim?: boolean; soon?: boolean }
 
 interface Plan {
   tier: string
@@ -67,7 +68,7 @@ const plans: Plan[] = [
       { text: '3 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
-      { text: 'Style marketplace' },
+      { text: 'Style marketplace', soon: true },
     ],
     btnLabel: 'Get Pro',
     btnVariant: 'solid',
@@ -86,9 +87,9 @@ const plans: Plan[] = [
       { text: '10 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
-      { text: 'API access' },
-      { text: 'DAW plugin (VST/AU)' },
-      { text: 'Team workspace' },
+      { text: 'API access', soon: true },
+      { text: 'DAW plugin (VST/AU)', soon: true },
+      { text: 'Team workspace', soon: true },
     ],
     btnLabel: 'Get Studio',
     btnVariant: 'ghost',
@@ -252,16 +253,23 @@ function PriceCard({ plan }: { plan: Plan }) {
             key={f.text}
             style={{
               fontSize: '13px',
-              color: f.dim ? '#9494BC' : '#C8C8E8',
+              color: f.dim || f.soon ? '#9494BC' : '#C8C8E8',
               display: 'flex',
               alignItems: 'flex-start',
               gap: '8px',
             }}
           >
-            <span style={{ color: f.dim ? '#2E2E56' : '#9D5CFF', fontWeight: 700, flexShrink: 0, marginTop: '1px' }}>
-              {f.dim ? '–' : '✓'}
+            <span style={{ color: f.dim || f.soon ? '#2E2E56' : '#9D5CFF', fontWeight: 700, flexShrink: 0, marginTop: '1px' }}>
+              {f.dim || f.soon ? '–' : '✓'}
             </span>
-            {f.text}
+            <span>
+              {f.text}
+              {f.soon && (
+                <span style={{ marginLeft: '8px', padding: '1px 8px', borderRadius: '999px', border: '1px solid #3C3C6A', fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', color: '#A8A8CC', whiteSpace: 'nowrap' }}>
+                  Coming soon
+                </span>
+              )}
+            </span>
           </li>
         ))}
       </ul>
