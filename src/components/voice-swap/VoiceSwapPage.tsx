@@ -20,7 +20,7 @@ import { clientTiming } from '@/lib/client-timing'
 import { KEY_COMPARE_ENABLED } from '@/lib/key-compare-shared'
 import { titleLooksEnglish } from '@/lib/title-language'
 import { refreshStemUrls } from '@/lib/stem-urls'
-import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS, HD_SWAP_CREDITS } from '@/lib/swap-prices'
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, FULL_SWAP_CREDITS, HD_PREVIEW_CREDITS, HD_SWAP_CREDITS } from '@/lib/swap-prices'
 
 type Step = 1 | 2 | 3
 type VoiceTab = 'My Voices' | 'Library' | 'Ghost Singers'
@@ -2205,7 +2205,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
             )}
             <div className="vs-action-bar">
               <span className="vs-credit-hint">
-                {isDualMode ? '2 voices · 400 cr' : `Standard ${FULL_SWAP_CREDITS} cr · HD ${HD_SWAP_CREDITS} cr · 2 free previews`}
+                {isDualMode ? '2 voices · 400 cr' : `Standard ${FULL_SWAP_CREDITS} cr · HD ${HD_SWAP_CREDITS} cr · ${hdTake ? `HD preview ${HD_PREVIEW_CREDITS} cr` : '2 free previews'}`}
               </span>
               <div className="vs-action-btns">
                 <button
@@ -2232,7 +2232,7 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
                     handleProcess('preview')
                   }}
                 >
-                  {step === 1 ? (guided ? 'Next: Choose a Voice →' : 'Next: Configure →') : '▶ Preview'}
+                  {step === 1 ? (guided ? 'Next: Choose a Voice →' : 'Next: Configure →') : `▶ Preview${hdTake && !isAdmin ? ` · ${HD_PREVIEW_CREDITS} cr` : ''}`}
                 </button>
                 {step === 2 && (
                   <button

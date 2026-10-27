@@ -9,14 +9,14 @@ import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { cancelHdVoice, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
 import { attachSwapJob, chargeSwap, downgradeToStandard, refundSwap, settleSwap } from '@/lib/swap-charges'
-import { FULL_SWAP_CREDITS, HD_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
+import { FULL_SWAP_CREDITS, HD_PREVIEW_CREDITS, HD_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
 
 export const maxDuration = 30
 
 // Charging (2026-10-24, engine rollout step 1 — lib/swap-charges.ts): every swap of a
 // non-admin account is charged by POST below BEFORE any machine starts (can't afford
-// it → refused, nothing starts): previews (first FREE_PREVIEWS_PER_TRACK of a track
-// free, then PREVIEW_CREDITS), full swaps FULL_SWAP_CREDITS per voice — HD_SWAP_CREDITS on
+// it → refused, nothing starts): Standard previews (first FREE_PREVIEWS_PER_TRACK of a track
+// free, then PREVIEW_CREDITS), HD Voice previews HD_PREVIEW_CREDITS each (own counter), full swaps FULL_SWAP_CREDITS per voice — HD_SWAP_CREDITS on
 // HD Voice, back to FULL_SWAP_CREDITS if HD falls back to Standard (step 5) — minus what a
 // paid preview of the same take cost. The charge is refunded, at most once, when the
 // job can't start, when a poll sees it failed, or when the page cancels it (DELETE)
@@ -167,15 +167,19 @@ export async function POST(req: NextRequest) {
       const kind = isPreview ? 'preview' : twoVoice ? 'duet' : 'full'
       // The engine this take will start on (the same test as the HD branch below) — for the HD cap.
       const engine = hdTake && engineChoice !== 'standard' ? 'hd' : 'standard'
-      chargePrice = isPreview ? PREVIEW_CREDITS : engine === 'hd' && !twoVoice ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS
+      const hdPreview = isPreview && engine === 'hd'
+      chargePrice = isPreview ? (hdPreview ? HD_PREVIEW_CREDITS : PREVIEW_CREDITS) : engine === 'hd' && !twoVoice ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS
       const charge = await chargeSwap({
         userId: user.id, kind, price: chargePrice,
-        trackKey: trackKey ?? '', previewId: isPreview ? undefined : previewId,
+        // HD previews: no free ones, and their own counter so they don't use the Standard free previews
+        trackKey: hdPreview ? `hd:${trackKey || 'manual'}` : trackKey ?? '', freePreviews: hdPreview ? 0 : undefined,
+        previewId: isPreview ? undefined : previewId,
         guard: { engine, pairId: twoVoice && typeof pairId === 'string' ? pairId.slice(0, 64) : undefined },
       })
       if (!charge.ok) {
         if (charge.insufficient) {
-          return NextResponse.json({ error: `Not enough credits — this ${isPreview ? 'preview' : chargePrice === HD_SWAP_CREDITS ? 'HD Voice swap' : 'swap'} costs up to ${chargePrice} credits and you have ${charge.creditsRemaining}. ${chargePrice === HD_SWAP_CREDITS ? 'Choose Standard on Configure, or top up.' : 'Top up to continue.'}`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
+          const hdPrice = chargePrice === HD_SWAP_CREDITS || (isPreview && chargePrice === HD_PREVIEW_CREDITS)
+          return NextResponse.json({ error: `Not enough credits — this ${isPreview ? (hdPrice ? 'HD Voice preview' : 'preview') : hdPrice ? 'HD Voice swap' : 'swap'} costs up to ${chargePrice} credits and you have ${charge.creditsRemaining}. ${hdPrice ? 'Choose Standard on Configure, or top up.' : 'Top up to continue.'}`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
         }
         if (charge.blocked === 'running') {
           const freeIn = Math.max(1, Math.ceil(SWAP_LOCK_MINUTES - (Date.now() - Date.parse(charge.runningSince)) / 60_000))
@@ -235,6 +239,7 @@ export async function POST(req: NextRequest) {
           backingPath: backingPath && !backingPath.includes('..') ? backingPath : '',
           pitch: pitchShift, autotune: Number(autotune) || 0, chargeId: chargeId ?? undefined,
           hdPriced: chargePrice === HD_SWAP_CREDITS, previewId: !isPreview && typeof previewId === 'string' ? previewId : undefined,
+          hdPreviewTrack: isPreview && chargePrice === HD_PREVIEW_CREDITS ? trackKey ?? '' : undefined,
           origin: new URL(req.url).origin, test: typeof hdTest === 'string' ? hdTest.slice(0, 40) : undefined,
           noFinish: duet === true,
         })
@@ -243,10 +248,15 @@ export async function POST(req: NextRequest) {
       } catch (hdErr) {
         console.warn(`[hd-voice] FALLBACK to today's engine: SoulX didn't start (${hdErr instanceof Error ? hdErr.message : String(hdErr)})`)
         // charged at the HD price → today's engine runs at the Standard price
-        if (chargeId && chargePrice === HD_SWAP_CREDITS) {
+        if (chargeId && chargePrice === HD_SWAP_CREDITS && !isPreview) {
           chargeId = await downgradeToStandard(user.id, chargeId, FULL_SWAP_CREDITS, typeof previewId === 'string' ? previewId : undefined)
           chargePrice = FULL_SWAP_CREDITS
           creditsRemaining = null // changed; the page re-reads it
+        } else if (chargeId && isPreview && chargePrice === HD_PREVIEW_CREDITS) {
+          chargeId = await downgradeToStandard(user.id, chargeId, PREVIEW_CREDITS, undefined, { trackKey: trackKey ?? '' })
+          previewCharged = 0 // the Standard preview's cost is unknown here; the page re-reads the balance
+          chargePrice = PREVIEW_CREDITS
+          creditsRemaining = null
         }
       }
     }

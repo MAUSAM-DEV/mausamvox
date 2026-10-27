@@ -25,13 +25,15 @@ export type ChargeResult =
 // `guard` (every swap that starts a job): the per-account guards too. `engine` = the
 // engine this swap is set to run on (counts toward the HD cap); `pairId` = shared by the
 // two voices of one duet (they may run together and count once).
+// `freePreviews` = how many previews of the track cost nothing (default FREE_PREVIEWS_PER_TRACK;
+// HD previews pass 0 with their own track key, so they never use the Standard free ones).
 export async function chargeSwap(o: {
-  userId: string; kind: ChargeKind; price: number; trackKey?: string; previewId?: string
+  userId: string; kind: ChargeKind; price: number; trackKey?: string; previewId?: string; freePreviews?: number
   guard?: { engine: 'hd' | 'standard'; pairId?: string }
 }): Promise<ChargeResult> {
   const common = {
     p_user: o.userId, p_kind: o.kind, p_price: o.price, p_track: o.trackKey ?? '',
-    p_preview: o.previewId ?? '', p_free_previews: FREE_PREVIEWS_PER_TRACK,
+    p_preview: o.previewId ?? '', p_free_previews: o.freePreviews ?? FREE_PREVIEWS_PER_TRACK,
   }
   const { data, error } = o.guard
     ? await supabaseAdmin.rpc('charge_swap_checked', {
@@ -95,10 +97,14 @@ export async function settleSwap(userId: string, by: { chargeId?: string; jobId?
 // instead, as one new charge (so the swap costs FULL_SWAP_CREDITS, at most once). Returns the
 // new charge id to carry on with, or null when it couldn't (the voice is then delivered
 // uncharged — logged; a refund that failed leaves the HD charge in place, also logged).
-export async function downgradeToStandard(userId: string, chargeId: string, price: number, previewId?: string): Promise<string | null> {
+// An HD preview (HD_PREVIEW_CREDITS) falling back is re-charged as a Standard preview instead
+// (`preview`: the track's free previews / PREVIEW_CREDITS).
+export async function downgradeToStandard(userId: string, chargeId: string, price: number, previewId?: string, preview?: { trackKey: string }): Promise<string | null> {
   const back = await refundSwap(userId, { chargeId }, 'HD fell back to Standard')
   if (back === null) return chargeId  // nothing refunded (already settled/refunded, or an error) → keep the old charge
-  const again = await chargeSwap({ userId, kind: 'full', price, previewId })
+  const again = preview
+    ? await chargeSwap({ userId, kind: 'preview', price, trackKey: preview.trackKey })
+    : await chargeSwap({ userId, kind: 'full', price, previewId })
   if (!again.ok) {
     console.error(`[charge] HD fell back to Standard: re-charge at ${price} cr failed — delivered without charge`)
     return null

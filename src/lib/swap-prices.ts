@@ -3,8 +3,10 @@
 export const FULL_SWAP_CREDITS = 200        // one voice, full song, Standard (a 2-voice duet = 2 × this)
 export const HD_SWAP_CREDITS = 800          // one voice, full song, HD Voice (rollout step 5, founder 2026-10-25);
                                             // an HD swap that falls back to Standard costs FULL_SWAP_CREDITS
-export const PREVIEW_CREDITS = 50           // a preview after the free ones
-export const FREE_PREVIEWS_PER_TRACK = 2    // previews per uploaded song that cost nothing
+export const PREVIEW_CREDITS = 50           // a Standard preview after the free ones
+export const FREE_PREVIEWS_PER_TRACK = 2    // Standard previews per uploaded song that cost nothing
+export const HD_PREVIEW_CREDITS = 100       // every HD Voice preview (founder 2026-10-27) — counts toward the
+                                            // full HD swap / saving it; doesn't use the free Standard previews
 
 // Per-account guards (2026-10-25, engine rollout step 2) — enforced in the database
 // (charge_swap_checked, migration 20261025000000):
