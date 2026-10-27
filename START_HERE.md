@@ -26,7 +26,7 @@ AI voice & music platform, India-first: clone your voice, swap vocals on a song,
 | Song Studio AI lyrics | gpt-4o-mini on Replicate | 5 cr | Any language (26 named + "Other"). |
 | Voice Swap / AI Cover | Demucs (stems) → UVR karaoke split → bare RVC (`pseudoram/rvc-v2`) | 200 cr full swap | `RVC_ENGINE` unset = bare RVC; `cover` = old slower engine (rollback). Warm pings keep it ~1 min. |
 | Duet split | MVSEP | 250 cr | Manual "Split duet" button. |
-| Stem Studio | Demucs 4-stem | 50 cr | |
+| Stem Studio | Demucs 4-stem | 100 cr (= a song upload, `SPLIT_CREDITS`; 2026-10-27) | |
 | Voice Lab (cloning) | Replicate RVC training | — | Optional free noise cleanup before training. |
 | Choir Composer | ffmpeg only (no AI) | 25 cr | Up to 3 min input. |
 | Instruments | Basic Pitch + FluidSynth (no AI vendor) | 25 cr | Hum up to 25 s, 32 instruments. |
