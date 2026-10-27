@@ -31,9 +31,8 @@ const LIBRARY: { emoji: string; label: string; href: string | null }[] = [
 interface VSidebarProps {
   creditsRemaining: number | null
   creditsTotal: number | null
-  // Real plan from users.plan (free | starter | pro | studio), owned by the
-  // page alongside credits — the sidebar previously hardcoded "Pro Plan".
-  plan: string | null
+  // No longer shown (2026-10-27: one-time credit packs, no plans) — callers may still pass it.
+  plan?: string | null
   // Which tool this sidebar instance highlights — the sidebar is shared by
   // Voice Swap and Stem Studio.
   activeTool?: string
@@ -43,12 +42,8 @@ function fmtN(n: number) {
   return n.toLocaleString('en-US')
 }
 
-// 'free' → 'Free Plan' etc.; placeholder while the plan is still loading.
-function planLabel(plan: string | null) {
-  return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
-}
 
-export function VSidebar({ creditsRemaining, creditsTotal, plan, activeTool = 'Voice Swap' }: VSidebarProps) {
+export function VSidebar({ creditsRemaining, creditsTotal, activeTool = 'Voice Swap' }: VSidebarProps) {
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
@@ -179,7 +174,7 @@ export function VSidebar({ creditsRemaining, creditsTotal, plan, activeTool = 'V
             </div>
             <div className="vs-uinfo">
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>{userName || '…'}</div>
-              <div style={{ fontSize: '11px', color: '#8E8EB4' }}>{planLabel(plan)}</div>
+
             </div>
           </div>
         </div>

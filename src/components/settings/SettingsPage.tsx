@@ -44,7 +44,6 @@ export function SettingsPage() {
   const [pwMsg, setPwMsg] = useState<SectionMsg>(null)
 
   // Read-only account info
-  const [plan, setPlan] = useState<string | null>(null)
   const [credits, setCredits] = useState<number | null>(null)
   const [memberSince, setMemberSince] = useState<string | null>(null)
 
@@ -58,14 +57,13 @@ export function SettingsPage() {
       const metaName = (u.user_metadata?.full_name ?? u.user_metadata?.name ?? '') as string
       supabase
         .from('users')
-        .select('full_name, plan, credits_remaining, created_at')
+        .select('full_name, credits_remaining, created_at')
         .eq('id', u.id)
         .single()
         .then(({ data: row, error }) => {
           if (error) console.error('settings profile fetch failed', error)
           setFullName((row?.full_name ?? metaName ?? '').trim())
           if (row) {
-            setPlan(row.plan)
             setCredits(row.credits_remaining)
             setMemberSince(row.created_at)
           }
@@ -161,8 +159,6 @@ export function SettingsPage() {
     window.location.href = '/'
   }
 
-  const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : '…'
-
   return (
     <>
       <div className="set-shell">
@@ -175,7 +171,7 @@ export function SettingsPage() {
 
         <main className="set-main">
           <h1 className="set-title">Account Settings</h1>
-          <p className="set-sub">Your profile, sign-in details and plan.</p>
+          <p className="set-sub">Your profile, sign-in details and credits.</p>
 
           {loading && <div className="set-note">Loading…</div>}
 
@@ -256,7 +252,6 @@ export function SettingsPage() {
               {/* ── Account (read-only) ─────────────────────────────────── */}
               <section className="set-card">
                 <div className="set-card-title">Account</div>
-                <div className="set-info-row"><span>Plan</span><span className="set-info-val">{planLabel}</span></div>
                 <div className="set-info-row"><span>Credits remaining</span><span className="set-info-val">{credits === null ? '…' : credits.toLocaleString('en-US')}</span></div>
                 <div className="set-info-row"><span>Member since</span><span className="set-info-val">{memberSince ? new Date(memberSince).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '…'}</span></div>
               </section>

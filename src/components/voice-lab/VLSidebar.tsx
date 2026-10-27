@@ -32,17 +32,10 @@ function fmtN(n: number) {
   return n.toLocaleString('en-US')
 }
 
-// 'free' → 'Free Plan' etc.; placeholder while the plan is still loading.
-function planLabel(plan: string | null) {
-  return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan' : '…'
-}
 
 export function VLSidebar() {
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null)
   const [creditsTotal, setCreditsTotal] = useState<number | null>(null)
-  // Real plan from users.plan (free | starter | pro | studio) — was hardcoded
-  // "Pro Plan".
-  const [plan, setPlan] = useState<string | null>(null)
   // Live "My Voices" count from voice_clones (same query the dashboard + pickers
   // use), so the sidebar badge reflects the real number instead of a stale '3'.
   const [voiceClonesCount, setVoiceClonesCount] = useState<number | null>(null)
@@ -63,11 +56,11 @@ export function VLSidebar() {
       setUserInitial((display[0] ?? '').toUpperCase())
       supabase
         .from('users')
-        .select('credits_remaining, credits_total, plan')
+        .select('credits_remaining, credits_total')
         .eq('id', uid)
         .single()
         .then(({ data: row, error }) => {
-          if (row) { setCreditsRemaining(row.credits_remaining); setCreditsTotal(row.credits_total); setPlan(row.plan) }
+          if (row) { setCreditsRemaining(row.credits_remaining); setCreditsTotal(row.credits_total) }
           else if (error) console.error('credits fetch failed', error)
         })
 
@@ -158,7 +151,7 @@ export function VLSidebar() {
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #9D5CFF, #F9459E, #0CC7E8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{userInitial || '·'}</div>
             <div className="vls-uinfo">
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#C4C4E0' }}>{userName || '…'}</div>
-              <div style={{ fontSize: '11px', color: '#8E8EB4' }}>{planLabel(plan)}</div>
+
             </div>
           </div>
         </div>

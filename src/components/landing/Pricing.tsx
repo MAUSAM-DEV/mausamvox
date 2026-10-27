@@ -25,13 +25,12 @@ const plans: Plan[] = [
     price: '$0',
     desc: 'Try before you buy',
     features: [
-      { text: '500 credits' },
-      { text: '1 watermarked swap' },
+      { text: '500 free credits — once, when you sign up' },
+      { text: 'Enough for 2 voice swaps' },
       { text: '1 express voice clone' },
       { text: '4-stem split' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
-      { text: 'No HD quality', dim: true },
     ],
     btnLabel: 'Start Free',
     btnVariant: 'ghost',
@@ -40,13 +39,13 @@ const plans: Plan[] = [
     tier: 'Starter',
     price: '9',
     currency: '$',
-    period: '/mo',
-    india: 'Also ₹499/mo in India · 3,000 credits',
-    desc: 'Also ₹499/mo in India · 3,000 credits',
+    period: ' one-time',
+    india: 'Also ₹499 in India · 3,000 credits',
+    desc: 'Also ₹499 in India · 3,000 credits',
     features: [
-      { text: '6,000 credits/month' },
-      { text: 'Up to 30 voice swaps/month' },
-      { text: '1 studio clone/month' },
+      { text: '6,000 credits' },
+      { text: 'Up to 30 voice swaps' },
+      { text: '1 studio voice clone' },
       { text: '4-stem split' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
@@ -59,13 +58,13 @@ const plans: Plan[] = [
     tier: 'Pro',
     price: '24',
     currency: '$',
-    period: '/mo',
-    india: 'Also ₹999/mo in India · 8,000 credits',
-    desc: 'Also ₹999/mo in India · 8,000 credits',
+    period: ' one-time',
+    india: 'Also ₹999 in India · 8,000 credits',
+    desc: 'Also ₹999 in India · 8,000 credits',
     features: [
-      { text: '20,000 credits/month' },
-      { text: 'Up to 25 HD Voice swaps/month' },
-      { text: '3 studio clones/month' },
+      { text: '20,000 credits' },
+      { text: 'Up to 25 HD Voice swaps' },
+      { text: '3 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
       { text: 'Style marketplace' },
@@ -78,13 +77,13 @@ const plans: Plan[] = [
     tier: 'Studio',
     price: '59',
     currency: '$',
-    period: '/mo',
-    india: 'Also ₹2,499/mo in India · 22,000 credits',
-    desc: 'Also ₹2,499/mo in India · 22,000 credits',
+    period: ' one-time',
+    india: 'Also ₹2,499 in India · 22,000 credits',
+    desc: 'Also ₹2,499 in India · 22,000 credits',
     features: [
-      { text: '55,000 credits/month' },
-      { text: 'Up to 68 HD Voice swaps/month' },
-      { text: '10 studio clones/month' },
+      { text: '55,000 credits' },
+      { text: 'Up to 68 HD Voice swaps' },
+      { text: '10 studio voice clones' },
       { text: 'Choir Composer harmonies (2–8 voices)' },
       { text: 'Instruments — 32, played from your voice' },
       { text: 'API access' },
@@ -130,7 +129,7 @@ export function Pricing() {
         Simple, honest pricing.<br />Global &amp; India tiers.
       </h2>
       <p style={{ fontSize: '16px', color: '#9494BC', maxWidth: '480px', lineHeight: 1.75 }}>
-        Prorated upgrades. 7-day refund. UPI + card support. No surprises.
+        One-time credit packs — no subscription, nothing renews. 7-day refund. UPI + card support. No surprises.
       </p>
 
       <div
@@ -141,6 +140,12 @@ export function Pricing() {
           <PriceCard key={plan.tier} plan={plan} />
         ))}
       </div>
+
+      <p style={{ fontSize: '14px', color: '#9494BC', lineHeight: 1.7, marginTop: '28px', maxWidth: '760px' }}>
+        <strong style={{ color: '#C4C4E0' }}>How credits work:</strong> every pack is a one-time purchase — no subscription, nothing renews.
+        New accounts get 500 free credits once. <strong style={{ color: '#C4C4E0' }}>Purchased credits are valid for 12 months from the date of purchase.</strong>{' '}
+        A Standard voice swap uses 200 credits, an HD Voice swap 800.
+      </p>
 
       <style>{`
         @media (max-width: 1024px) { .pricing-grid { grid-template-columns: repeat(2, 1fr) !important; } }

@@ -21,7 +21,7 @@ const reasons = [
   {
     num: '04',
     title: 'Fair billing — no nasty surprises',
-    desc: '7-day satisfaction guarantee with no-questions refund. Prorated upgrades — remaining days credited instantly when you switch plans. India pricing with UPI support for the global South.',
+    desc: '7-day satisfaction guarantee with no-questions refund. One-time credit packs — no subscription, nothing renews; credits stay valid for 12 months. India pricing with UPI support for the global South.',
   },
   {
     num: '05',
