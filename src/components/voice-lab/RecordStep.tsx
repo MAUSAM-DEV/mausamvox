@@ -6,6 +6,7 @@ import { ProRecordPanel } from './ProRecordPanel'
 import { UploadRecordingPanel } from './UploadRecordingPanel'
 import { MIN_DURATION_SEC, extFromMimeType } from './audioUtils'
 import { detectVoiceLanguage } from '@/lib/voice-language-client'
+import { OwnVoiceCheck } from './OwnVoiceCheck'
 
 type Mode = 'quick' | 'pro' | 'upload'
 type CloneType = 'express' | 'studio'
@@ -54,6 +55,8 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
   const [saveError, setSaveError] = useState('')
   // "This is my own voice" — required for every voice (2026-10-27); the server refuses without it
   const [ownVoice, setOwnVoice] = useState(false)
+  // the voice just saved — its own-voice check shows under the recorder (2026-10-27)
+  const [checkFor, setCheckFor] = useState<SavedVoice | null>(null)
 
   function handleModeChange(next: Mode) {
     setMode(next)
@@ -105,6 +108,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
       if (!createRes.ok) throw new Error(createData.error ?? 'Could not save voice')
 
       onSaved(createData.voice as SavedVoice)
+      setCheckFor(createData.voice as SavedVoice)
       // its language, from the recording, in the background (Voice Lab has no language choice) — 2026-10-27
       if ((createData.voice as SavedVoice | undefined)?.id) detectVoiceLanguage((createData.voice as SavedVoice).id)
       onToast('Voice sample saved — it now shows up in My Voices')
@@ -180,6 +184,7 @@ export function RecordStep({ cloneType, onToast, onSaved }: RecordStepProps) {
         )}
 
         {saveError && <div className="vlrec-save-error">{saveError}</div>}
+        {checkFor && <OwnVoiceCheck key={checkFor.id} voiceId={checkFor.id} voiceName={checkFor.name} />}
       </div>
 
       <style suppressHydrationWarning>{`

@@ -24,10 +24,12 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-    const { contentType, incoming, fileExt } = await req.json()
+    const { contentType, incoming, fileExt, check } = await req.json()
     const rawMime = (contentType || '').split(';')[0].trim()
     let mime = MIME_TO_EXT[rawMime] ? rawMime : 'audio/webm'
     let path = `${user.id}/${Date.now()}-sample.${MIME_TO_EXT[mime] ?? 'webm'}`
+    // check = an own-voice check clip (/api/voice-lab/voice-check scores it, then deletes it)
+    if (check) path = `${user.id}/checks/${Date.now()}-check.${MIME_TO_EXT[mime] ?? 'webm'}`
     // incoming = a recording the browser can't read (e.g. iPhone Voice Memos lossless / ALAC):
     // stored as-is under incoming/ for /api/voice-lab/convert-sample, which turns it into a WAV
     // and deletes it. The bucket only takes a fixed list of types, so anything else (FLAC,
