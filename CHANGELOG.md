@@ -2,6 +2,7 @@
 
 ## 2026-10-27
 
+- **Step 6 (4-song test) + fixes:** ledger correct for all 4 songs (incl. a refunded 429 attempt); est. Replicate cost per swap $0.08–0.48. **`7eb7d73`** real backoff on Replicate 429s + no raw errors for users · **`0a95516`** processing screen shows the real engine, fake steps removed · **`861fb82`** `?hdtest=` admins only. Found: Voice Lab stores every voice as English (weak HD references for Hindi recordings); Punjabi sounded like the original because Auto kept key 0 for a song 4–6 st above the voice; the song split is charged only by the page.
 - **`1104751`** one-time credit packs, 500 free credits once, 12-month validity stated, no plan labels · **`028af7f`** sidebar shows "750 credits" · **`11bddce`** short bottom bar, buttons always visible (phones too), toasts above it · **`c42c79c`** Gender Lock only on split duets · **`2844cb9`** upload limits: MP3/M4A 50 MB, WAV 75 MB · **`e69ef0a`** "Coming soon" on unbuilt pricing features · **`41dd74c`** HD previews 100 cr (count toward the HD swap; Standard previews still 2 free). Step 5 live test passed.
 
 ## 2026-10-25
