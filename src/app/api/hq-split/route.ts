@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { persistStemFile } from '@/lib/stem-persist'
 import { mvsepCreate, mvsepPoll, mvsepFile } from '@/lib/mvsep'
+import { ADMIN_EMAILS } from '@/lib/admin'
+import { chargeSplit } from '@/lib/swap-charges'
+import { SPLIT_CREDITS } from '@/lib/swap-prices'
 
 // Studio-quality vocals / music split for Voice Swap (2026-10-09): MVSEP
 // BS-RoFormer "124 bands" (the best checkpoint listed: SDR vocals 12.33,
@@ -39,6 +42,16 @@ export async function POST(req: NextRequest) {
     }
     const { data: signed, error } = await supabaseAdmin.storage.from('audio-uploads').createSignedUrl(storagePath, 21600)
     if (error || !signed?.signedUrl) return NextResponse.json({ error: 'Could not sign the upload' }, { status: 500 })
+
+    // The upload is charged once per song before any machine starts (2026-10-27) — here or in
+    // /api/stem-split, whichever comes first (the other finds it paid). Admins: never.
+    if (!ADMIN_EMAILS.includes(user.email ?? '')) {
+      const charge = await chargeSplit(user.id, storagePath, SPLIT_CREDITS)
+      if (!charge.ok) {
+        if (charge.insufficient) return NextResponse.json({ error: `Not enough credits — uploading a song costs ${SPLIT_CREDITS} credits and you have ${charge.creditsRemaining}.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
+        return NextResponse.json({ error: "Couldn't check your credits — please try again in a minute." }, { status: 500 })
+      }
+    }
 
     const job = await mvsepCreate({ url: signed.signedUrl, sep_type: SEP_TYPE, add_opt1: MODEL, add_opt2: OVERLAP, output_format: OUTPUT_FLAC_16 })
     if ('error' in job) {

@@ -7,6 +7,9 @@ import { fireWarmPing } from '@/lib/rvc-engine'
 import { fireKaraokeWarmPing } from '@/lib/karaoke-engine'
 import { createClient } from '@/lib/supabase/server'
 import { newEnginesFor } from '@/lib/new-engines'
+import { ADMIN_EMAILS } from '@/lib/admin'
+import { attachSwapJob, chargeSplit, refundSwap, settleSwap } from '@/lib/swap-charges'
+import { SPLIT_CREDITS } from '@/lib/swap-prices'
 import { replicateClient } from '@/lib/replicate-client'
 
 // POST creates the prediction and returns immediately. GET is the status poll;
@@ -104,8 +107,27 @@ export async function POST(req: NextRequest) {
     }
 
     const { storagePath } = body
-    if (!storagePath) {
+    // Signed in, own upload only (2026-10-27: this route had no sign-in check — anyone could start Demucs jobs).
+    const { data: { user } } = await (await createClient()).auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    if (!storagePath || storagePath.includes('..') || !storagePath.startsWith(`${user.id}/`)) {
       return NextResponse.json({ error: 'storagePath is required' }, { status: 400 })
+    }
+
+    // ── 0. Charge the upload BEFORE any machine starts (once per song — /api/hq-split
+    // may have charged it already; a failed Demucs job gives it back). Admins: never.
+    let chargeId: string | null = null
+    let chargedHere = false // false when /api/hq-split already charged this song (its MVSEP job is running)
+    let creditsRemaining: number | null = null
+    if (!ADMIN_EMAILS.includes(user.email ?? '')) {
+      const charge = await chargeSplit(user.id, storagePath, SPLIT_CREDITS)
+      if (!charge.ok) {
+        if (charge.insufficient) return NextResponse.json({ error: `Not enough credits — uploading a song costs ${SPLIT_CREDITS} credits and you have ${charge.creditsRemaining}.`, creditsRemaining: charge.creditsRemaining }, { status: 402 })
+        return NextResponse.json({ error: "Couldn't check your credits — please try again in a minute." }, { status: 500 })
+      }
+      chargeId = charge.chargeId
+      chargedHere = charge.charged > 0
+      creditsRemaining = charge.creditsRemaining
     }
 
     // ── 1. Signed URL (bucket is private) ───────────────────────────
@@ -129,20 +151,27 @@ export async function POST(req: NextRequest) {
 
     // ── 2. Start Demucs (fire and return — client polls GET) ─────────
     const replicate = replicateClient()
-    const prediction = await replicate.predictions.create({
-      version: DEMUCS_VERSION,
-      input: {
-        // cjwbw/demucs's param is `model_name` (not `model`); the old `model` key
-        // was silently ignored, so the cog ran its default htdemucs (4-stem) by
-        // luck. Name it explicitly. `mp3: true` was likewise an ignored key —
-        // output_format already defaults to mp3, so it's dropped. Output unchanged.
-        audio: signed.signedUrl,
-        model_name: 'htdemucs',
-        mp3_bitrate: 320,
-      },
-    })
+    let prediction
+    try {
+      prediction = await replicate.predictions.create({
+        version: DEMUCS_VERSION,
+        input: {
+          // cjwbw/demucs's param is `model_name` (not `model`); the old `model` key
+          // was silently ignored, so the cog ran its default htdemucs (4-stem) by
+          // luck. Name it explicitly. `mp3: true` was likewise an ignored key —
+          // output_format already defaults to mp3, so it's dropped. Output unchanged.
+          audio: signed.signedUrl,
+          model_name: 'htdemucs',
+          mp3_bitrate: 320,
+        },
+      })
+    } catch (createErr) {
+      if (chargeId && chargedHere) await refundSwap(user.id, { chargeId }, "split didn't start")
+      throw createErr
+    }
 
     console.log(`[stem-split] started prediction ${prediction.id} (status=${prediction.status})`)
+    if (chargeId) await attachSwapJob(user.id, chargeId, prediction.id) // its failure refunds the upload; false when already settled
 
     // ── 3. Pre-warm the downstream pools (PROJECT_STATUS §6) ──────────
     // First of two RVC pings per swap: this one wakes the RVC pool while Demucs
@@ -152,8 +181,7 @@ export async function POST(req: NextRequest) {
     // New-engine accounts (lib/new-engines.ts) split the lead with MVSEP and convert on our own
     // deployments, so neither the KARA_2 pool nor the public RVC pool is used — no warm-up for
     // them (2026-10-27: the KARA_2 ping was a 34 s L40S job, ≈ $0.03 per upload, never used).
-    const { data: { user: warmUser } } = await (await createClient()).auth.getUser()
-    if (!newEnginesFor(warmUser?.email)) {
+    if (!newEnginesFor(user.email)) {
       await fireWarmPing(origin, 'stem-split')
       // Also warm the karaoke (UVR KARA_2) pool NOW: the real karaoke-split fires
       // the instant these stems land (~120-155s of Demucs = the cold-boot runway),
@@ -162,7 +190,7 @@ export async function POST(req: NextRequest) {
       await fireKaraokeWarmPing(origin, 'stem-split')
     }
 
-    return NextResponse.json({ predictionId: prediction.id, status: prediction.status })
+    return NextResponse.json({ predictionId: prediction.id, status: prediction.status, creditsRemaining })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[stem-split] unhandled error:', msg)
@@ -185,8 +213,10 @@ export async function GET(req: NextRequest) {
 
     const replicate = replicateClient()
     const prediction = await replicate.predictions.get(id)
+    const { data: { user: pollUser } } = await (await createClient()).auth.getUser()
 
     if (prediction.status === 'succeeded') {
+      if (pollUser) await settleSwap(pollUser.id, { jobId: id }, id) // the upload's charge can't be refunded from now on
       logReplicateTiming('stem-split', prediction)
       logReplicateStageTiming('demucs', prediction)
       // Log raw output shape so Vercel logs can diagnose any future parse issues.
@@ -216,8 +246,7 @@ export async function GET(req: NextRequest) {
       // minutes of here, and the pool re-chills faster than the POST-time ping
       // alone can cover (observed <7 min on 2026-07-05). The client polls stop
       // at 'succeeded', so this fires once per split.
-      const { data: { user: warmUser } } = await (await createClient()).auth.getUser()
-      if (!newEnginesFor(warmUser?.email)) await fireWarmPing(new URL(req.url).origin, 'stem-split')
+      if (!newEnginesFor(pollUser?.email)) await fireWarmPing(new URL(req.url).origin, 'stem-split')
       return NextResponse.json({
         status: 'succeeded',
         ...stems,
@@ -231,7 +260,9 @@ export async function GET(req: NextRequest) {
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
       const errMsg = safeStringify(prediction.error)
       console.error(`[stem-split] prediction ${id} ${prediction.status}:`, errMsg)
-      return NextResponse.json({ status: prediction.status, error: errMsg })
+      // a failed split gives the upload's credits back (once)
+      const credits = pollUser ? await refundSwap(pollUser.id, { jobId: id }, `split ${prediction.status}`) : null
+      return NextResponse.json({ status: prediction.status, error: "The song couldn't be split — you haven't been charged for it. Please try again.", ...(credits !== null ? { creditsRemaining: credits } : {}) })
     }
 
     // starting / processing / etc — client keeps polling

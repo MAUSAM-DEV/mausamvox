@@ -125,6 +125,31 @@ export async function chargeEngineFor(userId: string, deliveredId: string, kind:
   return data ? String(data.engine ?? '') : null
 }
 
+// Uploading a song: charged once per song (track = its upload storage path) — the two
+// parallel splits share the charge (migration 20261027000000). charged = 0 when it was
+// already paid.
+export async function chargeSplit(userId: string, trackKey: string, price: number): Promise<
+  | { ok: true; chargeId: string; charged: number; creditsRemaining: number }
+  | { ok: false; insufficient: true; creditsRemaining: number }
+  | { ok: false; insufficient?: false; error: string }
+> {
+  const { data, error } = await supabaseAdmin.rpc('charge_split', { p_user: userId, p_track: trackKey, p_price: price })
+  if (error) { console.error(`[charge] split charge failed: ${error.message}`); return { ok: false, error: error.message } }
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return { ok: false, error: 'no answer from charge_split' }
+  if (row.insufficient) { console.log(`[charge] split: not enough credits (${row.credits_remaining} left)`); return { ok: false, insufficient: true, creditsRemaining: row.credits_remaining } }
+  console.log(`[charge] split ${row.charged ? `charged ${row.charged} cr` : 'already paid'} → ${row.credits_remaining} left (charge ${row.charge_id})`)
+  return { ok: true, chargeId: row.charge_id, charged: row.charged, creditsRemaining: row.credits_remaining }
+}
+
+// Does this song have a paid (not refunded) split? Its free previews depend on it. null = couldn't check.
+export async function splitPaid(userId: string, trackKey: string): Promise<boolean | null> {
+  if (!trackKey) return false
+  const { data, error } = await supabaseAdmin.rpc('split_paid', { p_user: userId, p_track: trackKey })
+  if (error) { console.error(`[charge] split check for ${trackKey} failed: ${error.message}`); return null }
+  return data === true
+}
+
 // true / false, or null when it couldn't be checked.
 export async function swapPaid(userId: string, predictionId: string): Promise<boolean | null> {
   const { data, error } = await supabaseAdmin.rpc('swap_paid', { p_user: userId, p_prediction: predictionId })

@@ -1117,7 +1117,8 @@ export function VoiceSwapPage({ guided = false }: { guided?: boolean } = {}) {
     // "Split duet · 250 cr · Premium" button (onSplitDuet → handleSplitDuet) to
     // proceed — restoring the explicit confirm before any charge.
     if (result.storagePath) {
-      if (!isAdmin) deductCredits(50, 'stem_split')
+      // the 50-credit upload was charged by the server when the split started (2026-10-27)
+      if (!isAdmin) void refreshCredits()
       if (!isDuet) {
         void runKaraokeSplit(result)
       }

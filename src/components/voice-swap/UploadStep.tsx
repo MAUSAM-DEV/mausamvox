@@ -6,7 +6,7 @@ import { formatGroupVocalRanges } from '@/lib/group-vocals'
 import { AudioPlayer } from './AudioPlayer'
 import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
 import { clientTiming } from '@/lib/client-timing'
-import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS } from '@/lib/swap-prices'
+import { DUET_SPLIT_ANY_PLAN, DUET_SPLIT_CREDITS, SPLIT_CREDITS } from '@/lib/swap-prices'
 
 type Phase = 'idle' | 'uploading' | 'splitting' | 'done' | 'error'
 type UploadMode = 'full' | 'extracted-stems'
@@ -349,6 +349,13 @@ export function UploadStep({ userId, result, onDone, onStemsAdded, onContinue, o
     const validationError = validateFile(file)
     if (validationError) {
       setErrorMsg(validationError)
+      setPhase('error')
+      return
+    }
+    // Uploading a song is charged by the server before the split starts (2026-10-27) — say so
+    // up front instead of uploading first and being refused.
+    if (!isAdmin && creditsRemaining !== null && creditsRemaining < SPLIT_CREDITS) {
+      setErrorMsg(`Not enough credits — uploading a song costs ${SPLIT_CREDITS} credits and you have ${creditsRemaining}.`)
       setPhase('error')
       return
     }

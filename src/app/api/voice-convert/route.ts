@@ -8,7 +8,7 @@ import { createRvcPrediction, rvcEngine, rvcPoolName } from '@/lib/rvc-engine'
 import { resolveVoiceModelUrl, rvcInput } from '@/lib/rvc-convert'
 import { cancelHdVoice, isHdTicket, pollHdVoice, startHdVoice, startStandardVoice } from '@/lib/hd-voice'
 import { newEnginesFor } from '@/lib/new-engines'
-import { attachSwapJob, chargeSwap, downgradeToStandard, refundSwap, settleSwap } from '@/lib/swap-charges'
+import { attachSwapJob, chargeSwap, downgradeToStandard, refundSwap, settleSwap, splitPaid } from '@/lib/swap-charges'
 import { FULL_SWAP_CREDITS, HD_PREVIEW_CREDITS, HD_SWAP_CREDITS, HD_SWAPS_PER_DAY, PREVIEW_CREDITS, SWAP_LOCK_MINUTES } from '@/lib/swap-prices'
 import { friendlyEngineError, replicateClient } from '@/lib/replicate-client'
 
@@ -173,11 +173,15 @@ export async function POST(req: NextRequest) {
       // The engine this take will start on (the same test as the HD branch below) — for the HD cap.
       const engine = hdTake && engineChoice !== 'standard' ? 'hd' : 'standard'
       const hdPreview = isPreview && engine === 'hd'
+      // Free Standard previews only for a song whose upload was paid (2026-10-27: a made-up trackKey or
+      // the manual-stems path used to get unlimited free previews — each a full-song conversion).
+      const freeOk = isPreview && !hdPreview && !!trackKey && (await splitPaid(user.id, trackKey)) === true
       chargePrice = isPreview ? (hdPreview ? HD_PREVIEW_CREDITS : PREVIEW_CREDITS) : engine === 'hd' && !twoVoice ? HD_SWAP_CREDITS : FULL_SWAP_CREDITS
       const charge = await chargeSwap({
         userId: user.id, kind, price: chargePrice,
         // HD previews: no free ones, and their own counter so they don't use the Standard free previews
-        trackKey: hdPreview ? `hd:${trackKey || 'manual'}` : trackKey ?? '', freePreviews: hdPreview ? 0 : undefined,
+        trackKey: hdPreview ? `hd:${trackKey || 'manual'}` : isPreview && !freeOk ? `paid:${trackKey || 'manual'}` : trackKey ?? '',
+        freePreviews: hdPreview || (isPreview && !freeOk) ? 0 : undefined,
         previewId: isPreview ? undefined : previewId,
         guard: { engine, pairId: twoVoice && typeof pairId === 'string' ? pairId.slice(0, 64) : undefined },
       })

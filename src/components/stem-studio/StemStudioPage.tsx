@@ -10,8 +10,10 @@ import { VToast } from '@/components/voice-swap/VToast'
 import { KaraokePanel } from '@/components/karaoke/KaraokePanel'
 import { PerformanceMode } from '@/components/karaoke/PerformanceMode'
 import { uploadAudioToStorage, uploadSizeError, UPLOAD_LIMIT_TEXT } from '@/lib/audio-upload'
+import { SPLIT_CREDITS } from '@/lib/swap-prices'
 
-const STEM_SPLIT_COST = 50 // same price the Voice Swap flow charges for this exact operation
+// Charged by the server (/api/stem-split) before the split starts, refunded if it fails (2026-10-27).
+const STEM_SPLIT_COST = SPLIT_CREDITS
 
 const ACCEPTED_EXTS = ['mp3', 'wav', 'm4a']
 // Size limits: lib/audio-upload.ts — the same as the Voice Swap upload.
@@ -96,24 +98,6 @@ export function StemStudioPage() {
     return () => clearInterval(t)
   }, [phase])
 
-  // Same client-charge pattern as the Voice Swap flow: deduct after the split
-  // succeeds (a failed job costs nothing). The route derives the target from
-  // the session; userId is sent for the mismatch check.
-  async function chargeSplit() {
-    if (isAdmin || !userId) return
-    try {
-      const res = await fetch('/api/credits/deduct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount: STEM_SPLIT_COST, action: 'stem_split' }),
-      })
-      const data = await res.json()
-      if (res.ok && typeof data.creditsRemaining === 'number') {
-        setCreditsRemaining(data.creditsRemaining)
-      }
-    } catch { /* non-critical — don't block the result view */ }
-  }
-
   async function processFile(file: File) {
     const validationError = validateFile(file)
     if (validationError) {
@@ -152,6 +136,7 @@ export function StemStudioPage() {
       const startData = await startRes.json()
       const predictionId = startData.predictionId as string | undefined
       if (!predictionId) throw new Error('Stem split failed: no prediction ID returned')
+      if (typeof startData.creditsRemaining === 'number') setCreditsRemaining(startData.creditsRemaining)
 
       // 4 — wait for Demucs; dropped checks are retried (lib/poll)
       const result = await pollUntil<Stems, Record<string, string>>({
@@ -169,7 +154,6 @@ export function StemStudioPage() {
       setStems(result)
       setPhase('done')
       showToast('Stems ready!')
-      void chargeSplit()
     } catch (err) {
       console.error('[stem-studio] split failed:', err)
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
@@ -250,7 +234,7 @@ export function StemStudioPage() {
                 <p className="ss-note">
                   You&rsquo;ll get 4 separated stems — vocals, bass, drums and other —
                   each playable here and downloadable as MP3.
-                  {!isAdmin && ` ${STEM_SPLIT_COST} credits are charged only when the split succeeds.`}
+                  {!isAdmin && ` ${STEM_SPLIT_COST} credits — given back if the split fails.`}
                 </p>
               </>
             )}
